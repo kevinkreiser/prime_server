@@ -141,22 +141,20 @@ int main(int argc, char** argv) {
     std::set<size_t> primes = {2};
     client_t client(context_ptr, server_endpoint,
       [requests, &produced_requests]() {
-        std::list<zmq::message_t> messages;
+        std::string request;
         if(produced_requests != requests)
         {
-          //std::string http_get =
+          //std::string request =
           //    "GET /primes?possible_prime=" +
           //    std::to_string(produced_requests * 2 + 3) +
           //    " HTTP/1.1\r\nUser-Agent: fake\r\nHost: ipc\r\nAccept: */*\r\n\r\n";
-          std::string http_get = std::to_string(produced_requests * 2 + 3);
-          messages.emplace_back(http_get.size());
-          std::copy(http_get.begin(), http_get.end(), static_cast<char*>(messages.back().data()));
+          request = std::to_string(produced_requests * 2 + 3);
           ++produced_requests;
         }
-        return messages;
+        return request;
       },
-      [requests, &primes, &collected_results] (const std::list<zmq::message_t>& result) {
-          primes.insert(*static_cast<const size_t*>(result.front().data()));
+      [requests, &primes, &collected_results] (const std::string& result) {
+          primes.insert(*static_cast<const size_t*>(static_cast<const void*>(result.data())));
           ++collected_results;
           return collected_results == requests;
         }

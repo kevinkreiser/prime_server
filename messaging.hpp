@@ -67,29 +67,37 @@ namespace messaging {
 
   //client makes requests and gets back responses in batches asynchronously
   class client_t {
-    using request_function_t = std::function<std::list<zmq::message_t> ()>;
-    using collect_function_t = std::function<bool (const std::list<zmq::message_t>&)>;
+    using request_function_t = std::function<std::string ()>;
+    using collect_function_t = std::function<bool (const std::string&)>;
    public:
     client_t(const std::shared_ptr<zmq::context_t>& context_ptr, const std::string& server_endpoint, const request_function_t& request_function,
       const collect_function_t& collect_function):
-      context_ptr(context_ptr), server(*context_ptr, ZMQ_DEALER), request_function(request_function), collect_function(collect_function) {
+      context_ptr(context_ptr), server(*context_ptr, ZMQ_STREAM), request_function(request_function), collect_function(collect_function) {
 
       int high_water_mark = 0;
       server.setsockopt(ZMQ_SNDHWM, &high_water_mark, sizeof(high_water_mark));
       server.setsockopt(ZMQ_RCVHWM, &high_water_mark, sizeof(high_water_mark));
-      auto identity = set_identity(server);
       server.connect(server_endpoint.c_str());
     }
     void request() {
+      //swallow the first response as its just for connecting
+      recv_all(server);
+
+      //need the identity to identify our connection when we send stuff
+      uint8_t identity[256];
+      size_t identity_size = sizeof(identity);
+      server.getsockopt(ZMQ_IDENTITY, identity, &identity_size);
+
       while(true) {
         try {
           //see if we are still making stuff
-          auto messages = request_function();
-          if(messages.size() == 0)
+          auto message = request_function();
+          if(message.size() == 0)
             break;
           //send the stuff on
           LOG_INFO("SEND REQUEST");
-          send_all(server, messages);
+          server.send(static_cast<const void*>(identity), identity_size, ZMQ_SNDMORE);
+          server.send(static_cast<const void*>(message.c_str()), message.size());
           LOG_INFO("/SEND REQUEST");
         }
         catch(const std::exception& e) {
@@ -103,7 +111,8 @@ namespace messaging {
           //see if we are still waiting for stuff
           auto messages = recv_all(server);
           LOG_INFO("GET RESULT");
-          if(collect_function(messages))
+          messages.erase(messages.begin());
+          if(collect_function(std::string(static_cast<const char *>(messages.front().data()), messages.front().size())))
             break;
           LOG_INFO("/GET RESULT");
         }
@@ -123,10 +132,8 @@ namespace messaging {
   class server_t {
    public:
     server_t(const std::shared_ptr<zmq::context_t>& context_ptr, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint):
-      context_ptr(context_ptr), client(*context_ptr, ZMQ_ROUTER), proxy(*context_ptr, ZMQ_DEALER), loopback(*context_ptr, ZMQ_SUB) {
+      context_ptr(context_ptr), client(*context_ptr, ZMQ_STREAM), proxy(*context_ptr, ZMQ_DEALER), loopback(*context_ptr, ZMQ_SUB) {
 
-      //int raw_router = 1;
-      //client.setsockopt(ZMQ_ROUTER_RAW, &raw_router, sizeof(raw_router));
       int high_water_mark = 0;
       client.setsockopt(ZMQ_SNDHWM, &high_water_mark, sizeof(high_water_mark));
       client.setsockopt(ZMQ_RCVHWM, &high_water_mark, sizeof(high_water_mark));
@@ -150,13 +157,16 @@ namespace messaging {
         //got a new request
         if(items[0].revents & ZMQ_POLLIN) {
           try {
-            LOG_INFO("NEW REQUEST");
             auto messages = recv_all(client);
-            log(messages);
-            LOG_INFO("/NEW REQUEST");
-            LOG_INFO("FORWARD REQUEST");
-            send_all(proxy, messages);
-            LOG_INFO("/FORWARD REQUEST");
+            //TODO: do something more with clients opening and closing connections
+            if(messages.size() == 2 && std::next(messages.begin())->size() != 0) {
+              LOG_INFO("NEW REQUEST");
+              log(messages);
+              LOG_INFO("/NEW REQUEST");
+              LOG_INFO("FORWARD REQUEST");
+              send_all(proxy, messages);
+              LOG_INFO("/FORWARD REQUEST");
+            }
           }
           catch(const std::exception& e) {
             LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " server_t: " + e.what());
