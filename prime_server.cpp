@@ -1,15 +1,18 @@
 #include <zmq.hpp>
 #include <thread>
 #include <functional>
-#include <memory>
 #include <string>
 #include <list>
 #include <set>
 #include <iostream>
 #include <unordered_set>
+#include <memory>
+#include <stdexcept>
 
 #include "messaging.hpp"
 using namespace messaging;
+
+#include "logging/logging.hpp"
 
 /*
  * this system is essentially just a server or a simulated one that tells you
@@ -24,12 +27,12 @@ using namespace messaging;
                                         ==========                   ==========
                                         | worker |                   | worker |
                                         | worker |                   | worker |
-   client <---> server ---> proxy <---> |  ....  | <---> proxy <---> |  ....  | <---> ...
+   client <---> server ---> proxy <---> |  ....  | <---> proxy <---> |  ....  | <---> ....
                   ^                     | worker |                   | worker |
                   |                     | worker |                   | worker |
                   |                     ==========                   ==========
                   |                         |                            |
-                  |_________________________|____________________________|___________ ...
+                  |_________________________|____________________________|___________ ....
 
  * a client (a browser or just a thread within this process) makes request to a server
  * the server listens for new requests and replies when the backend bits send back results
@@ -46,32 +49,32 @@ using namespace messaging;
  * an easier approach would be just running a separate cluster per workflow, pros and cons there
  */
 
-
 int main(int argc, char** argv) {
-
-  //number of jobs to do
-  size_t requests = 10;
-  if(argc > 1)
-    requests = std::stoul(argv[1]);
 
   //number of workers to use at each stage
   size_t worker_concurrency = 1;
-  if(argc > 2)
-    worker_concurrency = std::stoul(argv[2]);
+  if(argc > 1)
+    worker_concurrency = std::stoul(argv[1]);
+
+  //number of jobs to do or server endpoint
+  size_t requests = 0;
+  std::string server_endpoint = "ipc://server_endpoint";
+  if(argc > 2) {
+    if(std::string(argv[2]).find("://") != std::string::npos)
+      server_endpoint = argv[2];
+    else
+      requests = std::stoul(argv[2]);
+  }
+  else {
+    LOG_ERROR("Supply a number of requests to simulate or an endpoint to listen on");
+    return 1;
+  }
 
   //change these to tcp://known.ip.address.with:port if you want to do this across machines
-  std::shared_ptr<zmq::context_t> context_ptr = std::make_shared<zmq::context_t>(1);
+  auto context_ptr = std::make_shared<zmq::context_t>(1);
   std::string result_endpoint = "ipc://result_endpoint";
   std::string parse_proxy_endpoint = "ipc://parse_proxy_endpoint";
   std::string compute_proxy_endpoint = "ipc://compute_proxy_endpoint";
-
-  //see if you want to actually serve http requests or not
-  std::string server_endpoint = "ipc://server_endpoint";
-  bool real_server = false;
-  if(argc > 3) {
-    server_endpoint = argv[3];
-    real_server = true;
-  }
 
   //server
   std::thread server_thread(std::bind(&server_t::serve, server_t(context_ptr, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint)));
@@ -84,7 +87,7 @@ int main(int argc, char** argv) {
   std::list<std::thread> parse_worker_threads;
   for(size_t i = 0; i < worker_concurrency; ++i) {
     parse_worker_threads.emplace_back(std::bind(&worker_t::work,
-      worker_t(context_ptr, parse_proxy_endpoint + "downstream", compute_proxy_endpoint + "_upstream", result_endpoint,
+      worker_t(context_ptr, parse_proxy_endpoint + "_downstream", compute_proxy_endpoint + "_upstream", result_endpoint,
       [] (const std::list<zmq::message_t>& job) {
         //parse the string into a size_t
         worker_t::result_t result{true};
@@ -105,7 +108,7 @@ int main(int argc, char** argv) {
   std::list<std::thread> compute_worker_threads;
   for(size_t i = 0; i < worker_concurrency; ++i) {
     compute_worker_threads.emplace_back(std::bind(&worker_t::work,
-      worker_t(context_ptr, compute_proxy_endpoint + "downstream", "ipc://NO_ENDPOINT", result_endpoint,
+      worker_t(context_ptr, compute_proxy_endpoint + "_downstream", "ipc://NO_ENDPOINT", result_endpoint,
       [] (const std::list<zmq::message_t>& job) {
         //check if its prime
         const size_t prime = *static_cast<const size_t*>(job.front().data());
@@ -128,44 +131,50 @@ int main(int argc, char** argv) {
     compute_worker_threads.back().detach();
   }
 
+  //make a client in process and quit when its batch is done
   //listen for requests from some other client indefinitely
-  if(real_server) {
-    server_thread.join();
-    //TODO: should we listen for SIGINT and terminate gracefully/exit(0)?
-    return 0;
-  }//or make a client in process and quit when its batch is done
-  else
+  if(requests > 0) {
     server_thread.detach();
 
-  //client makes requests and gets back responses in a batch fashion
-  size_t produced_requests = 0, collected_results;
-  std::set<size_t> primes = {2};
-  client_t client(context_ptr, server_endpoint,
-    [requests, &produced_requests]() {
-      std::list<zmq::message_t> messages;
-      if(produced_requests != requests)
-      {
-        auto request = std::to_string(produced_requests * 2 + 3);
-        messages.emplace_back(request.size());
-        std::copy(request.begin(), request.end(), static_cast<char*>(messages.back().data()));
-        ++produced_requests;
-      }
-      return messages;
-    },
-    [requests, &primes, &collected_results] (const std::list<zmq::message_t>& result) {
-        primes.insert(*static_cast<const size_t*>(result.front().data()));
-        ++collected_results;
-        return collected_results == requests;
-      }
-  );
-  //make the requests
-  client.request();
-  //get back the responses
-  client.collect();
-  //show primes
-  //for(const auto& prime : primes)
-  //  std::cout << prime << " | ";
-  std::cout << primes.size() << std::endl;
+    //client makes requests and gets back responses in a batch fashion
+    size_t produced_requests = 0, collected_results = 0;
+    std::set<size_t> primes = {2};
+    client_t client(context_ptr, server_endpoint,
+      [requests, &produced_requests]() {
+        std::list<zmq::message_t> messages;
+        if(produced_requests != requests)
+        {
+          //std::string http_get =
+          //    "GET /primes?possible_prime=" +
+          //    std::to_string(produced_requests * 2 + 3) +
+          //    " HTTP/1.1\r\nUser-Agent: fake\r\nHost: ipc\r\nAccept: */*\r\n\r\n";
+          std::string http_get = std::to_string(produced_requests * 2 + 3);
+          messages.emplace_back(http_get.size());
+          std::copy(http_get.begin(), http_get.end(), static_cast<char*>(messages.back().data()));
+          ++produced_requests;
+        }
+        return messages;
+      },
+      [requests, &primes, &collected_results] (const std::list<zmq::message_t>& result) {
+          primes.insert(*static_cast<const size_t*>(result.front().data()));
+          ++collected_results;
+          return collected_results == requests;
+        }
+    );
+    //make the requests
+    client.request();
+    //get back the responses
+    client.collect();
+    //show primes
+    //for(const auto& prime : primes)
+    //  std::cout << prime << " | ";
+    std::cout << primes.size() << std::endl;
+
+  }//or listen for requests from some other client indefinitely
+  else {
+    server_thread.join();
+    //TODO: should we listen for SIGINT and terminate gracefully/exit(0)?
+  }
 
   return 0;
 }

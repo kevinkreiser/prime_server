@@ -1,0 +1,3 @@
+[submodule "logging"]
+	path = logging
+	url = https://gist.github.com/39f2e39273c625d96790.git
