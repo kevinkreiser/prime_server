@@ -1,20 +1,53 @@
-#ifndef __HTTP_REQUEST_HPP__
-#define __HTTP_REQUEST_HPP__
+#ifndef __MESSAGING_REQUEST_HPP__
+#define __MESSAGING_REQUEST_HPP__
 
+#include <zmq.hpp>
 #include <unordered_map>
 
-namespace http {
+namespace messaging {
+
+  //like netstrings but with human unfriendly binary
+  class simple_protocol_t {
+   public:
+    static zmq::message_t deliniate(const void* data, size_t size) {
+      zmq::message_t message(sizeof(size_t) + size);
+      *static_cast<size_t*>(message.data()) = size;
+      std::copy(static_cast<const char*>(data), static_cast<const char*>(data) + size, static_cast<char*>(message.data()) + sizeof(size_t));
+      return message;
+    }
+    static std::list<std::pair<const void*, size_t> > separate(const void* data, size_t size, size_t& consumed) {
+      std::list<std::pair<const void*, size_t> > pieces;
+      consumed = size;
+      size_t pos = 0;
+      while(pos < size) {
+        //grab the datas length
+        const char* current = static_cast<const char*>(data) + pos;
+        size_t piece_length = *static_cast<const size_t*>(static_cast<const void*>(current));
+        if(pos + piece_length > size) {
+          LOG_INFO(std::string(static_cast<const char*>(data), size));
+          throw std::runtime_error("Unexpected data in simple protocol");
+        }
+        //tell where this piece is
+        pieces.emplace_back(static_cast<const void*>(current + sizeof(size_t)), piece_length);
+        pos += sizeof(size_t) + piece_length;
+      }
+      return pieces;
+    }
+   protected:
+  };
+
+/*
   //TODO: this only supports GET right now
   //TODO: write tests
-  class request_t {
+  class http_request_t {
    public:
-    enum class method_t { GET/*, POST, PUT, HEAD, DELETE, TRACE, CONNECT*/ };
-    static const std::unordered_map<std::string, method_t> METHODS = { {"GET", method_t::GET}/*, {"POST", method_t::POST}, {"PUT", method_t::PUT}, {"HEAD", method_t::HEAD}, {"DELETE", method_t::DELETE}, {"TRACE", method_t::TRACE}, {"CONNECT", method_t::CONNECT}*/ };
+    enum class method_t { GET }; //, POST, PUT, HEAD, DELETE, TRACE, CONNECT };
+    static const std::unordered_map<std::string, method_t> METHODS{ {"GET", method_t::GET} }; //, {"POST", method_t::POST}, {"PUT", method_t::PUT}, {"HEAD", method_t::HEAD}, {"DELETE", method_t::DELETE}, {"TRACE", method_t::TRACE}, {"CONNECT", method_t::CONNECT} };
 
-    request_t() = delete;
+    http_request_t() = delete;
     //requests look like this
     //GET /help?blah=4 HTTP/1.1\r\nHost: localhost:8002\r\nUser-Agent: Mozilla/5.0 ... \r\n\r\n
-    request_t(const char* str, size_t len): request(str, len) {
+    http_request_t(const char* str, size_t len): request(str, len) {
       auto next = parse_method(request.begin(), request.end());
       next = parse_path(next, request.end());
       next = parse_version(next, request.end());
@@ -129,6 +162,8 @@ namespace http {
       return begin;
     }
   };
+
+  */
 }
 
-#endif //__HTTP_REQUEST_HPP__
+#endif //__MESSAGING_REQUEST_HPP__

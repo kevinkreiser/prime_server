@@ -10,6 +10,7 @@
 #include <stdexcept>
 
 #include "messaging.hpp"
+#include "request.hpp"
 using namespace messaging;
 
 #include "logging/logging.hpp"
@@ -51,24 +52,24 @@ using namespace messaging;
 
 int main(int argc, char** argv) {
 
-  //number of workers to use at each stage
-  size_t worker_concurrency = 1;
-  if(argc > 1)
-    worker_concurrency = std::stoul(argv[1]);
+  if(argc < 2) {
+    LOG_ERROR("Usage: " + std::string(argv[0]) + "num_requests|server_listen_endpoint concurrency");
+    return 1;
+  }
 
   //number of jobs to do or server endpoint
   size_t requests = 0;
   std::string server_endpoint = "ipc://server_endpoint";
-  if(argc > 2) {
-    if(std::string(argv[2]).find("://") != std::string::npos)
-      server_endpoint = argv[2];
-    else
-      requests = std::stoul(argv[2]);
-  }
-  else {
-    LOG_ERROR("Supply a number of requests to simulate or an endpoint to listen on");
-    return 1;
-  }
+  if(std::string(argv[1]).find("://") != std::string::npos)
+    server_endpoint = argv[1];
+  else
+    requests = std::stoul(argv[1]);
+
+  //number of workers to use at each stage
+  size_t worker_concurrency = 1;
+  if(argc > 2)
+    worker_concurrency = std::stoul(argv[2]);
+
 
   //change these to tcp://known.ip.address.with:port if you want to do this across machines
   auto context_ptr = std::make_shared<zmq::context_t>(1);
@@ -77,7 +78,7 @@ int main(int argc, char** argv) {
   std::string compute_proxy_endpoint = "ipc://compute_proxy_endpoint";
 
   //server
-  std::thread server_thread(std::bind(&server_t::serve, server_t(context_ptr, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint)));
+  std::thread server_thread(std::bind(&server_t<simple_protocol_t>::serve, server_t<simple_protocol_t>(context_ptr, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint)));
 
   //load balancer for parsing
   std::thread parse_proxy(std::bind(&proxy_t::forward, proxy_t(context_ptr, parse_proxy_endpoint + "_upstream", parse_proxy_endpoint + "_downstream")));
@@ -138,31 +139,31 @@ int main(int argc, char** argv) {
 
     //client makes requests and gets back responses in a batch fashion
     size_t produced_requests = 0, collected_results = 0;
+    std::string request;
     std::set<size_t> primes = {2};
-    client_t client(context_ptr, server_endpoint,
-      [requests, &produced_requests]() {
-        std::string request;
-        if(produced_requests != requests)
-        {
-          //std::string request =
-          //    "GET /primes?possible_prime=" +
-          //    std::to_string(produced_requests * 2 + 3) +
-          //    " HTTP/1.1\r\nUser-Agent: fake\r\nHost: ipc\r\nAccept: */*\r\n\r\n";
-          request = std::to_string(produced_requests * 2 + 3);
-          ++produced_requests;
-        }
-        return request;
+    client_t<simple_protocol_t> client(context_ptr, server_endpoint,
+      [&request, requests, &produced_requests]() {
+        //request =
+        //  "GET /primes?possible_prime=" +
+        //  std::to_string(produced_requests * 2 + 3) +
+        //  " HTTP/1.1\r\nUser-Agent: fake\r\nHost: ipc\r\nAccept: */*\r\n\r\n";
+
+        //blank request means we are done
+        if(produced_requests < requests)
+          request = std::to_string(produced_requests++ * 2 + 3);
+        else
+          request.clear();
+        return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
-      [requests, &primes, &collected_results] (const std::string& result) {
-          primes.insert(*static_cast<const size_t*>(static_cast<const void*>(result.data())));
-          ++collected_results;
-          return collected_results == requests;
-        }
+      [requests, &primes, &collected_results] (const std::pair<const void*, size_t>& result) {
+        //get the result and tell if there is more or not
+        size_t number = *static_cast<const size_t*>(result.first);
+        primes.insert(number);
+        return ++collected_results < requests;
+      }
     );
-    //make the requests
-    client.request();
-    //get back the responses
-    client.collect();
+    //request and receive
+    client.batch();
     //show primes
     //for(const auto& prime : primes)
     //  std::cout << prime << " | ";
