@@ -78,7 +78,7 @@ int main(int argc, char** argv) {
   std::string compute_proxy_endpoint = "ipc://compute_proxy_endpoint";
 
   //server
-  std::thread server_thread(std::bind(&server_t<simple_protocol_t>::serve, server_t<simple_protocol_t>(context_ptr, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint)));
+  std::thread server_thread(std::bind(&server_t<netstring_protocol_t>::serve, server_t<netstring_protocol_t>(context_ptr, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint)));
 
   //load balancer for parsing
   std::thread parse_proxy(std::bind(&proxy_t::forward, proxy_t(context_ptr, parse_proxy_endpoint + "_upstream", parse_proxy_endpoint + "_downstream")));
@@ -93,7 +93,8 @@ int main(int argc, char** argv) {
         //parse the string into a size_t
         worker_t::result_t result{true};
         result.messages.emplace_back(sizeof(size_t));
-        const size_t possible_prime = std::stoul(std::string(static_cast<const char*>(job.front().data()), job.front().size()));
+        std::string prime_str(static_cast<const char*>(job.front().data()), job.front().size());
+        const size_t possible_prime = std::stoul(prime_str);
         *static_cast<size_t*>(result.messages.back().data()) = possible_prime;
         return result;
       }
@@ -141,7 +142,7 @@ int main(int argc, char** argv) {
     size_t produced_requests = 0, collected_results = 0;
     std::string request;
     std::set<size_t> primes = {2};
-    client_t<simple_protocol_t> client(context_ptr, server_endpoint,
+    client_t<netstring_protocol_t> client(context_ptr, server_endpoint,
       [&request, requests, &produced_requests]() {
         //request =
         //  "GET /primes?possible_prime=" +

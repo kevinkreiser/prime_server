@@ -4,33 +4,62 @@
 #include <zmq.hpp>
 #include <unordered_map>
 
+
+
+
 namespace messaging {
 
-  //like netstrings but with human unfriendly binary
-  class simple_protocol_t {
+  //TODO: this kind of sucks but currently dont have a bette way
+  //might want to make it a real class and keep state as to where you are in parsing
+  class netstring_protocol_t {
    public:
     static zmq::message_t deliniate(const void* data, size_t size) {
-      zmq::message_t message(sizeof(size_t) + size);
+      auto size_prefix = std::to_string(size) + ':';
+      zmq::message_t message(size_prefix.size() + size + 1);
       *static_cast<size_t*>(message.data()) = size;
-      std::copy(static_cast<const char*>(data), static_cast<const char*>(data) + size, static_cast<char*>(message.data()) + sizeof(size_t));
+      auto* dst = static_cast<char*>(message.data());
+      std::copy(size_prefix.begin(), size_prefix.end(), dst);
+      dst += size_prefix.size();
+      std::copy(static_cast<const char*>(data), static_cast<const char*>(data) + size, dst);
+      dst[size] = ',';
       return message;
     }
     static std::list<std::pair<const void*, size_t> > separate(const void* data, size_t size, size_t& consumed) {
+      if(size == 0)
+        return {};
+
+      if(static_cast<const char*>(data)[0] == ':')
+        throw std::runtime_error("Netstring protocol message cannot begin with a ':'");
+
+      //keep getting pieces if there is enough space for the message length plus a message
       std::list<std::pair<const void*, size_t> > pieces;
-      consumed = size;
-      size_t pos = 0;
-      while(pos < size) {
-        //grab the datas length
-        const char* current = static_cast<const char*>(data) + pos;
-        size_t piece_length = *static_cast<const size_t*>(static_cast<const void*>(current));
-        if(pos + piece_length > size) {
-          LOG_INFO(std::string(static_cast<const char*>(data), size));
-          throw std::runtime_error("Unexpected data in simple protocol");
-        }
+      const char* begin = static_cast<const char*>(data);
+      const char* end = begin + size;
+      const char* delim = begin;
+      while(delim < end) {
+        //get next colon
+        const char* next_delim = delim;
+        for(;next_delim < end; ++next_delim)
+          if(*next_delim == ':')
+            break;
+        if(next_delim == end)
+          break;
+
+        //convert the previous portion to a number
+        std::string length_str(delim, next_delim - delim);
+        size_t length = std::stoul(length_str);
+        const char* piece = next_delim + 1;
+        next_delim += length + 2;
+
+        //data is past the end which means we dont have it all yet
+        if(next_delim > end)
+          break;
+
         //tell where this piece is
-        pieces.emplace_back(static_cast<const void*>(current + sizeof(size_t)), piece_length);
-        pos += sizeof(size_t) + piece_length;
+        pieces.emplace_back(static_cast<const void*>(piece), length);
+        delim = next_delim;
       }
+      consumed = delim - static_cast<const char*>(data);
       return pieces;
     }
    protected:

@@ -14,6 +14,12 @@
 
 #include "logging/logging.hpp"
 
+//NOTE: ZMQ_STREAM sockets are very raw so you have to do a lot of extra work
+//issue one is that messages coalesce on the socket (makes sense given the name stream)
+//but there seems to be an internal buffer that, on my machine is around 8192 bytes
+//this means that you have to always be careful of partial messages and have some
+//means of knowing when a message is whole or not.
+
 namespace {
 
   //read all of the messages from a socket
@@ -48,7 +54,7 @@ namespace messaging {
     using collect_function_t = std::function<bool (const std::pair<const void*, size_t>&)>;
    public:
     client_t(const std::shared_ptr<zmq::context_t>& context_ptr, const std::string& server_endpoint, const request_function_t& request_function,
-      const collect_function_t& collect_function, size_t batch_size = 100):
+      const collect_function_t& collect_function, size_t batch_size = 8912):
       context_ptr(context_ptr), server(*context_ptr, ZMQ_STREAM), request_function(request_function), collect_function(collect_function), batch_size(batch_size) {
 
       int disabled = 0;
