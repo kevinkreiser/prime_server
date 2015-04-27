@@ -15,41 +15,6 @@ using namespace prime_server;
 
 #include "logging/logging.hpp"
 
-/*
- * this system is essentially just a server or a simulated one that tells you
- * whether or not a given input number is prime. the aim isn't really to do any
- * type of novel large prime computation but rather to contrive a system whose
- * units of work are highly non-uniform in terms of their time to completion.
- * this is a common problem in many other workflows an primes seemed like a
- * good way to illustrate this.
- *
- * the system we are looking to build is something like the following:
-
-                                        ==========                   ==========
-                                        | worker |                   | worker |
-                                        | worker |                   | worker |
-   client <---> server ---> proxy <---> |  ....  | <---> proxy <---> |  ....  | <---> ....
-                  ^                     | worker |                   | worker |
-                  |                     | worker |                   | worker |
-                  |                     ==========                   ==========
-                  |                         |                            |
-                  |_________________________|____________________________|___________ ....
-
- * a client (a browser or just a thread within this process) makes request to a server
- * the server listens for new requests and replies when the backend bits send back results
- * the backend is comprised of load balancing proxies between layers of worker pools
- * in real life you may run these in different processes or on different machines
- * we just use threads to simulate it, ie. no classic mutex patterns to worry about
- *
- * so this system lets you handle one type of request that can decomposed into multiple steps
- * that is useful if certain steps take longer than others because you can scale them individually
- * it doesn't really handle multiple types of requests unless workers learn more than one job
- * to fix this we could upgrade the workers to be able to forward work to more than one proxy
- * this would allow heterogeneous workflows without having making larger pluripotent workers
- * and therefore would allow scaling of various workflows independently of each other
- * an easier approach would be just running a separate cluster per workflow, pros and cons there
- */
-
 int main(int argc, char** argv) {
 
   if(argc < 2) {
