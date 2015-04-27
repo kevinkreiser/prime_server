@@ -6,8 +6,9 @@
 
 namespace prime_server {
 
-  //TODO: this kind of sucks but currently dont have a bette way
+  //TODO: this kind of sucks but currently dont have a better way
   //might want to make it a real class and keep state as to where you are in parsing
+  //this is like netstrings but the strings are actually binary if you want them to be
   class netstring_protocol_t {
    public:
     static zmq::message_t delineate(const void* data, size_t size) {

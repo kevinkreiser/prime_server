@@ -16,11 +16,11 @@
 
 #include "logging/logging.hpp"
 
-//NOTE: ZMQ_STREAM sockets are very raw so you have to do a lot of extra work
-//issue one is that messages coalesce on the socket (makes sense given the name stream)
+//NOTE: ZMQ_STREAM sockets are 'raw' and require a lot of extra work compared to other types
+//one issue is that messages coalesce on the socket (makes sense given the name stream right)
 //but there seems to be an internal buffer that, on my machine is around 8192 bytes
-//this means that you have to always be careful of partial messages and have some
-//means of knowing when a message is whole or not.
+//this means that you have to always be careful of partial messages and have some means of
+//knowing when a message is whole or not.
 
 namespace {
 
@@ -48,6 +48,9 @@ namespace {
 }
 
 namespace prime_server {
+
+  //TODO: do a make_shared for zmq context and socket
+
 
   //client makes requests and gets back responses in batches asynchronously
   template <class protocol_type>
