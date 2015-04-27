@@ -81,7 +81,7 @@ POST_UNINSTALL = :
 build_triplet = x86_64-unknown-linux-gnu
 host_triplet = x86_64-unknown-linux-gnu
 bin_PROGRAMS = prime_serverd$(EXEEXT)
-check_PROGRAMS = test/netstring$(EXEEXT)
+check_PROGRAMS = test/netstring$(EXEEXT) test/http$(EXEEXT)
 subdir = .
 DIST_COMMON = INSTALL NEWS README AUTHORS ChangeLog \
 	$(srcdir)/Makefile.in $(srcdir)/Makefile.am \
@@ -146,8 +146,10 @@ am__dirstamp = $(am__leading_dot)dirstamp
 am_prime_serverd_OBJECTS = src/prime_serverd-prime_serverd.$(OBJEXT)
 prime_serverd_OBJECTS = $(am_prime_serverd_OBJECTS)
 prime_serverd_DEPENDENCIES = $(am__DEPENDENCIES_1) libprime_server.la
-am_test_netstring_OBJECTS = test/test_netstring-netstring.$(OBJEXT) \
-	test/test_netstring-test.$(OBJEXT)
+am_test_http_OBJECTS = test/test_http-http.$(OBJEXT)
+test_http_OBJECTS = $(am_test_http_OBJECTS)
+test_http_DEPENDENCIES = $(am__DEPENDENCIES_1) libprime_server.la
+am_test_netstring_OBJECTS = test/test_netstring-netstring.$(OBJEXT)
 test_netstring_OBJECTS = $(am_test_netstring_OBJECTS)
 test_netstring_DEPENDENCIES = $(am__DEPENDENCIES_1) libprime_server.la
 AM_V_P = $(am__v_P_$(V))
@@ -203,9 +205,9 @@ am__v_CCLD_ = $(am__v_CCLD_$(AM_DEFAULT_VERBOSITY))
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = $(libprime_server_la_SOURCES) $(prime_serverd_SOURCES) \
-	$(test_netstring_SOURCES)
+	$(test_http_SOURCES) $(test_netstring_SOURCES)
 DIST_SOURCES = $(libprime_server_la_SOURCES) $(prime_serverd_SOURCES) \
-	$(test_netstring_SOURCES)
+	$(test_http_SOURCES) $(test_netstring_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -434,7 +436,7 @@ AUTOMAKE = ${SHELL} /data/sandbox/prime_server/missing automake-1.14
 AWK = mawk
 CC = gcc
 CCDEPMODE = depmode=gcc3
-CFLAGS = -g -O2
+CFLAGS = -g 
 COVERAGE_CFLAGS = 
 COVERAGE_CXXFLAGS = 
 COVERAGE_LDFLAGS = 
@@ -443,7 +445,7 @@ CPPFLAGS =
 CXX = g++
 CXXCPP = g++ -E
 CXXDEPMODE = depmode=gcc3
-CXXFLAGS = -g -O2 -std=c++11
+CXXFLAGS = -g -std=c++11
 CYGPATH_W = echo
 DEFS = -DHAVE_CONFIG_H
 DEPDIR = .deps
@@ -573,9 +575,12 @@ prime_serverd_SOURCES = \
 
 prime_serverd_CPPFLAGS = $(DEPS_CFLAGS)
 prime_serverd_LDADD = $(DEPS_LIBS) libprime_server.la
-test_netstring_SOURCES = test/netstring.cpp test/test.cpp
+test_netstring_SOURCES = test/netstring.cpp
 test_netstring_CPPFLAGS = $(DEPS_CFLAGS)
 test_netstring_LDADD = $(DEPS_LIBS) libprime_server.la
+test_http_SOURCES = test/http.cpp
+test_http_CPPFLAGS = $(DEPS_CFLAGS)
+test_http_LDADD = $(DEPS_LIBS) libprime_server.la
 TESTS = $(check_PROGRAMS)
 TEST_EXTENSIONS = .sh
 SH_LOG_COMPILER = sh
@@ -746,9 +751,13 @@ test/$(am__dirstamp):
 test/$(DEPDIR)/$(am__dirstamp):
 	@$(MKDIR_P) test/$(DEPDIR)
 	@: > test/$(DEPDIR)/$(am__dirstamp)
-test/test_netstring-netstring.$(OBJEXT): test/$(am__dirstamp) \
+test/test_http-http.$(OBJEXT): test/$(am__dirstamp) \
 	test/$(DEPDIR)/$(am__dirstamp)
-test/test_netstring-test.$(OBJEXT): test/$(am__dirstamp) \
+
+test/http$(EXEEXT): $(test_http_OBJECTS) $(test_http_DEPENDENCIES) $(EXTRA_test_http_DEPENDENCIES) test/$(am__dirstamp)
+	@rm -f test/http$(EXEEXT)
+	$(AM_V_CXXLD)$(CXXLINK) $(test_http_OBJECTS) $(test_http_LDADD) $(LIBS)
+test/test_netstring-netstring.$(OBJEXT): test/$(am__dirstamp) \
 	test/$(DEPDIR)/$(am__dirstamp)
 
 test/netstring$(EXEEXT): $(test_netstring_OBJECTS) $(test_netstring_DEPENDENCIES) $(EXTRA_test_netstring_DEPENDENCIES) test/$(am__dirstamp)
@@ -764,8 +773,8 @@ distclean-compile:
 	-rm -f *.tab.c
 
 include src/$(DEPDIR)/prime_serverd-prime_serverd.Po
+include test/$(DEPDIR)/test_http-http.Po
 include test/$(DEPDIR)/test_netstring-netstring.Po
-include test/$(DEPDIR)/test_netstring-test.Po
 
 .cpp.o:
 	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
@@ -805,6 +814,20 @@ src/prime_serverd-prime_serverd.obj: src/prime_serverd.cpp
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
 #	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(prime_serverd_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o src/prime_serverd-prime_serverd.obj `if test -f 'src/prime_serverd.cpp'; then $(CYGPATH_W) 'src/prime_serverd.cpp'; else $(CYGPATH_W) '$(srcdir)/src/prime_serverd.cpp'; fi`
 
+test/test_http-http.o: test/http.cpp
+	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_http_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/test_http-http.o -MD -MP -MF test/$(DEPDIR)/test_http-http.Tpo -c -o test/test_http-http.o `test -f 'test/http.cpp' || echo '$(srcdir)/'`test/http.cpp
+	$(AM_V_at)$(am__mv) test/$(DEPDIR)/test_http-http.Tpo test/$(DEPDIR)/test_http-http.Po
+#	$(AM_V_CXX)source='test/http.cpp' object='test/test_http-http.o' libtool=no \
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
+#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_http_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/test_http-http.o `test -f 'test/http.cpp' || echo '$(srcdir)/'`test/http.cpp
+
+test/test_http-http.obj: test/http.cpp
+	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_http_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/test_http-http.obj -MD -MP -MF test/$(DEPDIR)/test_http-http.Tpo -c -o test/test_http-http.obj `if test -f 'test/http.cpp'; then $(CYGPATH_W) 'test/http.cpp'; else $(CYGPATH_W) '$(srcdir)/test/http.cpp'; fi`
+	$(AM_V_at)$(am__mv) test/$(DEPDIR)/test_http-http.Tpo test/$(DEPDIR)/test_http-http.Po
+#	$(AM_V_CXX)source='test/http.cpp' object='test/test_http-http.obj' libtool=no \
+#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
+#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_http_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/test_http-http.obj `if test -f 'test/http.cpp'; then $(CYGPATH_W) 'test/http.cpp'; else $(CYGPATH_W) '$(srcdir)/test/http.cpp'; fi`
+
 test/test_netstring-netstring.o: test/netstring.cpp
 	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_netstring_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/test_netstring-netstring.o -MD -MP -MF test/$(DEPDIR)/test_netstring-netstring.Tpo -c -o test/test_netstring-netstring.o `test -f 'test/netstring.cpp' || echo '$(srcdir)/'`test/netstring.cpp
 	$(AM_V_at)$(am__mv) test/$(DEPDIR)/test_netstring-netstring.Tpo test/$(DEPDIR)/test_netstring-netstring.Po
@@ -818,20 +841,6 @@ test/test_netstring-netstring.obj: test/netstring.cpp
 #	$(AM_V_CXX)source='test/netstring.cpp' object='test/test_netstring-netstring.obj' libtool=no \
 #	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
 #	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_netstring_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/test_netstring-netstring.obj `if test -f 'test/netstring.cpp'; then $(CYGPATH_W) 'test/netstring.cpp'; else $(CYGPATH_W) '$(srcdir)/test/netstring.cpp'; fi`
-
-test/test_netstring-test.o: test/test.cpp
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_netstring_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/test_netstring-test.o -MD -MP -MF test/$(DEPDIR)/test_netstring-test.Tpo -c -o test/test_netstring-test.o `test -f 'test/test.cpp' || echo '$(srcdir)/'`test/test.cpp
-	$(AM_V_at)$(am__mv) test/$(DEPDIR)/test_netstring-test.Tpo test/$(DEPDIR)/test_netstring-test.Po
-#	$(AM_V_CXX)source='test/test.cpp' object='test/test_netstring-test.o' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_netstring_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/test_netstring-test.o `test -f 'test/test.cpp' || echo '$(srcdir)/'`test/test.cpp
-
-test/test_netstring-test.obj: test/test.cpp
-	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_netstring_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -MT test/test_netstring-test.obj -MD -MP -MF test/$(DEPDIR)/test_netstring-test.Tpo -c -o test/test_netstring-test.obj `if test -f 'test/test.cpp'; then $(CYGPATH_W) 'test/test.cpp'; else $(CYGPATH_W) '$(srcdir)/test/test.cpp'; fi`
-	$(AM_V_at)$(am__mv) test/$(DEPDIR)/test_netstring-test.Tpo test/$(DEPDIR)/test_netstring-test.Po
-#	$(AM_V_CXX)source='test/test.cpp' object='test/test_netstring-test.obj' libtool=no \
-#	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) \
-#	$(AM_V_CXX_no)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_netstring_CPPFLAGS) $(CPPFLAGS) $(AM_CXXFLAGS) $(CXXFLAGS) -c -o test/test_netstring-test.obj `if test -f 'test/test.cpp'; then $(CYGPATH_W) 'test/test.cpp'; else $(CYGPATH_W) '$(srcdir)/test/test.cpp'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo
@@ -1070,6 +1079,13 @@ recheck: all $(check_PROGRAMS)
 test/netstring.log: test/netstring$(EXEEXT)
 	@p='test/netstring$(EXEEXT)'; \
 	b='test/netstring'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test/http.log: test/http$(EXEEXT)
+	@p='test/http$(EXEEXT)'; \
+	b='test/http'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \

@@ -51,11 +51,14 @@ prime_serverd_LDADD = $(DEPS_LIBS) libprime_server.la
 
 
 # tests
-check_PROGRAMS = \
-	test/netstring 
-test_netstring_SOURCES = test/netstring.cpp test/test.cpp
+check_PROGRAMS = test/netstring test/http
+test_netstring_SOURCES = test/netstring.cpp
 test_netstring_CPPFLAGS = $(DEPS_CFLAGS)
 test_netstring_LDADD = $(DEPS_LIBS) libprime_server.la
+test_http_SOURCES = test/http.cpp
+test_http_CPPFLAGS = $(DEPS_CFLAGS)
+test_http_LDADD = $(DEPS_LIBS) libprime_server.la
+
 
 TESTS = $(check_PROGRAMS)
 TEST_EXTENSIONS = .sh

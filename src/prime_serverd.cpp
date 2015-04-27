@@ -18,7 +18,7 @@ using namespace prime_server;
 int main(int argc, char** argv) {
 
   if(argc < 2) {
-    LOG_ERROR("Usage: " + std::string(argv[0]) + "num_requests|server_listen_endpoint concurrency");
+    LOG_ERROR("Usage: " + std::string(argv[0]) + " num_requests|server_listen_endpoint concurrency");
     return 1;
   }
 
@@ -41,9 +41,6 @@ int main(int argc, char** argv) {
   std::string result_endpoint = "ipc://result_endpoint";
   std::string parse_proxy_endpoint = "ipc://parse_proxy_endpoint";
   std::string compute_proxy_endpoint = "ipc://compute_proxy_endpoint";
-
-  //server
-  std::thread server_thread(std::bind(&server_t<netstring_protocol_t>::serve, server_t<netstring_protocol_t>(context_ptr, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint)));
 
   //load balancer for parsing
   std::thread parse_proxy(std::bind(&proxy_t::forward, proxy_t(context_ptr, parse_proxy_endpoint + "_upstream", parse_proxy_endpoint + "_downstream")));
@@ -101,6 +98,8 @@ int main(int argc, char** argv) {
   //make a client in process and quit when its batch is done
   //listen for requests from some other client indefinitely
   if(requests > 0) {
+    //server
+    std::thread server_thread(std::bind(&server_t<netstring_protocol_t>::serve, server_t<netstring_protocol_t>(context_ptr, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint)));
     server_thread.detach();
 
     //client makes requests and gets back responses in a batch fashion
@@ -109,11 +108,6 @@ int main(int argc, char** argv) {
     std::set<size_t> primes = {2};
     client_t<netstring_protocol_t> client(context_ptr, server_endpoint,
       [&request, requests, &produced_requests]() {
-        //request =
-        //  "GET /primes?possible_prime=" +
-        //  std::to_string(produced_requests * 2 + 3) +
-        //  " HTTP/1.1\r\nUser-Agent: fake\r\nHost: ipc\r\nAccept: */*\r\n\r\n";
-
         //blank request means we are done
         if(produced_requests < requests)
           request = std::to_string(produced_requests++ * 2 + 3);
@@ -137,6 +131,8 @@ int main(int argc, char** argv) {
 
   }//or listen for requests from some other client indefinitely
   else {
+    //server
+    std::thread server_thread(std::bind(&server_t<http_protocol_t>::serve, server_t<http_protocol_t>(context_ptr, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint)));
     server_thread.join();
     //TODO: should we listen for SIGINT and terminate gracefully/exit(0)?
   }

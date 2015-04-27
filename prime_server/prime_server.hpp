@@ -54,7 +54,6 @@ namespace prime_server {
 
   //TODO: do a make_shared for zmq context and socket
 
-
   //client makes requests and gets back responses in batches asynchronously
   template <class protocol_type>
   class client_t {
@@ -229,13 +228,6 @@ namespace prime_server {
       }//actual request data
       else {
         if(request != requests.end()) {
-          //hangup if this is all too much
-          if(body.size() + request->second.size() > MAX_REQUEST_SIZE) {
-            requests.erase(request);
-            body.rebuild(0);
-            handle_response(messages);
-          }
-
           //put this part of the request with the rest
           auto& request_data = request->second;
           request_data.append(static_cast<const char*>(body.data()), body.size());
@@ -248,6 +240,15 @@ namespace prime_server {
             proxy.send(separate.first, separate.second, 0);
           }
           request_data.erase(0, consumed);
+
+          //hangup if this is all too much
+          //TODO: 414 for http clients
+          if(request_data.size() > MAX_REQUEST_SIZE) {
+            requests.erase(request);
+            body.rebuild(0);
+            handle_response(messages);
+            return;
+          }
         }
         else
           LOG_WARN("Ignoring request: unknown client");

@@ -23,24 +23,25 @@ namespace {
   }
 
   void test_separate() {
-    std::string netstring("3:mer,5:welle,5:luege,5:oeb's,4:guet,4:isch,du_siehscht_mi_noed");
+    std::string http("GET /irgendwelle/pfad HTTP1.1\r\n\r\nGET /annrer/pfad?aafrag=gel HTTP1.0\r\n\r\nsell siehscht du au noed");
     size_t consumed;
-    auto parts = prime_server::netstring_protocol_t::separate(static_cast<const void*>(netstring.data()), netstring.size(), consumed);
-    if(parts.size() != 6)
+    auto parts = prime_server::http_protocol_t::separate(static_cast<const void*>(http.data()), http.size(), consumed);
+    if(parts.size() != 2)
       throw std::runtime_error("Wrong number of parts when separated");
-    if(netstring.substr(consumed) != "du_siehscht_mi_noed")
+    if(http.substr(consumed) != "sell siehscht du au noed")
       throw std::runtime_error("Didn't consume the right amount of the string");
     auto itr = parts.begin();
-    std::advance(itr, 3);
-    if(std::string(static_cast<const char*>(itr->first), itr->second) != "oeb's")
+    std::advance(itr, 1);
+    std::string x(static_cast<const char*>(itr->first), itr->second);
+    if(std::string(static_cast<const char*>(itr->first), itr->second) != "GET /annrer/pfad?aafrag=gel HTTP1.0\r\n\r\n")
       throw std::runtime_error("Wrong part");
   }
 
   void test_delineate() {
-    std::string netstring("e_chliises_schtoeckli");
-    auto message = prime_server::netstring_protocol_t::delineate(static_cast<const void*>(netstring.data()), netstring.size());
+    std::string http("e_chliises_schtoeckli");
+    auto message = prime_server::http_protocol_t::delineate(static_cast<const void*>(http.data()), http.size());
     std::string delineated(static_cast<const char*>(message.data()), message.size());
-    if(delineated != "21:e_chliises_schtoeckli,")
+    if(delineated != "GET e_chliises_schtoeckli HTTP/1.1\r\n\r\n")
       throw std::runtime_error("Message was not properly delineated");
   }
 
@@ -50,7 +51,7 @@ namespace {
     std::unordered_set<std::string> requests;
     size_t received = 0;
     std::string request;
-    client_t<netstring_protocol_t> client(context_ptr, "ipc://test_netstring_server",
+    client_t<netstring_protocol_t> client(context_ptr, "ipc://test_http_server",
       [&requests, &request]() {
         //we want 10k requests
         if(requests.size() < total) {
@@ -81,18 +82,18 @@ namespace {
     auto context_ptr = std::make_shared<zmq::context_t>(1);
 
     //server
-    std::thread server(std::bind(&server_t<netstring_protocol_t>::serve,
-     server_t<netstring_protocol_t>(context_ptr, "ipc://test_netstring_server", "ipc://test_netstring_proxy_upstream", "ipc://test_netstring_results")));
+    std::thread server(std::bind(&server_t<http_protocol_t>::serve,
+     server_t<http_protocol_t>(context_ptr, "ipc://test_http_server", "ipc://test_http_proxy_upstream", "ipc://test_http_results")));
     server.detach();
 
     //load balancer for parsing
     std::thread proxy(std::bind(&proxy_t::forward,
-      proxy_t(context_ptr, "ipc://test_netstring_proxy_upstream", "ipc://test_netstring_proxy_downstream")));
+      proxy_t(context_ptr, "ipc://test_http_proxy_upstream", "ipc://test_http_proxy_downstream")));
     proxy.detach();
 
     //echo worker
     std::thread worker(std::bind(&worker_t::work,
-      worker_t(context_ptr, "ipc://test_netstring_proxy_downstream", "ipc://NONE", "ipc://test_netstring_results",
+      worker_t(context_ptr, "ipc://test_http_proxy_downstream", "ipc://NONE", "ipc://test_http_results",
       [] (const std::list<zmq::message_t>& job) {
         worker_t::result_t result{false};
         result.messages.emplace_back(job.front().size());
