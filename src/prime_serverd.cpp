@@ -9,9 +9,9 @@
 #include <memory>
 #include <stdexcept>
 
-#include "messaging.hpp"
-#include "request.hpp"
-using namespace messaging;
+#include "prime_server.hpp"
+#include "protocols.hpp"
+using namespace prime_server;
 
 #include "logging/logging.hpp"
 

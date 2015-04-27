@@ -1,19 +1,16 @@
-#ifndef __MESSAGING_REQUEST_HPP__
-#define __MESSAGING_REQUEST_HPP__
+#ifndef __PROTOCOLS_HPP__
+#define __PROTOCOLS_HPP__
 
 #include <zmq.hpp>
 #include <unordered_map>
 
-
-
-
-namespace messaging {
+namespace prime_server {
 
   //TODO: this kind of sucks but currently dont have a bette way
   //might want to make it a real class and keep state as to where you are in parsing
   class netstring_protocol_t {
    public:
-    static zmq::message_t deliniate(const void* data, size_t size) {
+    static zmq::message_t delineate(const void* data, size_t size) {
       auto size_prefix = std::to_string(size) + ':';
       zmq::message_t message(size_prefix.size() + size + 1);
       *static_cast<size_t*>(message.data()) = size;
@@ -195,4 +192,4 @@ namespace messaging {
   */
 }
 
-#endif //__MESSAGING_REQUEST_HPP__
+#endif //__PROTOCOLS_HPP__

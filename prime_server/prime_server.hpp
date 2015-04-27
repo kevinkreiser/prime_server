@@ -1,5 +1,5 @@
-#ifndef __MESSAGING_MESSAGING_HPP__
-#define __MESSAGING_MESSAGING_HPP__
+#ifndef __PRIME_SERVER_HPP__
+#define __PRIME_SERVER_HPP__
 
 #include <zmq.hpp>
 #include <functional>
@@ -7,6 +7,8 @@
 #include <queue>
 #include <deque>
 #include <list>
+#include <unordered_set>
+#include <unordered_map>
 #include <stdexcept>
 #include <random>
 #include <memory>
@@ -45,7 +47,7 @@ namespace {
 
 }
 
-namespace messaging {
+namespace prime_server {
 
   //client makes requests and gets back responses in batches asynchronously
   template <class protocol_type>
@@ -90,7 +92,7 @@ namespace messaging {
             auto request = request_function();
             if(request.second == 0)
               break;
-            auto message = protocol_type::deliniate(request.first, request.second);
+            auto message = protocol_type::delineate(request.first, request.second);
             //send the stuff on
             server.send(static_cast<const void*>(identity), identity_size, ZMQ_SNDMORE);
             server.send(message);
@@ -194,7 +196,7 @@ namespace messaging {
         LOG_WARN("Cannot reply with more than one message, dropping additional");
       client.send(messages.front(), ZMQ_SNDMORE);
       messages.pop_front();
-      auto response = protocol_type::deliniate(messages.front().data(), messages.front().size());
+      auto response = protocol_type::delineate(messages.front().data(), messages.front().size());
       client.send(response);
     }
     void handle_request(std::list<zmq::message_t>& messages) {
@@ -404,4 +406,4 @@ namespace messaging {
 
 }
 
-#endif //__MESSAGING_MESSAGING_HPP__
+#endif //__PRIME_SERVER_HPP__

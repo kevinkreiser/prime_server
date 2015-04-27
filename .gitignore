@@ -1,4 +1,55 @@
+# editor temporary / backup files
+*~
+
+# artefacts from autotools
+INSTALL
+Makefile.in
+aclocal.m4
+autom4te.cache/
+compile
+config.guess
+config.sub
+config.log
+config.status
+configure
+install-sh
+missing
+depcomp
+Makefile
+stub/config.h
+stub/config.h.in
+stub/stamp-h1
+ltmain.sh
+m4/libtool.m4
+m4/ltoptions.m4
+m4/ltsugar.m4
+m4/ltversion.m4
+m4/lt~obsolete.m4
+libtool
+
+# built objects
+*.o
+.deps/
+.dirstamp
+*.lo
+.libs/
+libprime_server.la
+prime_serverd
+
+# tests
+test-suite.log
+test-driver
+test/netstring
+test/*.log
+test/*.trs
+
+# test coverage stuff
+*.gcno
+*.gcda
+coverage.info
+coverage/
+
+# project settings
 .cproject
 .project
 .settings
-prime_server
