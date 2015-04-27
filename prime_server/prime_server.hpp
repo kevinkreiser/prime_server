@@ -24,6 +24,9 @@
 
 namespace {
 
+  //TODO: make this configurable
+  constexpr size_t MAX_REQUEST_SIZE = 1024;
+
   //read all of the messages from a socket
   std::list<zmq::message_t> recv_all(zmq::socket_t& socket) {
     //grab all message parts
@@ -212,10 +215,10 @@ namespace prime_server {
       //get some info about the client
       auto requester = std::string(static_cast<const char*>(messages.front().data()), messages.front().size());
       auto request = requests.find(requester);
-      messages.pop_front();
+      auto& body = *std::next(messages.begin());
 
       //open or close connection
-      if(messages.front().size() == 0) {
+      if(body.size() == 0) {
         //new client
         if(request == requests.end()) {
           requests.emplace(requester, "");
@@ -226,10 +229,16 @@ namespace prime_server {
       }//actual request data
       else {
         if(request != requests.end()) {
-          //TODO: add request size limit
+          //hangup if this is all too much
+          if(body.size() + request->second.size() > MAX_REQUEST_SIZE) {
+            requests.erase(request);
+            body.rebuild(0);
+            handle_response(messages);
+          }
+
           //put this part of the request with the rest
           auto& request_data = request->second;
-          request_data.append(static_cast<const char*>(messages.front().data()), messages.front().size());
+          request_data.append(static_cast<const char*>(body.data()), body.size());
           //see how many requests we have
           size_t consumed;
           auto separated = protocol_type::separate(request_data.c_str(), request_data.size(), consumed);

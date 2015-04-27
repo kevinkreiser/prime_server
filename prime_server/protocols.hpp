@@ -63,18 +63,28 @@ namespace prime_server {
    protected:
   };
 
-/*
+
   //TODO: this only supports GET right now
-  //TODO: write tests
-  class http_request_t {
+  //TODO: massive work in progress..
+  //TODO: might need to rethink the whole protocol thing to be more of an object that keeps state for
+  //assembling a request at the server or response at the client, creating a request or response needs
+  //no state but could still possibly benefit from it (ie adding headers)
+  class http_protocol_t {
    public:
+    static zmq::message_t delineate(const void* data, size_t size) {
+
+    }
+    static std::list<std::pair<const void*, size_t> > separate(const void* data, size_t size, size_t& consumed) {
+
+    }
+/*
     enum class method_t { GET }; //, POST, PUT, HEAD, DELETE, TRACE, CONNECT };
     static const std::unordered_map<std::string, method_t> METHODS{ {"GET", method_t::GET} }; //, {"POST", method_t::POST}, {"PUT", method_t::PUT}, {"HEAD", method_t::HEAD}, {"DELETE", method_t::DELETE}, {"TRACE", method_t::TRACE}, {"CONNECT", method_t::CONNECT} };
 
-    http_request_t() = delete;
+    http_protocol_t() = delete;
     //requests look like this
     //GET /help?blah=4 HTTP/1.1\r\nHost: localhost:8002\r\nUser-Agent: Mozilla/5.0 ... \r\n\r\n
-    http_request_t(const char* str, size_t len): request(str, len) {
+    http_protocol_t(const char* str, size_t len): request(str, len) {
       auto next = parse_method(request.begin(), request.end());
       next = parse_path(next, request.end());
       next = parse_version(next, request.end());
@@ -188,9 +198,10 @@ namespace prime_server {
       }
       return begin;
     }
+
+*/
   };
 
-  */
 }
 
 #endif //__PROTOCOLS_HPP__
