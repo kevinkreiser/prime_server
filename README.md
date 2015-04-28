@@ -26,20 +26,25 @@ Run it
 
 The library comes with a standalone binary which is essentially just a server or a simulated one that tells you whether or not a given input number is prime. The aim isn't really to do any type of novel large prime computation but rather to contrive a system whose units of work are highly non-uniform in terms of their time to completion (and yes random sleeps are boring). This is a common problem in many other workflows and primes seemed like a good way to illustrate this.
 
-    #simulate the whole thing
-    time simulator 10000000 1
-    time simulator 10000000 8
-
-    #actually run a server with with a backend
-    for c in 1 8; do
-        backend $c &
-        BACK="$!"
-        python server.py &
-        SERVE="$!"
-        #TODO: time xargs requests or something..
-        kill $SERVE
-        kill $BACK
+    #simulate the whole thing with 1 vs 8 workers per worker layer
+    time prime_serverd 1000000 1
+    time prime_serverd 1000000 8
+    
+    #run an http server
+    prime_serverd tcp://*:8007 &
+    server_pid=$!
+    
+    #TODO:
+    #generate an input file of requests
+    for i in {1..1000000}; do
+      2 * $i + 3 >> input_file
     done
+    
+    #TODO:
+    #something with ab or xargs..
+    
+    rm -f input_file
+    kill $server_pid
 
 The Point
 ---------
