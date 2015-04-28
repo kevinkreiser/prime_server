@@ -95,8 +95,9 @@ namespace {
       worker_t(context_ptr, "ipc://test_netstring_proxy_downstream", "ipc://NONE", "ipc://test_netstring_results",
       [] (const std::list<zmq::message_t>& job) {
         worker_t::result_t result{false};
-        result.messages.emplace_back(job.front().size());
-        memcpy(result.messages.back().data(), job.front().data(), job.front().size());
+        auto response = netstring_protocol_t::delineate(job.front().data(), job.front().size());
+        result.messages.emplace_back();
+        result.messages.back().move(&response);
         return result;
       }
     )));

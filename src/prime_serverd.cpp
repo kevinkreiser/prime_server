@@ -42,6 +42,13 @@ int main(int argc, char** argv) {
   std::string parse_proxy_endpoint = "ipc://parse_proxy_endpoint";
   std::string compute_proxy_endpoint = "ipc://compute_proxy_endpoint";
 
+  //server
+  std::thread server_thread = requests ?
+    std::thread(std::bind(&server_t<netstring_protocol_t>::serve,
+                          server_t<netstring_protocol_t>(context_ptr, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint))):
+    std::thread(std::bind(&server_t<http_protocol_t>::serve,
+                          server_t<http_protocol_t>(context_ptr, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint)));
+
   //load balancer for parsing
   std::thread parse_proxy(std::bind(&proxy_t::forward, proxy_t(context_ptr, parse_proxy_endpoint + "_upstream", parse_proxy_endpoint + "_downstream")));
   parse_proxy.detach();
@@ -75,7 +82,7 @@ int main(int argc, char** argv) {
       worker_t(context_ptr, compute_proxy_endpoint + "_downstream", "ipc://NO_ENDPOINT", result_endpoint,
       [] (const std::list<zmq::message_t>& job) {
         //check if its prime
-        const size_t prime = *static_cast<const size_t*>(job.front().data());
+        size_t prime = *static_cast<const size_t*>(job.front().data());
         size_t divisor = 2;
         size_t high = prime;
         while(divisor < high) {
@@ -86,9 +93,14 @@ int main(int argc, char** argv) {
         }
 
         //if it was prime send it back unmolested, else send back 2 which we know is prime
+        if(divisor < high)
+          prime = 2;
+        auto message = netstring_protocol_t::delineate(static_cast<const void*>(&prime), sizeof(prime));
+
+        //package it up
         worker_t::result_t result{false};
-        result.messages.emplace_back(sizeof(size_t));
-        *static_cast<size_t*>(result.messages.back().data()) = (divisor >= high ? prime : static_cast<size_t>(2));
+        result.messages.emplace_back();
+        result.messages.back().move(&message);
         return result;
       }
     )));
@@ -98,9 +110,10 @@ int main(int argc, char** argv) {
   //make a client in process and quit when its batch is done
   //listen for requests from some other client indefinitely
   if(requests > 0) {
-    //server
-    std::thread server_thread(std::bind(&server_t<netstring_protocol_t>::serve, server_t<netstring_protocol_t>(context_ptr, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint)));
     server_thread.detach();
+    //sometimes you miss getting results back because the sub socket
+    //on the server hasnt yet connected with pub sockets on the workers
+    //std::this_thread::sleep_for(std::chrono::seconds(1));
 
     //client makes requests and gets back responses in a batch fashion
     size_t produced_requests = 0, collected_results = 0;
@@ -131,8 +144,6 @@ int main(int argc, char** argv) {
 
   }//or listen for requests from some other client indefinitely
   else {
-    //server
-    std::thread server_thread(std::bind(&server_t<http_protocol_t>::serve, server_t<http_protocol_t>(context_ptr, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint)));
     server_thread.join();
     //TODO: should we listen for SIGINT and terminate gracefully/exit(0)?
   }

@@ -45,13 +45,13 @@ namespace {
       throw std::runtime_error("Message was not properly delineated");
   }
 
-  void netstring_client_work(std::shared_ptr<zmq::context_t>& context_ptr) {
+  void http_client_work(std::shared_ptr<zmq::context_t>& context_ptr) {
     //client makes requests and gets back responses in a batch fashion
     const size_t total = 100000;
     std::unordered_set<std::string> requests;
     size_t received = 0;
     std::string request;
-    client_t<netstring_protocol_t> client(context_ptr, "ipc://test_http_server",
+    client_t<http_protocol_t> client(context_ptr, "ipc://test_http_server",
       [&requests, &request]() {
         //we want 10k requests
         if(requests.size() < total) {
@@ -67,7 +67,19 @@ namespace {
       },
       [&requests, &received] (const std::pair<const void*, size_t>& result) {
         //get the result and tell if there is more or not
-        std::string response(static_cast<const char*>(result.first), result.second);
+        const char* begin = static_cast<const char*>(result.first);
+        const char* end = begin + result.second;
+        size_t space = 0;
+        while(space < 1 && begin < end) {
+          if(begin[0] == ' ')
+            ++space;
+          ++begin;
+        }
+        while(space < 2 && --end > begin) {
+          if(end[0] == ' ')
+            ++space;
+        }
+        std::string response(begin, end - begin);
         if(requests.find(response) == requests.end())
           throw std::runtime_error("Unexpected response!");
         return ++received < total;
@@ -104,8 +116,8 @@ namespace {
     worker.detach();
 
     //make a bunch of clients
-    std::thread client1(std::bind(&netstring_client_work, context_ptr));
-    std::thread client2(std::bind(&netstring_client_work, context_ptr));
+    std::thread client1(std::bind(&http_client_work, context_ptr));
+    std::thread client2(std::bind(&http_client_work, context_ptr));
     client1.join();
     client2.join();
   }

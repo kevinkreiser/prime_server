@@ -160,6 +160,7 @@ namespace prime_server {
       proxy.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
       proxy.connect(proxy_endpoint.c_str());
 
+      //TODO: consider making this into a pull socket so we dont lose any results due to timing
       loopback.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
       loopback.setsockopt(ZMQ_SUBSCRIBE, "", 0);
       loopback.bind(result_endpoint.c_str());
@@ -201,8 +202,7 @@ namespace prime_server {
         LOG_WARN("Cannot reply with more than one message, dropping additional");
       client.send(messages.front(), ZMQ_SNDMORE);
       messages.pop_front();
-      auto response = protocol_type::delineate(messages.front().data(), messages.front().size());
-      client.send(response);
+      client.send(messages.front());
     }
     void handle_request(std::list<zmq::message_t>& messages) {
       //cant be more than 2 messages
@@ -381,11 +381,8 @@ namespace prime_server {
               send_all(downstream_proxy, result.messages);
             }//or are we done
             else {
-              if(result.messages.size() > 1) {
-                while(result.messages.size() > 1)
-                  result.messages.pop_back();
+              if(result.messages.size() > 1)
                 LOG_WARN("Cannot send more than one result message, additional parts are dropped");
-              }
               loopback.send(address, ZMQ_SNDMORE);
               send_all(loopback, result.messages);
             }
