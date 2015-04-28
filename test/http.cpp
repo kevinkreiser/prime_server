@@ -45,13 +45,13 @@ namespace {
       throw std::runtime_error("Message was not properly delineated");
   }
 
-  void http_client_work(std::shared_ptr<zmq::context_t>& context_ptr) {
+  void http_client_work(zmq::context_t& context) {
     //client makes requests and gets back responses in a batch fashion
     const size_t total = 100000;
     std::unordered_set<std::string> requests;
     size_t received = 0;
     std::string request;
-    client_t<http_protocol_t> client(context_ptr, "ipc://test_http_server",
+    client_t<http_protocol_t> client(context, "ipc://test_http_server",
       [&requests, &request]() {
         //we want 10k requests
         if(requests.size() < total) {
@@ -91,21 +91,21 @@ namespace {
 
   void test_parallel_clients() {
 
-    auto context_ptr = std::make_shared<zmq::context_t>(1);
+    zmq::context_t context;
 
     //server
     std::thread server(std::bind(&server_t<http_protocol_t>::serve,
-     server_t<http_protocol_t>(context_ptr, "ipc://test_http_server", "ipc://test_http_proxy_upstream", "ipc://test_http_results")));
+     server_t<http_protocol_t>(context, "ipc://test_http_server", "ipc://test_http_proxy_upstream", "ipc://test_http_results")));
     server.detach();
 
     //load balancer for parsing
     std::thread proxy(std::bind(&proxy_t::forward,
-      proxy_t(context_ptr, "ipc://test_http_proxy_upstream", "ipc://test_http_proxy_downstream")));
+      proxy_t(context, "ipc://test_http_proxy_upstream", "ipc://test_http_proxy_downstream")));
     proxy.detach();
 
     //echo worker
     std::thread worker(std::bind(&worker_t::work,
-      worker_t(context_ptr, "ipc://test_http_proxy_downstream", "ipc://NONE", "ipc://test_http_results",
+      worker_t(context, "ipc://test_http_proxy_downstream", "ipc://NONE", "ipc://test_http_results",
       [] (const std::list<zmq::message_t>& job) {
         worker_t::result_t result{false};
         result.messages.emplace_back(job.front().size());
@@ -116,8 +116,8 @@ namespace {
     worker.detach();
 
     //make a bunch of clients
-    std::thread client1(std::bind(&http_client_work, context_ptr));
-    std::thread client2(std::bind(&http_client_work, context_ptr));
+    std::thread client1(std::bind(&http_client_work, context));
+    std::thread client2(std::bind(&http_client_work, context));
     client1.join();
     client2.join();
   }

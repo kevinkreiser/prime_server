@@ -1,7 +1,6 @@
 #ifndef __PRIME_SERVER_HPP__
 #define __PRIME_SERVER_HPP__
 
-#include <zmq.hpp>
 #include <functional>
 #include <string>
 #include <queue>
@@ -13,6 +12,9 @@
 #include <random>
 #include <memory>
 #include <limits>
+#include <cassert>
+
+#include <zmq.h>
 
 #include "logging/logging.hpp"
 
@@ -24,28 +26,164 @@
 
 namespace {
 
-  //TODO: make this configurable
-  constexpr size_t MAX_REQUEST_SIZE = 1024;
+//TODO: make this configurable
+constexpr size_t MAX_REQUEST_SIZE = 1024;
 
-  //read all of the messages from a socket
-  std::list<zmq::message_t> recv_all(zmq::socket_t& socket) {
-    //grab all message parts
-    std::list<zmq::message_t> messages;
-    int more;
-    size_t more_size = sizeof(more);
-    do {
-      messages.emplace_back();
-      socket.recv(&messages.back());
-      socket.getsockopt(ZMQ_RCVMORE, &more, &more_size);
-    } while(more);
-    return messages;
-  }
+}
 
-  //send all the messages over this socket
-  void send_all(zmq::socket_t& socket, std::list<zmq::message_t>& messages) {
-    const auto* last_message = &messages.back();
-    for(auto& message : messages)
-      socket.send(message, (last_message == &message ? 0 : ZMQ_SNDMORE));
+namespace zmq {
+
+  struct context_t {
+    context_t(/*TODO: add options*/) {
+      //make the c context
+      auto* context = zmq_ctx_new();
+      if(!context)
+        throw std::runtime_error(zmq_strerror(zmq_errno()));
+
+      //wrap it in RAII goodness
+      ptr.reset(context,
+        [](void* context) {
+          assert(zmq_ctx_destroy(context) == 0);
+        });
+    }
+    operator void*() {
+      return ptr.get();
+    }
+   protected:
+    std::shared_ptr<void> ptr;
+  };
+
+  struct message_t {
+    explicit message_t(size_t size = 0) {
+      //make the c message
+      zmq_msg_t* message = new zmq_msg_t();
+      if(zmq_msg_init_size(message, size) != 0)
+        throw std::runtime_error(zmq_strerror(zmq_errno()));
+
+      //wrap it in RAII goodness
+      ptr.reset(message,
+        [](zmq_msg_t* message) {
+          assert(zmq_msg_close(message) == 0);
+          delete message;
+        });
+    }
+    void reset(size_t size = 0) {
+      assert(zmq_msg_close(ptr.get()) == 0);
+      if(zmq_msg_init_size(ptr.get(), size) != 0)
+        throw std::runtime_error(zmq_strerror(zmq_errno()));
+    }
+    operator zmq_msg_t*() {
+      return ptr.get();
+    }
+    void* data() {
+      return zmq_msg_data(ptr.get());
+    }
+    const void* data() const {
+      return zmq_msg_data(const_cast<zmq_msg_t*>(ptr.get()));
+    }
+    size_t size() const {
+      return zmq_msg_size(const_cast<zmq_msg_t*>(ptr.get()));
+    }
+   protected:
+    std::shared_ptr<zmq_msg_t> ptr;
+  };
+
+  struct socket_t {
+    socket_t(const context_t& context, int socket_type):context(context) {
+      //make the c socket
+      auto* socket = zmq_socket(this->context, socket_type);
+      if(!socket)
+        throw std::runtime_error(zmq_strerror(zmq_errno()));
+
+      //wrap it in RAII goodness
+      ptr.reset(socket,
+        [](void* socket){
+          assert(zmq_close(socket) == 0);
+        });
+    }
+    //set an option on this socket
+    void setsockopt(int option, const void* value, size_t value_length) {
+      if(zmq_setsockopt(ptr.get(), option, value, value_length) != 0)
+        throw std::runtime_error(zmq_strerror(zmq_errno()));
+    }
+    //get an option from this socket
+    void getsockopt(int option, void* value, size_t* value_length) {
+      if(zmq_getsockopt(ptr.get(), option, value, value_length) != 0)
+        throw std::runtime_error(zmq_strerror(zmq_errno()));
+    }
+    //connect the socket
+    void connect(const char* address) {
+      if(zmq_connect(ptr.get(), address) != 0)
+        throw std::runtime_error(zmq_strerror(zmq_errno()));
+    }
+    //bind the socket
+    void bind(const char* address) {
+      if(zmq_bind(ptr.get(), address) != 0)
+        throw std::runtime_error(zmq_strerror(zmq_errno()));
+    }
+    //read a single message from this socket
+    bool recv(message_t& message, int flags = 0) {
+      auto byte_count = zmq_msg_recv(message, ptr.get(), flags);
+      //ignore EAGAIN it just means you asked for non-blocking and there wasn't anything
+      if(byte_count == -1 && zmq_errno() != EAGAIN)
+        throw std::runtime_error(zmq_strerror(zmq_errno()));
+      return byte_count >= 0;
+    }
+    //read all of the messages on this socket
+    std::list<message_t> recv_all(/*add flags*/) {
+      //grab all message parts
+      std::list<message_t> messages;
+      int more;
+      size_t more_size = sizeof(more);
+      do {
+        messages.emplace_back();
+        if(!recv(messages.back()))
+          messages.pop_back();
+        zmq_getsockopt(ptr.get(), ZMQ_RCVMORE, &more, &more_size);
+      } while(more);
+      return messages;
+    }
+    //send some bytes
+    bool send(const void* bytes, size_t count, int flags = 0) {
+      auto byte_count = zmq_send(ptr.get(), bytes, count, flags);
+      //ignore EAGAIN it just means you asked for non-blocking and we couldnt send the message
+      if(byte_count == -1 && zmq_errno() != EAGAIN)
+        throw std::runtime_error(zmq_strerror(zmq_errno()));
+      return byte_count >= 0;
+    }
+    //send a single message
+    bool send(message_t& message, int flags = 0) {
+      auto byte_count = zmq_msg_send(message, ptr.get(), flags);
+      //ignore EAGAIN it just means you asked for non-blocking and we couldnt send the message
+      if(byte_count == -1 && zmq_errno() != EAGAIN)
+        throw std::runtime_error(zmq_strerror(zmq_errno()));
+      return byte_count >= 0;
+    }
+    //send all the messages over this socket
+    size_t send_all(std::list<message_t>& messages/*, add flags*/) {
+      const auto* last_message = &messages.back();
+      size_t total = 0;
+      for(auto& message : messages)
+        total += static_cast<size_t>(send(message, (last_message == &message ? 0 : ZMQ_SNDMORE)));
+      return total;
+    }
+    operator void*() {
+      return ptr.get();
+    }
+   protected:
+    //keep a copy of context so that, if the one used to make
+    //this socket goes out of scope, we aren't screwed
+    context_t context;
+    std::shared_ptr<void> ptr;
+  };
+
+  //check for events on a bunch of sockets, multiplexing ftw
+  using pollitem_t = zmq_pollitem_t;
+  int poll(pollitem_t* items, int count, long timeout = -1) {
+    int signaled_events;
+    if((signaled_events = zmq_poll(items, count, timeout)) < 0)
+      throw std::runtime_error(zmq_strerror(zmq_errno()));
+    return signaled_events;
   }
 
 }
@@ -60,9 +198,9 @@ namespace prime_server {
     using request_function_t = std::function<std::pair<const void*, size_t> ()>;
     using collect_function_t = std::function<bool (const std::pair<const void*, size_t>&)>;
    public:
-    client_t(const std::shared_ptr<zmq::context_t>& context_ptr, const std::string& server_endpoint, const request_function_t& request_function,
+    client_t(zmq::context_t& context, const std::string& server_endpoint, const request_function_t& request_function,
       const collect_function_t& collect_function, size_t batch_size = 8912):
-      context_ptr(context_ptr), server(*context_ptr, ZMQ_STREAM), request_function(request_function), collect_function(collect_function), batch_size(batch_size) {
+      server(context, ZMQ_STREAM), request_function(request_function), collect_function(collect_function), batch_size(batch_size) {
 
       int disabled = 0;
       server.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
@@ -78,7 +216,7 @@ namespace prime_server {
     void batch() {
       //swallow the first response as its just for connecting
       //TODO: make sure it looks right
-      recv_all(server);
+      server.recv_all();
 
       //need the identity to identify our connection when we send stuff
       uint8_t identity[256];
@@ -113,7 +251,7 @@ namespace prime_server {
         while(more && current_batch < batch_size) {
           try {
             //see if we are still waiting for stuff
-            auto messages = recv_all(server);
+            auto messages = server.recv_all();
             messages.pop_front();
             response_data.append(static_cast<const char*>(messages.front().data()), messages.front().size());
             size_t consumed;
@@ -131,7 +269,6 @@ namespace prime_server {
       }
     }
    protected:
-    std::shared_ptr<zmq::context_t> context_ptr;
     zmq::socket_t server;
     request_function_t request_function;
     collect_function_t collect_function;
@@ -142,8 +279,8 @@ namespace prime_server {
   template <class protocol_type>
   class server_t {
    public:
-    server_t(const std::shared_ptr<zmq::context_t>& context_ptr, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint):
-      context_ptr(context_ptr), client(*context_ptr, ZMQ_STREAM), proxy(*context_ptr, ZMQ_DEALER), loopback(*context_ptr, ZMQ_SUB) {
+    server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint):
+      client(context, ZMQ_STREAM), proxy(context, ZMQ_DEALER), loopback(context, ZMQ_SUB) {
 
       int disabled = 0;
       client.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
@@ -176,7 +313,7 @@ namespace prime_server {
         //got a new result
         if(items[0].revents & ZMQ_POLLIN) {
           try {
-            auto messages = recv_all(loopback);
+            auto messages = loopback.recv_all();
             handle_response(messages);
           }
           catch(const std::exception& e) {
@@ -187,7 +324,7 @@ namespace prime_server {
         //got a new request
         if(items[1].revents & ZMQ_POLLIN) {
           try {
-            auto messages = recv_all(client);
+            auto messages = client.recv_all();
             handle_request(messages);
           }
           catch(const std::exception& e) {
@@ -245,7 +382,7 @@ namespace prime_server {
           //TODO: 414 for http clients
           if(request_data.size() > MAX_REQUEST_SIZE) {
             requests.erase(request);
-            body.rebuild(0);
+            body.reset();
             handle_response(messages);
             return;
           }
@@ -254,8 +391,6 @@ namespace prime_server {
           LOG_WARN("Ignoring request: unknown client");
       }
     }
-
-    std::shared_ptr<zmq::context_t> context_ptr;
     zmq::socket_t client;
     zmq::socket_t proxy;
     zmq::socket_t loopback;
@@ -266,8 +401,8 @@ namespace prime_server {
   //proxy messages between layers of a backend load balancing in between
   class proxy_t {
    public:
-    proxy_t(const std::shared_ptr<zmq::context_t>& context_ptr, const std::string& upstream_endpoint, const std::string& downstream_endpoint):
-      context_ptr(context_ptr), upstream(*context_ptr, ZMQ_ROUTER), downstream(*context_ptr, ZMQ_ROUTER) {
+    proxy_t(zmq::context_t& context, const std::string& upstream_endpoint, const std::string& downstream_endpoint):
+      upstream(context, ZMQ_ROUTER), downstream(context, ZMQ_ROUTER) {
 
       int disabled = 0;
 
@@ -294,7 +429,7 @@ namespace prime_server {
         //this worker is bored
         if(items[0].revents & ZMQ_POLLIN) {
           try {
-            auto messages = recv_all(downstream);
+            auto messages = downstream.recv_all();
             auto inserted = workers.insert(std::string(static_cast<const char*>(messages.front().data()), messages.front().size()));
             if(inserted.second)
               fifo.push(*inserted.first);
@@ -308,7 +443,7 @@ namespace prime_server {
         if(items[1].revents & ZMQ_POLLIN) {
           try {
             //get the request
-            auto messages = recv_all(upstream);
+            auto messages = upstream.recv_all();
             //strip the from address and replace with first bored worker
             messages.pop_front();
             auto worker_address = fifo.front();
@@ -316,7 +451,7 @@ namespace prime_server {
             fifo.pop();
             //send it on to the worker
             downstream.send(static_cast<const void*>(worker_address.c_str()), worker_address.size(), ZMQ_SNDMORE);
-            send_all(downstream, messages);
+            downstream.send_all(messages);
           }
           catch (const std::exception& e) {
             //TODO: recover from a worker dying just before you send it work
@@ -326,7 +461,6 @@ namespace prime_server {
       }
     }
    protected:
-    std::shared_ptr<zmq::context_t> context_ptr;
     zmq::socket_t upstream;
     zmq::socket_t downstream;
   };
@@ -340,9 +474,9 @@ namespace prime_server {
     };
     using work_function_t = std::function<result_t (const std::list<zmq::message_t>&)>;
 
-    worker_t(const std::shared_ptr<zmq::context_t>& context_ptr, const std::string& upstream_proxy_endpoint, const std::string& downstream_proxy_endpoint,
+    worker_t(zmq::context_t& context, const std::string& upstream_proxy_endpoint, const std::string& downstream_proxy_endpoint,
       const std::string& result_endpoint, const work_function_t& work_function):
-      context_ptr(context_ptr), upstream_proxy(*context_ptr, ZMQ_DEALER), downstream_proxy(*context_ptr, ZMQ_DEALER), loopback(*context_ptr, ZMQ_PUB),
+      upstream_proxy(context, ZMQ_DEALER), downstream_proxy(context, ZMQ_DEALER), loopback(context, ZMQ_PUB),
       work_function(work_function), heart_beat(5000) {
 
       int disabled = 0;
@@ -371,20 +505,20 @@ namespace prime_server {
         //got some work to do
         if(item.revents & ZMQ_POLLIN) {
           try {
-            auto messages = recv_all(upstream_proxy);
+            auto messages = upstream_proxy.recv_all();
             auto address = std::move(messages.front());
             messages.pop_front();
             auto result = work_function(messages);
             //should we send this on to the next proxy
             if(result.intermediate) {
               downstream_proxy.send(address, ZMQ_SNDMORE);
-              send_all(downstream_proxy, result.messages);
+              downstream_proxy.send_all(result.messages);
             }//or are we done
             else {
               if(result.messages.size() > 1)
                 LOG_WARN("Cannot send more than one result message, additional parts are dropped");
               loopback.send(address, ZMQ_SNDMORE);
-              send_all(loopback, result.messages);
+              loopback.send_all(result.messages);
             }
           }
           catch(const std::exception& e) {
@@ -406,7 +540,6 @@ namespace prime_server {
         LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what());
       }
     }
-    std::shared_ptr<zmq::context_t> context_ptr;
     zmq::socket_t upstream_proxy;
     zmq::socket_t downstream_proxy;
     zmq::socket_t loopback;

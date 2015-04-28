@@ -9,9 +9,6 @@ Grab some deps
     make -j8
     sudo make install
 
-    # grab the c++ bindings:
-    wget https://raw.githubusercontent.com/zeromq/cppzmq/master/zmq.hpp -O /usr/local/include/zmq.hpp
-
 Build and Install
 -----------------
 

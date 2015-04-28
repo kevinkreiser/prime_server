@@ -1,7 +1,7 @@
 #ifndef __PROTOCOLS_HPP__
 #define __PROTOCOLS_HPP__
 
-#include <zmq.hpp>
+#include <zmq.h>
 #include <unordered_map>
 
 namespace prime_server {
