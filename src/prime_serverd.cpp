@@ -9,7 +9,8 @@
 #include <stdexcept>
 
 #include "prime_server.hpp"
-#include "protocols.hpp"
+#include "netstring_protocol.hpp"
+#include "http_protocol.hpp"
 using namespace prime_server;
 
 #include "logging/logging.hpp"
@@ -42,12 +43,16 @@ int main(int argc, char** argv) {
   std::string compute_proxy_endpoint = "ipc://compute_proxy_endpoint";
 
   //server
+  std::thread server_thread =
+      std::thread(std::bind(&netstring_server_t::serve,
+                            netstring_server_t(context, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint)));
+  /*
   std::thread server_thread = requests ?
-    std::thread(std::bind(&server_t<netstring_protocol_t>::serve,
-                          server_t<netstring_protocol_t>(context, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint))):
-    std::thread(std::bind(&server_t<http_protocol_t>::serve,
-                          server_t<http_protocol_t>(context, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint)));
-
+    std::thread(std::bind(&netstring_server_t::serve,
+                          netstring_server_t(context, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint))):
+    std::thread(std::bind(&http_server_t::serve,
+                          http_server_t(context, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint)));
+*/
   //load balancer for parsing
   std::thread parse_proxy(std::bind(&proxy_t::forward, proxy_t(context, parse_proxy_endpoint + "_upstream", parse_proxy_endpoint + "_downstream")));
   parse_proxy.detach();
@@ -95,7 +100,7 @@ int main(int argc, char** argv) {
           prime = 2;
         worker_t::result_t result{false};
         result.messages.emplace_back(static_cast<const char*>(static_cast<const void*>(&prime)), sizeof(prime));
-        netstring_protocol_t::delineate(result.messages.back());
+        netstring_response_t::format(result.messages.back());
         return result;
       }
     )));
@@ -114,20 +119,20 @@ int main(int argc, char** argv) {
     size_t produced_requests = 0, collected_results = 0;
     std::string request;
     std::set<size_t> primes = {2};
-    client_t<netstring_protocol_t> client(context, server_endpoint,
+    netstring_client_t client(context, server_endpoint,
       [&request, requests, &produced_requests]() {
         //blank request means we are done
         if(produced_requests < requests) {
           request = std::to_string(produced_requests++ * 2 + 3);
-          netstring_protocol_t::delineate(request);
+          netstring_request_t::format(request);
         }
         else
           request.clear();
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
-      [requests, &primes, &collected_results] (const std::pair<const void*, size_t>& result) {
+      [requests, &primes, &collected_results] (const void* message, size_t length) {
         //get the result and tell if there is more or not
-        size_t number = *static_cast<const size_t*>(result.first);
+        size_t number = *static_cast<const size_t*>(message);
         primes.insert(number);
         return ++collected_results < requests;
       }

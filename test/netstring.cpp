@@ -1,6 +1,6 @@
 #include "testing/testing.hpp"
 #include "prime_server.hpp"
-#include "protocols.hpp"
+#include "netstring_protocol.hpp"
 
 #include <functional>
 #include <memory>
@@ -38,8 +38,11 @@ namespace {
 
   void test_delineate() {
     std::string netstring("e_chliises_schtoeckli");
-    prime_server::netstring_protocol_t::delineate(netstring);
+    prime_server::netstring_request_t::format(netstring);
     if(netstring != "21:e_chliises_schtoeckli,")
+      throw std::runtime_error("Message was not properly delineated");
+    prime_server::netstring_response_t::format(netstring);
+    if(netstring != "25:21:e_chliises_schtoeckli,,")
       throw std::runtime_error("Message was not properly delineated");
   }
 

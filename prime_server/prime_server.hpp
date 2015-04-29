@@ -35,13 +35,10 @@ namespace {
 
 namespace prime_server {
 
-  //TODO: do a make_shared for zmq context and socket
-
   //client makes requests and gets back responses in batches asynchronously
-  template <class protocol_type>
   class client_t {
     using request_function_t = std::function<std::pair<const void*, size_t> ()>;
-    using collect_function_t = std::function<bool (const std::pair<const void*, size_t>&)>;
+    using collect_function_t = std::function<bool (const void*, size_t)>;
    public:
     client_t(zmq::context_t& context, const std::string& server_endpoint, const request_function_t& request_function,
       const collect_function_t& collect_function, size_t batch_size = 8912):
@@ -58,6 +55,7 @@ namespace prime_server {
 #endif
       server.connect(server_endpoint.c_str());
     }
+    virtual ~client_t(){}
     void batch() {
       //swallow the first response as its just for connecting
       //TODO: make sure it looks right
@@ -90,21 +88,13 @@ namespace prime_server {
         }
 
         //receive some
-        std::string response_data;
         current_batch = 0;
         while(more && current_batch < batch_size) {
           try {
             //see if we are still waiting for stuff
             auto messages = server.recv_all();
             messages.pop_front();
-            response_data.append(static_cast<const char*>(messages.front().data()), messages.front().size());
-            size_t consumed;
-            auto responses = protocol_type::separate(response_data.c_str(), response_data.size(), consumed);
-            for(const auto& reponse : responses) {
-              more = collect_function(reponse);
-              ++current_batch;
-            }
-            response_data.erase(0, consumed);
+            current_batch += stream_responses(messages.front().data(), messages.front().size(), more);
           }
           catch(const std::exception& e) {
             LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " client_t: " + e.what());
@@ -113,6 +103,8 @@ namespace prime_server {
       }
     }
    protected:
+    virtual size_t stream_responses(void*, size_t, bool&) = 0;
+
     zmq::socket_t server;
     request_function_t request_function;
     collect_function_t collect_function;
@@ -120,7 +112,6 @@ namespace prime_server {
   };
 
   //server sits between a clients and a load balanced backend
-  template <class protocol_type>
   class server_t {
    public:
     server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint):
@@ -148,6 +139,7 @@ namespace prime_server {
 
       requests.reserve(1024);
     }
+    virtual ~server_t(){}
     void serve() {
       while(true) {
         //check for activity on the client socket and the result socket
@@ -209,22 +201,13 @@ namespace prime_server {
       }//actual request data
       else {
         if(request != requests.end()) {
-          //put this part of the request with the rest
-          auto& request_data = request->second;
-          request_data.append(static_cast<const char*>(body.data()), body.size());
-          //see how many requests we have
-          size_t consumed;
-          auto separated = protocol_type::separate(request_data.c_str(), request_data.size(), consumed);
-          //send them all into the machine
-          for(const auto& separate : separated) {
-            proxy.send(requester, ZMQ_SNDMORE);
-            proxy.send(separate.first, separate.second, 0);
-          }
-          request_data.erase(0, consumed);
+          //proxy any whole bits onward
+          auto& buffer = request->second;
+          stream_requests(body.data(), body.size(), requester, buffer);
 
-          //hangup if this is all too much
+          //hangup if this is all too much (in the buffer)
           //TODO: 414 for http clients
-          if(request_data.size() > MAX_REQUEST_SIZE) {
+          if(request->second.size() > MAX_REQUEST_SIZE) {
             requests.erase(request);
             body.reset();
             handle_response(messages);
@@ -235,6 +218,7 @@ namespace prime_server {
           LOG_WARN("Ignoring request: unknown client");
       }
     }
+    virtual void stream_requests(void*, size_t, const std::string&, std::string&) = 0;
     zmq::socket_t client;
     zmq::socket_t proxy;
     zmq::socket_t loopback;

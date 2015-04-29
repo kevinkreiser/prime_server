@@ -1,57 +1,11 @@
-#ifndef __PROTOCOLS_HPP__
-#define __PROTOCOLS_HPP__
+#ifndef __HTTP_PROTOCOL_HPP__
+#define __HTTP_PROTOCOL_HPP__
+
+#include "prime_server.hpp"
+
+#include <limits>
 
 namespace prime_server {
-
-  //TODO: this kind of sucks but currently dont have a better way
-  //might want to make it a real class and keep state as to where you are in parsing
-  //this is like netstrings but the strings are actually binary if you want them to be
-  class netstring_protocol_t {
-   public:
-    static void delineate(std::string& data) {
-      data = std::to_string(data.size()) + ':' + data + ',';
-    }
-    static std::list<std::pair<const void*, size_t> > separate(const void* data, size_t size, size_t& consumed) {
-      if(size == 0)
-        return {};
-
-      if(static_cast<const char*>(data)[0] == ':')
-        throw std::runtime_error("Netstring protocol message cannot begin with a ':'");
-
-      //keep getting pieces if there is enough space for the message length plus a message
-      std::list<std::pair<const void*, size_t> > pieces;
-      const char* begin = static_cast<const char*>(data);
-      const char* end = begin + size;
-      const char* delim = begin;
-      while(delim < end) {
-        //get next colon
-        const char* next_delim = delim;
-        for(;next_delim < end; ++next_delim)
-          if(*next_delim == ':')
-            break;
-        if(next_delim == end)
-          break;
-
-        //convert the previous portion to a number
-        std::string length_str(delim, next_delim - delim);
-        size_t length = std::stoul(length_str);
-        const char* piece = next_delim + 1;
-        next_delim += length + 2;
-
-        //data is past the end which means we dont have it all yet
-        if(next_delim > end)
-          break;
-
-        //tell where this piece is
-        pieces.emplace_back(static_cast<const void*>(piece), length);
-        delim = next_delim;
-      }
-      consumed = delim - static_cast<const char*>(data);
-      return pieces;
-    }
-   protected:
-  };
-
 
   //TODO: this only supports GET right now and is basically bare minimum, total work in progress..
   //TODO: should just re-think the whole protocol thing to be more of an object that keeps state for
@@ -215,7 +169,6 @@ namespace prime_server {
 
 */
   };
-
 }
 
-#endif //__PROTOCOLS_HPP__
+#endif //__HTTP_PROTOCOL_HPP__
