@@ -39,9 +39,8 @@ namespace {
 
   void test_delineate() {
     std::string http("e_chliises_schtoeckli");
-    auto message = prime_server::http_protocol_t::delineate(static_cast<const void*>(http.data()), http.size());
-    std::string delineated(static_cast<const char*>(message.data()), message.size());
-    if(delineated != "GET e_chliises_schtoeckli HTTP/1.1\r\n\r\n")
+    prime_server::http_protocol_t::delineate(http);
+    if(http != "GET e_chliises_schtoeckli HTTP/1.1\r\n\r\n")
       throw std::runtime_error("Message was not properly delineated");
   }
 
@@ -60,6 +59,7 @@ namespace {
             request = random_string(10);
             inserted = requests.insert(request);
           }
+          http_protocol_t::delineate(request);
         }//blank request means we are done
         else
           request.clear();
@@ -108,8 +108,8 @@ namespace {
       worker_t(context, "ipc://test_http_proxy_downstream", "ipc://NONE", "ipc://test_http_results",
       [] (const std::list<zmq::message_t>& job) {
         worker_t::result_t result{false};
-        result.messages.emplace_back(job.front().size());
-        memcpy(result.messages.back().data(), job.front().data(), job.front().size());
+        result.messages.emplace_back(static_cast<const char*>(job.front().data()), job.front().size());
+        netstring_protocol_t::delineate(result.messages.back());
         return result;
       }
     )));

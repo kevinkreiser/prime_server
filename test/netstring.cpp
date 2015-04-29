@@ -38,9 +38,8 @@ namespace {
 
   void test_delineate() {
     std::string netstring("e_chliises_schtoeckli");
-    auto message = prime_server::netstring_protocol_t::delineate(static_cast<const void*>(netstring.data()), netstring.size());
-    std::string delineated(static_cast<const char*>(message.data()), message.size());
-    if(delineated != "21:e_chliises_schtoeckli,")
+    prime_server::netstring_protocol_t::delineate(netstring);
+    if(netstring != "21:e_chliises_schtoeckli,")
       throw std::runtime_error("Message was not properly delineated");
   }
 
@@ -59,6 +58,7 @@ namespace {
             request = random_string(10);
             inserted = requests.insert(request);
           }
+          netstring_protocol_t::delineate(request);
         }//blank request means we are done
         else
           request.clear();
@@ -95,9 +95,8 @@ namespace {
       worker_t(context, "ipc://test_netstring_proxy_downstream", "ipc://NONE", "ipc://test_netstring_results",
       [] (const std::list<zmq::message_t>& job) {
         worker_t::result_t result{false};
-        auto response = netstring_protocol_t::delineate(job.front().data(), job.front().size());
-        result.messages.emplace_back();
-        result.messages.back() = std::move(response);
+        result.messages.emplace_back(static_cast<const char*>(job.front().data()), job.front().size());
+        netstring_protocol_t::delineate(result.messages.back());
         return result;
       }
     )));

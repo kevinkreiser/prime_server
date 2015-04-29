@@ -1,9 +1,6 @@
 #ifndef __PROTOCOLS_HPP__
 #define __PROTOCOLS_HPP__
 
-#include <zmq.h>
-#include <unordered_map>
-
 namespace prime_server {
 
   //TODO: this kind of sucks but currently dont have a better way
@@ -11,15 +8,8 @@ namespace prime_server {
   //this is like netstrings but the strings are actually binary if you want them to be
   class netstring_protocol_t {
    public:
-    static zmq::message_t delineate(const void* data, size_t size) {
-      auto size_prefix = std::to_string(size) + ':';
-      zmq::message_t message(size_prefix.size() + size + 1);
-      auto* dst = static_cast<char*>(message.data());
-      std::copy(size_prefix.begin(), size_prefix.end(), dst);
-      dst += size_prefix.size();
-      std::copy(static_cast<const char*>(data), static_cast<const char*>(data) + size, dst);
-      dst[size] = ',';
-      return message;
+    static void delineate(std::string& data) {
+      data = std::to_string(data.size()) + ':' + data + ',';
     }
     static std::list<std::pair<const void*, size_t> > separate(const void* data, size_t size, size_t& consumed) {
       if(size == 0)
@@ -74,17 +64,8 @@ namespace prime_server {
     //GET /help?blah=4 HTTP/1.1\r\nHost: localhost:8002\r\nUser-Agent: Mozilla/5.0 ... \r\n\r\n
 
    public:
-    static zmq::message_t delineate(const void* data, size_t size) {
-      const std::string directive("GET ");
-      const std::string type_headers_etc(" HTTP/1.1\r\n\r\n");
-      zmq::message_t message(directive.size() + size + type_headers_etc.size());
-      auto* dst = static_cast<char*>(message.data());
-      std::copy(directive.begin(), directive.end(), dst);
-      dst += directive.size();
-      std::copy(static_cast<const char*>(data), static_cast<const char*>(data) + size, dst);
-      dst += size;
-      std::copy(type_headers_etc.begin(), type_headers_etc.end(), dst);
-      return message;
+    static void delineate(std::string& data) {
+      data = "GET " + data + " HTTP/1.1\r\n\r\n";
     }
     static std::list<std::pair<const void*, size_t> > separate(const void* data, size_t size, size_t& consumed) {
       if(size == 0)

@@ -60,10 +60,9 @@ int main(int argc, char** argv) {
       [] (const std::list<zmq::message_t>& job) {
         //parse the string into a size_t
         worker_t::result_t result{true};
-        result.messages.emplace_back(sizeof(size_t));
         std::string prime_str(static_cast<const char*>(job.front().data()), job.front().size());
         const size_t possible_prime = std::stoul(prime_str);
-        *static_cast<size_t*>(result.messages.back().data()) = possible_prime;
+        result.messages.emplace_back(static_cast<const char*>(static_cast<const void*>(&possible_prime)), sizeof(size_t));
         return result;
       }
     )));
@@ -94,12 +93,9 @@ int main(int argc, char** argv) {
         //if it was prime send it back unmolested, else send back 2 which we know is prime
         if(divisor < high)
           prime = 2;
-        auto message = netstring_protocol_t::delineate(static_cast<const void*>(&prime), sizeof(prime));
-
-        //package it up
         worker_t::result_t result{false};
-        result.messages.emplace_back();
-        result.messages.back() = std::move(message);
+        result.messages.emplace_back(static_cast<const char*>(static_cast<const void*>(&prime)), sizeof(prime));
+        netstring_protocol_t::delineate(result.messages.back());
         return result;
       }
     )));
@@ -121,8 +117,10 @@ int main(int argc, char** argv) {
     client_t<netstring_protocol_t> client(context, server_endpoint,
       [&request, requests, &produced_requests]() {
         //blank request means we are done
-        if(produced_requests < requests)
+        if(produced_requests < requests) {
           request = std::to_string(produced_requests++ * 2 + 3);
+          netstring_protocol_t::delineate(request);
+        }
         else
           request.clear();
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());

@@ -75,7 +75,7 @@ This seems pretty decent for some offline scientific code that just pumps jobs i
                    |_________________________|____________________________|___________ ....
 
 
-A client (a browser or just a thread within this process) makes request to a server. The server listens for new requests and replies when the backend bits send back results. The backend is comprised of load balancing proxies between layers of worker pools. In real life you may run these in different processes or on different machines. We only using threads in order to simulate this, so please note the lack of classic mutex patterns (thank you zmq!).
+A client (a browser or just a thread within this process) makes a request to a server. The server listens for new requests and replies when the backend bits send back results. The backend is comprised of load balancing proxies between layers of worker pools. In real life you may run these in different processes or on different machines. We only using threads in order to simulate this, so please note the lack of classic mutex patterns (thank you zmq!).
 
 So this system lets you handle one type of request that can decomposed into multiple steps. That is useful if certain steps take longer than others because you can scale them individually. It doesn't really handle multiple types of requests unless workers learn more than one job. To fix this we could upgrade the workers to be able to forward work to more than one proxy. This would allow heterogeneous workflows without having to make smarter/larger pluripotent workers and therefore would allow scaling of various workflows independently of each other. An easier approach would be just running a separate cluster per workflow, pros and cons there too.
 

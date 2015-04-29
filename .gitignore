@@ -16,9 +16,9 @@ install-sh
 missing
 depcomp
 Makefile
-stub/config.h
-stub/config.h.in
-stub/stamp-h1
+prime_server/config.h
+prime_server/config.h.in
+prime_server/stamp-h1
 ltmain.sh
 m4/libtool.m4
 m4/ltoptions.m4

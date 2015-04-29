@@ -26,8 +26,8 @@
 
 namespace {
 
-//TODO: make this configurable
-constexpr size_t MAX_REQUEST_SIZE = 1024;
+  //TODO: make this configurable
+  constexpr size_t MAX_REQUEST_SIZE = 1024;
 
 }
 
@@ -122,7 +122,7 @@ namespace zmq {
         throw std::runtime_error(zmq_strerror(zmq_errno()));
     }
     //read a single message from this socket
-    bool recv(message_t& message, int flags = 0) {
+    bool recv(message_t& message, int flags) {
       auto byte_count = zmq_msg_recv(message, ptr.get(), flags);
       //ignore EAGAIN it just means you asked for non-blocking and there wasn't anything
       if(byte_count == -1 && zmq_errno() != EAGAIN)
@@ -137,14 +137,14 @@ namespace zmq {
       size_t more_size = sizeof(more);
       do {
         messages.emplace_back();
-        if(!recv(messages.back()))
+        if(!recv(messages.back(), 0))
           messages.pop_back();
         zmq_getsockopt(ptr.get(), ZMQ_RCVMORE, &more, &more_size);
       } while(more);
       return messages;
     }
     //send some bytes
-    bool send(const void* bytes, size_t count, int flags = 0) {
+    bool send(const void* bytes, size_t count, int flags) {
       auto byte_count = zmq_send(ptr.get(), bytes, count, flags);
       //ignore EAGAIN it just means you asked for non-blocking and we couldnt send the message
       if(byte_count == -1 && zmq_errno() != EAGAIN)
@@ -152,19 +152,17 @@ namespace zmq {
       return byte_count >= 0;
     }
     //send a single message
-    bool send(message_t& message, int flags = 0) {
-      auto byte_count = zmq_msg_send(message, ptr.get(), flags);
-      //ignore EAGAIN it just means you asked for non-blocking and we couldnt send the message
-      if(byte_count == -1 && zmq_errno() != EAGAIN)
-        throw std::runtime_error(zmq_strerror(zmq_errno()));
-      return byte_count >= 0;
+    template <class container_t>
+    bool send(const container_t& message, int flags) {
+      return send(static_cast<const void*>(message.data()), message.size(), flags);
     }
     //send all the messages over this socket
-    size_t send_all(std::list<message_t>& messages/*, add flags*/) {
+    template <class container_t>
+    size_t send_all(const std::list<container_t>& messages/*, add flags*/) {
       const auto* last_message = &messages.back();
       size_t total = 0;
-      for(auto& message : messages)
-        total += static_cast<size_t>(send(message, (last_message == &message ? 0 : ZMQ_SNDMORE)));
+      for(const auto& message : messages)
+        total += static_cast<size_t>(send<container_t>(message, (last_message == &message ? 0 : ZMQ_SNDMORE)));
       return total;
     }
     operator void*() {
@@ -235,10 +233,9 @@ namespace prime_server {
             auto request = request_function();
             if(request.second == 0)
               break;
-            auto message = protocol_type::delineate(request.first, request.second);
             //send the stuff on
             server.send(static_cast<const void*>(identity), identity_size, ZMQ_SNDMORE);
-            server.send(message);
+            server.send(static_cast<const void*>(request.first), request.second, 0);
           }
           catch(const std::exception& e) {
             LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " client_t: " + e.what());
@@ -339,7 +336,7 @@ namespace prime_server {
         LOG_WARN("Cannot reply with more than one message, dropping additional");
       client.send(messages.front(), ZMQ_SNDMORE);
       messages.pop_front();
-      client.send(messages.front());
+      client.send(messages.front(), 0);
     }
     void handle_request(std::list<zmq::message_t>& messages) {
       //cant be more than 2 messages
@@ -373,7 +370,7 @@ namespace prime_server {
           auto separated = protocol_type::separate(request_data.c_str(), request_data.size(), consumed);
           //send them all into the machine
           for(const auto& separate : separated) {
-            proxy.send(static_cast<const void*>(requester.c_str()), requester.size(), ZMQ_SNDMORE);
+            proxy.send(requester, ZMQ_SNDMORE);
             proxy.send(separate.first, separate.second, 0);
           }
           request_data.erase(0, consumed);
@@ -450,7 +447,7 @@ namespace prime_server {
             workers.erase(worker_address);
             fifo.pop();
             //send it on to the worker
-            downstream.send(static_cast<const void*>(worker_address.c_str()), worker_address.size(), ZMQ_SNDMORE);
+            downstream.send(worker_address, ZMQ_SNDMORE);
             downstream.send_all(messages);
           }
           catch (const std::exception& e) {
@@ -470,7 +467,7 @@ namespace prime_server {
    public:
     struct result_t {
       bool intermediate;
-      std::list<zmq::message_t> messages;
+      std::list<std::string> messages;
     };
     using work_function_t = std::function<result_t (const std::list<zmq::message_t>&)>;
 
@@ -534,7 +531,7 @@ namespace prime_server {
     void advertise() {
       try {
         //heart beat, we're alive
-        upstream_proxy.send(static_cast<const void*>(""), 0);
+        upstream_proxy.send(static_cast<const void*>(""), 0, 0);
       }
       catch (const std::exception& e) {
         LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what());
