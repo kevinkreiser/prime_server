@@ -1,3 +1,16 @@
+
+             o                                              
+    .,-. .--..  .--.--. .-.     .--. .-. .--..    ._.-. .--.
+    |   )|   |  |  |  |(.-'     `--.(.-' |    \  / (.-' |   
+    |`-' ' -' `-'  '  `-`--'____`--' `--''     `'   `--''   
+    |                                                       
+    '                                                       
+
+Build Status
+------------
+
+[![Build Status](https://travis-ci.org/kevinkreiser/prime_server.svg?branch=master)](https://travis-ci.org/kevinkreiser/prime_server)
+
 Grab some deps
 --------------
 
