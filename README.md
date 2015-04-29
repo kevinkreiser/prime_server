@@ -48,19 +48,19 @@ The Point
 
 What we want is a tool that lets you build a system that is pipelined and parallelized ie. the zmq "butterfly" or "parallel pipeline" pattern. See http://zeromq.org/tutorials:butterfly. Should end up looking something like:
 
-       (input)        request_producer
-                      /      |       \
-                     /       |        \
-    (parallelize)  worker  worker   worker ...
-                     \       |        /
-                      \      |       /
-     (rebalance)    intermediate_router
-                      /      |       \
-                     /       |        \
-    (parallelize)  worker  worker   worker ...
-                     \       |        /
-                      \      |       /
-      (output)       response_collector
+                           (input)        request_producer
+                                          /      |       \
+                                         /       |        \
+                        (parallelize)  worker  worker   worker ...
+                                         \       |        /
+                                          \      |       /
+                         (rebalance)    intermediate_router
+                                          /      |       \
+                                         /       |        \
+                        (parallelize)  worker  worker   worker ...
+                                         \       |        /
+                                          \      |       /
+                          (output)       response_collector
 
 This seems pretty decent for some offline scientific code that just pumps jobs into the system and waits for the results to land at the bottom. However this isn't very useful for online systems that face users for example. For that we need some kind of loopback so that we can get the result back to the requester. Something like:
 
