@@ -9,7 +9,7 @@ before_install:
 install:
   - sudo apt-get install -y -qq autoconf automake libtool make gcc-4.8 g++-4.8 lcov
   - sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-4.8 90
-  - cd libzmq && ./autogen.sh && ./configure --without-libsodium && make -j2 && sudo make install
+  - cd libzmq && ./autogen.sh && ./configure --without-libsodium && make -j2 && sudo make install && cd ..
 before_script:
 script:
   ./autogen.sh && ./configure --enable-coverage && make test -j2
