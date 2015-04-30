@@ -104,14 +104,14 @@ namespace zmq {
       return byte_count >= 0;
     }
     //read all of the messages on this socket
-    std::list<message_t> recv_all(/*add flags*/) {
+    std::list<message_t> recv_all(int flags) {
       //grab all message parts
       std::list<message_t> messages;
       int more;
       size_t more_size = sizeof(more);
       do {
         messages.emplace_back();
-        if(!recv(messages.back(), 0))
+        if(!recv(messages.back(), flags))
           messages.pop_back();
         zmq_getsockopt(ptr.get(), ZMQ_RCVMORE, &more, &more_size);
       } while(more);
@@ -132,11 +132,11 @@ namespace zmq {
     }
     //send all the messages over this socket
     template <class container_t>
-    size_t send_all(const std::list<container_t>& messages/*, add flags*/) {
+    size_t send_all(const std::list<container_t>& messages, int flags) {
       const auto* last_message = &messages.back();
       size_t total = 0;
       for(const auto& message : messages)
-        total += static_cast<size_t>(send<container_t>(message, (last_message == &message ? 0 : ZMQ_SNDMORE)));
+        total += static_cast<size_t>(send<container_t>(message, (last_message == &message ? 0 : ZMQ_SNDMORE) | flags));
       return total;
     }
     operator void*() {

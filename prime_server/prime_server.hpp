@@ -59,7 +59,7 @@ namespace prime_server {
     void batch() {
       //swallow the first response as its just for connecting
       //TODO: make sure it looks right
-      server.recv_all();
+      server.recv_all(0);
 
       //need the identity to identify our connection when we send stuff
       uint8_t identity[256];
@@ -92,7 +92,7 @@ namespace prime_server {
         while(more && current_batch < batch_size) {
           try {
             //see if we are still waiting for stuff
-            auto messages = server.recv_all();
+            auto messages = server.recv_all(0);
             messages.pop_front();
             current_batch += stream_responses(messages.front().data(), messages.front().size(), more);
           }
@@ -149,7 +149,7 @@ namespace prime_server {
         //got a new result
         if(items[0].revents & ZMQ_POLLIN) {
           try {
-            auto messages = loopback.recv_all();
+            auto messages = loopback.recv_all(ZMQ_DONTWAIT);
             handle_response(messages);
           }
           catch(const std::exception& e) {
@@ -160,7 +160,7 @@ namespace prime_server {
         //got a new request
         if(items[1].revents & ZMQ_POLLIN) {
           try {
-            auto messages = client.recv_all();
+            auto messages = client.recv_all(ZMQ_DONTWAIT);
             handle_request(messages);
           }
           catch(const std::exception& e) {
@@ -218,7 +218,7 @@ namespace prime_server {
           LOG_WARN("Ignoring request: unknown client");
       }
     }
-    virtual void stream_requests(void*, size_t, const std::string&, std::string&) = 0;
+    virtual void stream_requests(const void*, size_t, const std::string&, std::string&) = 0;
     zmq::socket_t client;
     zmq::socket_t proxy;
     zmq::socket_t loopback;
@@ -257,7 +257,7 @@ namespace prime_server {
         //this worker is bored
         if(items[0].revents & ZMQ_POLLIN) {
           try {
-            auto messages = downstream.recv_all();
+            auto messages = downstream.recv_all(ZMQ_DONTWAIT);
             auto inserted = workers.insert(std::string(static_cast<const char*>(messages.front().data()), messages.front().size()));
             if(inserted.second)
               fifo.push(*inserted.first);
@@ -271,7 +271,7 @@ namespace prime_server {
         if(items[1].revents & ZMQ_POLLIN) {
           try {
             //get the request
-            auto messages = upstream.recv_all();
+            auto messages = upstream.recv_all(ZMQ_DONTWAIT);
             //strip the from address and replace with first bored worker
             messages.pop_front();
             auto worker_address = fifo.front();
@@ -279,7 +279,7 @@ namespace prime_server {
             fifo.pop();
             //send it on to the worker
             downstream.send(worker_address, ZMQ_SNDMORE);
-            downstream.send_all(messages);
+            downstream.send_all(messages, ZMQ_DONTWAIT);
           }
           catch (const std::exception& e) {
             //TODO: recover from a worker dying just before you send it work
@@ -333,20 +333,20 @@ namespace prime_server {
         //got some work to do
         if(item.revents & ZMQ_POLLIN) {
           try {
-            auto messages = upstream_proxy.recv_all();
+            auto messages = upstream_proxy.recv_all(0);
             auto address = std::move(messages.front());
             messages.pop_front();
             auto result = work_function(messages);
             //should we send this on to the next proxy
             if(result.intermediate) {
               downstream_proxy.send(address, ZMQ_SNDMORE);
-              downstream_proxy.send_all(result.messages);
+              downstream_proxy.send_all(result.messages, 0);
             }//or are we done
             else {
               if(result.messages.size() > 1)
                 LOG_WARN("Cannot send more than one result message, additional parts are dropped");
               loopback.send(address, ZMQ_SNDMORE);
-              loopback.send_all(result.messages);
+              loopback.send_all(result.messages, 0);
             }
           }
           catch(const std::exception& e) {
