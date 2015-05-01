@@ -43,16 +43,12 @@ int main(int argc, char** argv) {
   std::string compute_proxy_endpoint = "ipc://compute_proxy_endpoint";
 
   //server
-  std::thread server_thread =
-      std::thread(std::bind(&netstring_server_t::serve,
-                            netstring_server_t(context, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint)));
-  /*
   std::thread server_thread = requests ?
     std::thread(std::bind(&netstring_server_t::serve,
                           netstring_server_t(context, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint))):
     std::thread(std::bind(&http_server_t::serve,
                           http_server_t(context, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint)));
-*/
+
   //load balancer for parsing
   std::thread parse_proxy(std::bind(&proxy_t::forward, proxy_t(context, parse_proxy_endpoint + "_upstream", parse_proxy_endpoint + "_downstream")));
   parse_proxy.detach();

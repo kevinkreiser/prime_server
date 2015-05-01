@@ -17,7 +17,7 @@ namespace zmq {
       //wrap it in RAII goodness
       ptr.reset(context,
         [](void* context) {
-          assert(zmq_ctx_destroy(context) == 0);
+          assert(zmq_ctx_term(context) == 0);
         });
     }
     operator void*() {

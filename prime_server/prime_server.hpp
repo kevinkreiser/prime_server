@@ -37,9 +37,10 @@ namespace prime_server {
 
   //client makes requests and gets back responses in batches asynchronously
   class client_t {
+   public:
     using request_function_t = std::function<std::pair<const void*, size_t> ()>;
     using collect_function_t = std::function<bool (const void*, size_t)>;
-   public:
+
     client_t(zmq::context_t& context, const std::string& server_endpoint, const request_function_t& request_function,
       const collect_function_t& collect_function, size_t batch_size = 8912):
       server(context, ZMQ_STREAM), request_function(request_function), collect_function(collect_function), batch_size(batch_size) {
@@ -103,7 +104,7 @@ namespace prime_server {
       }
     }
    protected:
-    virtual size_t stream_responses(void*, size_t, bool&) = 0;
+    virtual size_t stream_responses(const void*, size_t, bool&) = 0;
 
     zmq::socket_t server;
     request_function_t request_function;
@@ -112,6 +113,7 @@ namespace prime_server {
   };
 
   //server sits between a clients and a load balanced backend
+  template <class request_container>
   class server_t {
    public:
     server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint):
@@ -171,11 +173,17 @@ namespace prime_server {
     }
    protected:
     void handle_response(std::list<zmq::message_t>& messages) {
-      if(messages.size() != 2)
+      if(messages.size() < 2) {
+        LOG_ERROR("Cannot reply without address infomation");
+        return;
+      }
+      if(messages.size() > 2) {
         LOG_WARN("Cannot reply with more than one message, dropping additional");
-      client.send(messages.front(), ZMQ_SNDMORE);
-      messages.pop_front();
-      client.send(messages.front(), 0);
+        messages.resize(2);
+      }
+      if(messages.back().size() == 0)
+        LOG_WARN("Sending empty messages will disconnect the client");
+      client.send_all(messages, ZMQ_DONTWAIT);
     }
     void handle_request(std::list<zmq::message_t>& messages) {
       //cant be more than 2 messages
@@ -193,7 +201,7 @@ namespace prime_server {
       if(body.size() == 0) {
         //new client
         if(request == requests.end()) {
-          requests.emplace(requester, "");
+          requests.emplace(requester, request_container{});
         }//TODO: check if disconnecting client has a partial request waiting here
         else {
           requests.erase(request);
@@ -202,15 +210,15 @@ namespace prime_server {
       else {
         if(request != requests.end()) {
           //proxy any whole bits onward
-          auto& buffer = request->second;
-          stream_requests(body.data(), body.size(), requester, buffer);
+          request_container& streaming = request->second;
+          stream_requests(body.data(), body.size(), requester, streaming);
 
           //hangup if this is all too much (in the buffer)
           //TODO: 414 for http clients
           if(request->second.size() > MAX_REQUEST_SIZE) {
             requests.erase(request);
             body.reset();
-            handle_response(messages);
+            client.send_all(messages, ZMQ_DONTWAIT);
             return;
           }
         }
@@ -218,12 +226,12 @@ namespace prime_server {
           LOG_WARN("Ignoring request: unknown client");
       }
     }
-    virtual void stream_requests(const void*, size_t, const std::string&, std::string&) = 0;
+    virtual size_t stream_requests(const void*, size_t, const std::string&, request_container&) = 0;
     zmq::socket_t client;
     zmq::socket_t proxy;
     zmq::socket_t loopback;
     //TODO: have a reverse look up by time of connection, kill connections that stick around for a long time
-    std::unordered_map<std::string, std::string> requests;
+    std::unordered_map<std::string, request_container> requests;
   };
 
   //proxy messages between layers of a backend load balancing in between
@@ -278,7 +286,7 @@ namespace prime_server {
             workers.erase(worker_address);
             fifo.pop();
             //send it on to the worker
-            downstream.send(worker_address, ZMQ_SNDMORE);
+            downstream.send(worker_address, ZMQ_DONTWAIT | ZMQ_SNDMORE);
             downstream.send_all(messages, ZMQ_DONTWAIT);
           }
           catch (const std::exception& e) {

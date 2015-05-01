@@ -1,6 +1,6 @@
 #include "testing/testing.hpp"
 #include "prime_server.hpp"
-#include "protocols.hpp"
+#include "http_protocol.hpp"
 
 #include <functional>
 #include <memory>
@@ -13,6 +13,93 @@
 using namespace prime_server;
 
 namespace {
+  class testable_http_server_t : public http_server_t {
+   public:
+    using http_server_t::http_server_t;
+    using http_server_t::stream_requests;
+    //zmq is great, it will hold on to unsent messages so that if you are disconnected
+    //and reconnect, they eventually do get sent, for this test we actually want them
+    //dropped since we arent really testing their delivery here
+    void passify() {
+      int disabled = 0;
+      proxy.setsockopt(ZMQ_LINGER, &disabled, sizeof(disabled));
+    }
+  };
+
+  class testable_http_client_t : public http_client_t {
+   public:
+    using http_client_t::http_client_t;
+    using http_client_t::stream_responses;
+    using http_client_t::buffer;
+  };
+
+  void test_streaming_server() {
+    zmq::context_t context;
+    testable_http_server_t server(context, "ipc://test_http_server", "ipc://test_http_proxy_upstream", "ipc://test_http_results");
+    server.passify();
+
+    std::string buffer;
+    std::string incoming("GET /irgendwelle/pfad HTTP1.1\r");
+    auto forwarded = server.stream_requests(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", buffer);
+    incoming ="\n\r\nGET /annrer/pfad?aafrag=gel HTTP1.0\r\n\r\nsell siehscht du au noed";
+    forwarded += server.stream_requests(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", buffer);
+
+    if(forwarded != 2)
+      throw std::runtime_error("Wrong number of requests were forwarded");
+    if(buffer != "sell siehscht du au noed")
+      throw std::runtime_error("Unexpected partial request data");
+  }
+
+  void test_streaming_client() {
+    std::string all;
+    size_t responses = 0;
+    zmq::context_t context;
+    testable_http_client_t client(context, "ipc://test_http_server",
+      [](){ return std::make_pair<void*, size_t>(nullptr, 0); },
+      [&all, &responses](const void* data, size_t size){
+        std::string response(static_cast<const char*>(data), size);
+        all.append(response);
+        ++responses;
+        return true;
+      });
+
+    bool more;
+    std::string incoming = "HTTP1.0 OK\r\nContent-Lengt";
+    auto reported_responses = client.stream_responses(static_cast<const void*>(incoming.data()), incoming.size(), more);
+    incoming = "h: 6\r\n\r\nguet\r\n\r\n\r";
+    reported_responses += client.stream_responses(static_cast<const void*>(incoming.data()), incoming.size(), more);
+
+    if(all != "")
+      throw std::runtime_error("Unexpected response data");
+
+    incoming = "\nHTTP1.0 OK\r\n\r\nsell siehscht du au noed";
+    reported_responses += client.stream_responses(static_cast<const void*>(incoming.data()), incoming.size(), more);
+
+    if(!more)
+      throw std::runtime_error("Expected the client to want more responses");
+    if(all != "HTTP1.0 OK\r\nContent-Length: 6\r\n\r\nguet\r\n\r\n\r\nHTTP1.0 OK\r\n\r\n")
+      throw std::runtime_error("Unexpected response data");
+    if(responses != 2)
+      throw std::runtime_error("Wrong number of responses were collected");
+    if(reported_responses != responses)
+      throw std::runtime_error("Wrong number of responses were reported");
+    if(client.buffer != "sell siehscht du au noed")
+      throw std::runtime_error("Unexpected partial response data");
+  }
+
+
+  void test_request() {
+    std::string http = prime_server::http_request_t::get("e_chliises_schtoeckli");
+    if(http != "GET e_chliises_schtoeckli HTTP/1.0\r\n\r\n")
+      throw std::runtime_error("Request was not well-formed");
+  }
+
+  void test_response() {
+    std::string http = prime_server::http_response_t::ok("e_chliises_schtoeckli");
+    if(http != ("HTTP/1.0 200 OK\r\nContent-Length: 21\r\n\r\ne_chliises_schtoeckli\r\n\r\n"))
+      throw std::runtime_error("Response was not well-formed");
+  }
+
   constexpr char alpha_numeric[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
   std::string random_string(size_t length) {
@@ -22,35 +109,13 @@ namespace {
     return random;
   }
 
-  void test_separate() {
-    std::string http("GET /irgendwelle/pfad HTTP1.1\r\n\r\nGET /annrer/pfad?aafrag=gel HTTP1.0\r\n\r\nsell siehscht du au noed");
-    size_t consumed;
-    auto parts = prime_server::http_protocol_t::separate(static_cast<const void*>(http.data()), http.size(), consumed);
-    if(parts.size() != 2)
-      throw std::runtime_error("Wrong number of parts when separated");
-    if(http.substr(consumed) != "sell siehscht du au noed")
-      throw std::runtime_error("Didn't consume the right amount of the string");
-    auto itr = parts.begin();
-    std::advance(itr, 1);
-    std::string x(static_cast<const char*>(itr->first), itr->second);
-    if(std::string(static_cast<const char*>(itr->first), itr->second) != "GET /annrer/pfad?aafrag=gel HTTP1.0\r\n\r\n")
-      throw std::runtime_error("Wrong part");
-  }
-
-  void test_delineate() {
-    std::string http("e_chliises_schtoeckli");
-    prime_server::http_protocol_t::delineate(http);
-    if(http != "GET e_chliises_schtoeckli HTTP/1.1\r\n\r\n")
-      throw std::runtime_error("Message was not properly delineated");
-  }
-
   void http_client_work(zmq::context_t& context) {
     //client makes requests and gets back responses in a batch fashion
     const size_t total = 100000;
     std::unordered_set<std::string> requests;
     size_t received = 0;
     std::string request;
-    client_t<http_protocol_t> client(context, "ipc://test_http_server",
+    http_client_t client(context, "ipc://test_http_server",
       [&requests, &request]() {
         //we want 10k requests
         if(requests.size() < total) {
@@ -59,24 +124,24 @@ namespace {
             request = random_string(10);
             inserted = requests.insert(request);
           }
-          http_protocol_t::delineate(request);
+          request = prime_server::http_request_t::get(request);
         }//blank request means we are done
         else
           request.clear();
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
-      [&requests, &received] (const std::pair<const void*, size_t>& result) {
+      [&requests, &received](const void* data, size_t size) {
         //get the result and tell if there is more or not
-        const char* begin = static_cast<const char*>(result.first);
-        const char* end = begin + result.second;
+        const char* begin = static_cast<const char*>(data);
+        const char* end = begin + size;
         size_t space = 0;
-        while(space < 1 && begin < end) {
-          if(begin[0] == ' ')
+        while(space < 4 && begin < end) {
+          if(*begin == ' ')
             ++space;
           ++begin;
         }
-        while(space < 2 && --end > begin) {
-          if(end[0] == ' ')
+        while(space < 5 && --end > begin) {
+          if(*end == ' ')
             ++space;
         }
         std::string response(begin, end - begin);
@@ -94,8 +159,8 @@ namespace {
     zmq::context_t context;
 
     //server
-    std::thread server(std::bind(&server_t<http_protocol_t>::serve,
-     server_t<http_protocol_t>(context, "ipc://test_http_server", "ipc://test_http_proxy_upstream", "ipc://test_http_results")));
+    std::thread server(std::bind(&http_server_t::serve,
+     http_server_t(context, "ipc://test_http_server", "ipc://test_http_proxy_upstream", "ipc://test_http_results")));
     server.detach();
 
     //load balancer for parsing
@@ -109,7 +174,7 @@ namespace {
       [] (const std::list<zmq::message_t>& job) {
         worker_t::result_t result{false};
         result.messages.emplace_back(static_cast<const char*>(job.front().data()), job.front().size());
-        netstring_protocol_t::delineate(result.messages.back());
+        result.messages.back() = prime_server::http_response_t::ok(result.messages.back());
         return result;
       }
     )));
@@ -125,13 +190,16 @@ namespace {
 }
 
 int main() {
-  testing::suite suite("netstring");
+  testing::suite suite("http");
 
-  suite.test(TEST_CASE(test_separate));
+  suite.test(TEST_CASE(test_streaming_client));
 
-  suite.test(TEST_CASE(test_delineate));
+  suite.test(TEST_CASE(test_streaming_server));
+
+  suite.test(TEST_CASE(test_request));
+
+  suite.test(TEST_CASE(test_response));
 
   suite.test(TEST_CASE(test_parallel_clients));
-
   return suite.tear_down();
 }

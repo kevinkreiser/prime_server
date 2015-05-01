@@ -38,7 +38,8 @@ lib_LTLIBRARIES = libprime_server.la
 nobase_include_HEADERS = \
 	prime_server/prime_server.hpp \
 	prime_server/zmq.hpp \
-	prime_server/protocols.hpp \
+	prime_server/netstring_protocol.hpp \
+	prime_server/http_protocol.hpp \
 	logging/logging.hpp 
 libprime_server_la_SOURCES = 
 libprime_server_la_CPPFLAGS = $(DEPS_CFLAGS)

@@ -13,6 +13,88 @@
 using namespace prime_server;
 
 namespace {
+  class testable_netstring_server_t : public netstring_server_t {
+   public:
+    using netstring_server_t::netstring_server_t;
+    using netstring_server_t::stream_requests;
+    //zmq is great, it will hold on to unsent messages so that if you are disconnected
+    //and reconnect, they eventually do get sent, for this test we actually want them
+    //dropped since we arent really testing their delivery here
+    void passify() {
+      int disabled = 0;
+      proxy.setsockopt(ZMQ_LINGER, &disabled, sizeof(disabled));
+    }
+  };
+
+  class testable_netstring_client_t : public netstring_client_t {
+   public:
+    using netstring_client_t::netstring_client_t;
+    using netstring_client_t::stream_responses;
+    using netstring_client_t::buffer;
+  };
+
+  void test_streaming_server() {
+    zmq::context_t context;
+    testable_netstring_server_t server(context, "ipc://test_netstring_server", "ipc://test_netstring_proxy_upstream", "ipc://test_netstring_results");
+    server.passify();
+
+    std::string buffer;
+    std::string incoming("1");
+    auto forwarded = server.stream_requests(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", buffer);
+    incoming = "2:abgeschnitte,3:mer,5:welle,5:luege,5:oeb's,4:guet,4:isch,du_siehscht_mi_noed";
+    forwarded += server.stream_requests(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", buffer);
+    if(forwarded != 7)
+      throw std::runtime_error("Wrong number of requests were forwarded");
+    if(buffer != "du_siehscht_mi_noed")
+      throw std::runtime_error("Unexpected partial request data");
+  }
+
+  void test_streaming_client() {
+    std::string all;
+    size_t responses = 0;
+    zmq::context_t context;
+    testable_netstring_client_t client(context, "ipc://test_netstring_server",
+      [](){ return std::make_pair<void*, size_t>(nullptr, 0); },
+      [&all, &responses](const void* data, size_t size){
+        all.append(static_cast<const char*>(data), size);
+        ++responses;
+        return true;
+      });
+
+    bool more;
+    std::string incoming("1");
+    auto reported_responses = client.stream_responses(static_cast<const void*>(incoming.data()), incoming.size(), more);
+    incoming = "4:abgeschnitteni,11";
+    reported_responses += client.stream_responses(static_cast<const void*>(incoming.data()), incoming.size(), more);
+    incoming = ":rueckmeldig,3:mer,5:welle,5:luege,5:oeb's,4:guet,4:isch,du_siehscht_mi_noed";
+    reported_responses += client.stream_responses(static_cast<const void*>(incoming.data()), incoming.size(), more);
+
+    if(!more)
+      throw std::runtime_error("Expected the client to want more responses");
+    if(all != "abgeschnittenirueckmeldigmerwelleluegeoeb'sguetisch")
+      throw std::runtime_error("Unexpected response data");
+    if(responses != 8)
+      throw std::runtime_error("Wrong number of responses were collected");
+    if(reported_responses != responses)
+      throw std::runtime_error("Wrong number of responses were reported");
+    if(client.buffer != "du_siehscht_mi_noed")
+      throw std::runtime_error("Unexpected partial response data");
+  }
+
+  void test_request() {
+    std::string netstring("e_chliises_schtoeckli");
+    prime_server::netstring_request_t::format(netstring);
+    if(netstring != "21:e_chliises_schtoeckli,")
+      throw std::runtime_error("Request was not well-formed");
+  }
+
+  void test_response() {
+    std::string netstring("e_chliises_schtoeckli");
+    prime_server::netstring_request_t::format(netstring);
+    if(netstring != "21:e_chliises_schtoeckli,")
+      throw std::runtime_error("Response was not well-formed");
+  }
+
   constexpr char alpha_numeric[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
   std::string random_string(size_t length) {
@@ -22,37 +104,13 @@ namespace {
     return random;
   }
 
-  void test_separate() {
-    std::string netstring("3:mer,5:welle,5:luege,5:oeb's,4:guet,4:isch,du_siehscht_mi_noed");
-    size_t consumed;
-    auto parts = prime_server::netstring_protocol_t::separate(static_cast<const void*>(netstring.data()), netstring.size(), consumed);
-    if(parts.size() != 6)
-      throw std::runtime_error("Wrong number of parts when separated");
-    if(netstring.substr(consumed) != "du_siehscht_mi_noed")
-      throw std::runtime_error("Didn't consume the right amount of the string");
-    auto itr = parts.begin();
-    std::advance(itr, 3);
-    if(std::string(static_cast<const char*>(itr->first), itr->second) != "oeb's")
-      throw std::runtime_error("Wrong part");
-  }
-
-  void test_delineate() {
-    std::string netstring("e_chliises_schtoeckli");
-    prime_server::netstring_request_t::format(netstring);
-    if(netstring != "21:e_chliises_schtoeckli,")
-      throw std::runtime_error("Message was not properly delineated");
-    prime_server::netstring_response_t::format(netstring);
-    if(netstring != "25:21:e_chliises_schtoeckli,,")
-      throw std::runtime_error("Message was not properly delineated");
-  }
-
   void netstring_client_work(zmq::context_t& context) {
     //client makes requests and gets back responses in a batch fashion
     const size_t total = 100000;
     std::unordered_set<std::string> requests;
     size_t received = 0;
     std::string request;
-    client_t<netstring_protocol_t> client(context, "ipc://test_netstring_server",
+    netstring_client_t client(context, "ipc://test_netstring_server",
       [&requests, &request]() {
         //we want 10k requests
         if(requests.size() < total) {
@@ -61,15 +119,15 @@ namespace {
             request = random_string(10);
             inserted = requests.insert(request);
           }
-          netstring_protocol_t::delineate(request);
+          netstring_request_t::format(request);
         }//blank request means we are done
         else
           request.clear();
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
-      [&requests, &received] (const std::pair<const void*, size_t>& result) {
+      [&requests, &received](const void* data, size_t size) {
         //get the result and tell if there is more or not
-        std::string response(static_cast<const char*>(result.first), result.second);
+        std::string response(static_cast<const char*>(data), size);
         if(requests.find(response) == requests.end())
           throw std::runtime_error("Unexpected response!");
         return ++received < total;
@@ -84,8 +142,8 @@ namespace {
     zmq::context_t context;
 
     //server
-    std::thread server(std::bind(&server_t<netstring_protocol_t>::serve,
-     server_t<netstring_protocol_t>(context, "ipc://test_netstring_server", "ipc://test_netstring_proxy_upstream", "ipc://test_netstring_results")));
+    std::thread server(std::bind(&netstring_server_t::serve,
+      netstring_server_t(context, "ipc://test_netstring_server", "ipc://test_netstring_proxy_upstream", "ipc://test_netstring_results")));
     server.detach();
 
     //load balancer for parsing
@@ -99,7 +157,7 @@ namespace {
       [] (const std::list<zmq::message_t>& job) {
         worker_t::result_t result{false};
         result.messages.emplace_back(static_cast<const char*>(job.front().data()), job.front().size());
-        netstring_protocol_t::delineate(result.messages.back());
+        netstring_response_t::format(result.messages.back());
         return result;
       }
     )));
@@ -117,9 +175,13 @@ namespace {
 int main() {
   testing::suite suite("netstring");
 
-  suite.test(TEST_CASE(test_separate));
+  suite.test(TEST_CASE(test_streaming_client));
 
-  suite.test(TEST_CASE(test_delineate));
+  suite.test(TEST_CASE(test_streaming_server));
+
+  suite.test(TEST_CASE(test_request));
+
+  suite.test(TEST_CASE(test_response));
 
   suite.test(TEST_CASE(test_parallel_clients));
 

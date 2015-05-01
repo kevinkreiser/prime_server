@@ -3,7 +3,7 @@
 
 #include "prime_server.hpp"
 
-#include <limits>
+#include <cctype>
 
 namespace prime_server {
 
@@ -11,7 +11,7 @@ namespace prime_server {
    public:
     using client_t::client_t;
    protected:
-    virtual size_t stream_responses(void* message, size_t size, bool& more) {
+    virtual size_t stream_responses(const void* message, size_t size, bool& more) {
       //um..
       size_t collected = 0;
       if(size == 0)
@@ -20,12 +20,10 @@ namespace prime_server {
       //box out the message a bit so we can iterate
       const char* begin = static_cast<const char*>(message);
       const char* end = begin + size;
-      const char* delim = begin;
 
-      //do we have a partial response
+      //do we have a partial response in the buffer
       if(buffer.size()) {
         //make sure the buffer has a colon in it and bail otherwise
-        size_t length = std::numeric_limits<size_t>::max();
         auto pos = buffer.find(':');
         if(pos == std::string::npos) {
           while(begin < end) {
@@ -37,30 +35,29 @@ namespace prime_server {
           if(begin == end)
             return collected;
           pos = buffer.size() - 1;
-          size = end - begin;
         }
 
-        //copy up to what the message calls for
-        length = std::stoul(buffer.substr(0, pos));
+        //copy up to what the message calls for, add one for the comma
+        auto length = std::stoul(buffer.substr(0, pos)) + 1;
         length -= buffer.size() - (pos + 1);
 
         //not enough
-        if(length > size) {
+        if(length > end - begin) {
           buffer.append(begin, end - begin);
           return collected;
         }//we have a full message here
         else {
           buffer.append(begin, length);
-          more = collect_function(static_cast<const void*>(buffer.data()), buffer.size());
+          more = collect_function(static_cast<const void *>(&buffer[pos + 1]), length - 1);
           ++collected;
           begin += length;
-          delim += length;
         }
       }
 
       //keep getting pieces if there is enough space for the message length plus a message
-      if(static_cast<const char*>(message)[0] == ':')
-        throw std::runtime_error("Netstring protocol message cannot begin with a ':'");
+      if(begin < end && !isdigit(*begin))
+        throw std::runtime_error("Netstring protocol message cannot begin with anything but a digit");
+      const char* delim = begin;
       while(delim < end) {
         //get next colon
         const char* next_delim = delim;
@@ -91,24 +88,24 @@ namespace prime_server {
     std::string buffer;
   };
 
-  class netstring_server_t : public server_t {
+  class netstring_server_t : public server_t<std::string> {
    public:
-    using server_t::server_t;
+    using server_t<std::string>::server_t;
+    virtual ~netstring_server_t(){}
    protected:
-    virtual void stream_requests(void* message, size_t size, const std::string& requester, std::string& buffer) {
+    virtual size_t stream_requests(const void* message, size_t size, const std::string& requester, std::string& buffer) {
       //um..
+      size_t forwarded = 0;
       if(size == 0)
-        return;
+        return forwarded;
 
       //box out the message a bit so we can iterate
       const char* begin = static_cast<const char*>(message);
       const char* end = begin + size;
-      const char* delim = begin;
 
       //do we have a partial request
       if(buffer.size()) {
         //make sure the buffer has a colon in it and bail otherwise
-        size_t length = std::numeric_limits<size_t>::max();
         auto pos = buffer.find(':');
         if(pos == std::string::npos) {
           while(begin < end) {
@@ -118,32 +115,32 @@ namespace prime_server {
               break;
           }
           if(begin == end)
-            return;
+            return forwarded;
           pos = buffer.size() - 1;
-          size = end - begin;
         }
 
-        //copy up to what the message calls for
-        length = std::stoul(buffer.substr(0, pos));
+        //copy up to what the message calls for, add one for the comma
+        auto length = std::stoul(buffer.substr(0, pos)) + 1;
         length -= buffer.size() - (pos + 1);
 
         //not enough
-        if(length > size) {
+        if(length > end - begin) {
           buffer.append(begin, end - begin);
-          return;
+          return forwarded;
         }//we have a full message here
         else {
           buffer.append(begin, length);
-          proxy.send(requester, ZMQ_SNDMORE);
-          proxy.send(buffer, 0);
+          this->proxy.send(requester, ZMQ_DONTWAIT | ZMQ_SNDMORE);
+          this->proxy.send(static_cast<void *>(&buffer[pos + 1]), length - 1, ZMQ_DONTWAIT);
+          ++forwarded;
           begin += length;
-          delim += length;
         }
       }
 
       //keep getting pieces if there is enough space for the message length plus a message
-      if(static_cast<const char*>(message)[0] == ':')
-        throw std::runtime_error("Netstring protocol message cannot begin with a ':'");
+      if(begin < end && !isdigit(*begin))
+        throw std::runtime_error("Netstring protocol message cannot begin with anything but a digit");
+      const char* delim = begin;
       while(delim < end) {
         //get next colon
         const char* next_delim = delim;
@@ -164,11 +161,13 @@ namespace prime_server {
           break;
 
         //tell where this piece is
-        proxy.send(requester, ZMQ_SNDMORE);
-        proxy.send(static_cast<const void*>(piece), length, 0);
+        this->proxy.send(requester, ZMQ_DONTWAIT | ZMQ_SNDMORE);
+        this->proxy.send(static_cast<const void*>(piece), length, ZMQ_DONTWAIT);
+        ++forwarded;
         delim = next_delim;
       }
       buffer.assign(delim, end - delim);
+      return forwarded;
     }
   };
 
