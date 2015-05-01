@@ -95,7 +95,7 @@ namespace {
   }
 
   void test_response() {
-    std::string http = prime_server::http_response_t::ok("e_chliises_schtoeckli");
+    std::string http = prime_server::http_response_t::generic(200, "OK", headers_t{}, "e_chliises_schtoeckli");
     if(http != ("HTTP/1.0 200 OK\r\nContent-Length: 21\r\n\r\ne_chliises_schtoeckli\r\n\r\n"))
       throw std::runtime_error("Response was not well-formed");
   }
@@ -174,7 +174,7 @@ namespace {
       [] (const std::list<zmq::message_t>& job) {
         worker_t::result_t result{false};
         result.messages.emplace_back(static_cast<const char*>(job.front().data()), job.front().size());
-        result.messages.back() = prime_server::http_response_t::ok(result.messages.back());
+        result.messages.back() = prime_server::http_response_t::generic(200, "OK", headers_t{}, result.messages.back());
         return result;
       }
     )));

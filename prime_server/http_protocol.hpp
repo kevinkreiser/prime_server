@@ -5,6 +5,7 @@
 
 #include <limits>
 #include <cctype>
+#include <unordered_map>
 
 namespace {
 
@@ -199,17 +200,50 @@ namespace prime_server {
     }
   };
 
+
+  using headers_t = std::unordered_map<std::string, std::string>;
   struct http_request_t {
     static std::string get(const std::string& uri/*, add headers*/) {
       return "GET " + uri + " HTTP/1.0\r\n\r\n";
+    }
+    static std::string post(const std::string& uri, const std::string& body/*, add headers*/) {
+      return "POST " + uri + " HTTP/1.0\r\nContent-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body + "\r\n\r\n";
+    }
+
+    static std::string head(const std::string& uri/*, add headers*/) {
+      throw std::runtime_error("unimplemented");
+    }
+    static std::string delete_(const std::string& uri/*, add headers*/) {
+      throw std::runtime_error("unimplemented");
+    }
+    static std::string trace(const std::string& uri/*, add headers*/) {
+      throw std::runtime_error("unimplemented");
+    }
+    static std::string connect(const std::string& uri/*, add headers*/) {
+      throw std::runtime_error("unimplemented");
     }
   };
 
   //TODO: support gzip encoded responses natively or let applications to do this themselves?
 
+
   struct http_response_t {
-    static std::string ok(const std::string&  body/*,add headers*/) {
-      return "HTTP/1.0 200 OK\r\nContent-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body + "\r\n\r\n";
+    static std::string generic(unsigned code, const std::string message, const headers_t& headers, const std::string& body = "") {
+      auto response = "HTTP/1.0 " + std::to_string(code) + ' ' + message + "\r\n";
+      for(const auto& header : headers) {
+        response += header.first;
+        response += ": ";
+        response += header.second;
+        response += "\r\n";
+      }
+      if(body.size()){
+        response += "Content-Length: ";
+        response += std::to_string(body.size());
+        response += "\r\n\r\n";
+        response += body + "\r\n";
+      }
+      response.append("\r\n");
+      return response;
     }
   };
 
