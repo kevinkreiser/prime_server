@@ -8,8 +8,9 @@
 #include <memory>
 #include <stdexcept>
 
+//netstrings are far easier to work with but http is a more interesting use-case
+//so we just do everthing using the http protocol here
 #include "prime_server.hpp"
-#include "netstring_protocol.hpp"
 #include "http_protocol.hpp"
 using namespace prime_server;
 
@@ -35,7 +36,6 @@ int main(int argc, char** argv) {
   if(argc > 2)
     worker_concurrency = std::stoul(argv[2]);
 
-
   //change these to tcp://known.ip.address.with:port if you want to do this across machines
   zmq::context_t context;
   std::string result_endpoint = "ipc://result_endpoint";
@@ -43,28 +43,36 @@ int main(int argc, char** argv) {
   std::string compute_proxy_endpoint = "ipc://compute_proxy_endpoint";
 
   //server
-  std::thread server_thread = requests ?
-    std::thread(std::bind(&netstring_server_t::serve,
-                          netstring_server_t(context, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint))):
-    std::thread(std::bind(&http_server_t::serve,
-                          http_server_t(context, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint)));
+  std::thread server_thread = std::thread(std::bind(&http_server_t::serve,
+    http_server_t(context, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint)));
 
   //load balancer for parsing
   std::thread parse_proxy(std::bind(&proxy_t::forward, proxy_t(context, parse_proxy_endpoint + "_upstream", parse_proxy_endpoint + "_downstream")));
   parse_proxy.detach();
 
   //request parsers
+  const std::string REQUEST_TEMPLATE("GET /is_prime?possible_prime=");
   std::list<std::thread> parse_worker_threads;
   for(size_t i = 0; i < worker_concurrency; ++i) {
     parse_worker_threads.emplace_back(std::bind(&worker_t::work,
       worker_t(context, parse_proxy_endpoint + "_downstream", compute_proxy_endpoint + "_upstream", result_endpoint,
-      [] (const std::list<zmq::message_t>& job) {
-        //parse the string into a size_t
-        worker_t::result_t result{true};
-        std::string prime_str(static_cast<const char*>(job.front().data()), job.front().size());
-        const size_t possible_prime = std::stoul(prime_str);
-        result.messages.emplace_back(static_cast<const char*>(static_cast<const void*>(&possible_prime)), sizeof(size_t));
-        return result;
+      [&REQUEST_TEMPLATE] (const std::list<zmq::message_t>& job) {
+        //request should look like
+        //GET /is_prime?possible_prime=SOME_NUMBER HTTP/1.0
+        std::string request_str(static_cast<const char*>(job.front().data()), job.front().size());
+        try{
+          auto pos = request_str.find(' ', REQUEST_TEMPLATE.size());
+          size_t possible_prime = std::stoul(request_str.substr(REQUEST_TEMPLATE.size(), pos - REQUEST_TEMPLATE.size()));
+          worker_t::result_t result{true};
+          result.messages.emplace_back(static_cast<const char*>(static_cast<const void*>(&possible_prime)), sizeof(size_t));
+          return result;
+        }
+        catch(...) {
+          worker_t::result_t result{false};
+          result.messages.emplace_back();
+          result.messages.back() = http_response_t::generic(400, "Bad Request", headers_t{});
+          return result;
+        }
       }
     )));
     parse_worker_threads.back().detach();
@@ -95,8 +103,7 @@ int main(int argc, char** argv) {
         if(divisor < high)
           prime = 2;
         worker_t::result_t result{false};
-        result.messages.emplace_back(static_cast<const char*>(static_cast<const void*>(&prime)), sizeof(prime));
-        netstring_response_t::format(result.messages.back());
+        result.messages.emplace_back(http_response_t::generic(200, "OK", headers_t{}, std::to_string(prime)));
         return result;
       }
     )));
@@ -115,21 +122,25 @@ int main(int argc, char** argv) {
     size_t produced_requests = 0, collected_results = 0;
     std::string request;
     std::set<size_t> primes = {2};
-    netstring_client_t client(context, server_endpoint,
+    http_client_t client(context, server_endpoint,
       [&request, requests, &produced_requests]() {
         //blank request means we are done
-        if(produced_requests < requests) {
-          request = std::to_string(produced_requests++ * 2 + 3);
-          netstring_request_t::format(request);
-        }
+        if(produced_requests < requests)
+          request = http_request_t::get("/is_prime?possible_prime=" + std::to_string(produced_requests++ * 2 + 3));
         else
           request.clear();
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
       [requests, &primes, &collected_results] (const void* message, size_t length) {
         //get the result and tell if there is more or not
-        size_t number = *static_cast<const size_t*>(message);
-        primes.insert(number);
+        std::string response_str(static_cast<const char*>(message), length - 4);
+        try {
+          size_t number = std::stoul(response_str.substr(response_str.rfind('\n')));
+          primes.insert(number);
+        }
+        catch(...) {
+          LOG_ERROR("Responded with: " + response_str);
+        }
         return ++collected_results < requests;
       }
     );
