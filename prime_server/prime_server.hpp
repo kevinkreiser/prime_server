@@ -10,8 +10,8 @@
 #include <unordered_map>
 #include <stdexcept>
 
-#include "zmq.hpp"
-#include "logging/logging.hpp"
+#include <prime_server/zmq.hpp>
+#include <prime_server/logging.hpp>
 
 /*
  * NOTE: ZMQ_STREAM sockets are 'raw' and require some extra work compared to other socket types

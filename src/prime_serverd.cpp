@@ -13,8 +13,7 @@
 #include "prime_server.hpp"
 #include "http_protocol.hpp"
 using namespace prime_server;
-
-#include "logging/logging.hpp"
+#include "logging.hpp"
 
 int main(int argc, char** argv) {
 

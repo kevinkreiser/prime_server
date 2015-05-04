@@ -40,7 +40,7 @@ nobase_include_HEADERS = \
 	prime_server/zmq.hpp \
 	prime_server/netstring_protocol.hpp \
 	prime_server/http_protocol.hpp \
-	logging/logging.hpp 
+	prime_server/logging.hpp 
 libprime_server_la_SOURCES = 
 libprime_server_la_CPPFLAGS = $(DEPS_CFLAGS)
 libprime_server_la_LIBADD = $(DEPS_LIBS)

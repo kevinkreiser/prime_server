@@ -1,7 +1,7 @@
 #ifndef __NETSTRING_PROTOCOL_HPP__
 #define __NETSTRING_PROTOCOL_HPP__
 
-#include "prime_server.hpp"
+#include <prime_server/prime_server.hpp>
 
 #include <cctype>
 
