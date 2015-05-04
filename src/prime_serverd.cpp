@@ -50,18 +50,21 @@ int main(int argc, char** argv) {
   parse_proxy.detach();
 
   //request parsers
-  const std::string REQUEST_TEMPLATE("GET /is_prime?possible_prime=");
   std::list<std::thread> parse_worker_threads;
   for(size_t i = 0; i < worker_concurrency; ++i) {
     parse_worker_threads.emplace_back(std::bind(&worker_t::work,
       worker_t(context, parse_proxy_endpoint + "_downstream", compute_proxy_endpoint + "_upstream", result_endpoint,
-      [&REQUEST_TEMPLATE] (const std::list<zmq::message_t>& job) {
+      [] (const std::list<zmq::message_t>& job) {
         //request should look like
-        //GET /is_prime?possible_prime=SOME_NUMBER HTTP/1.0
+        ///is_prime?possible_prime=SOME_NUMBER
         std::string request_str(static_cast<const char*>(job.front().data()), job.front().size());
         try{
-          auto pos = request_str.find(' ', REQUEST_TEMPLATE.size());
-          size_t possible_prime = std::stoul(request_str.substr(REQUEST_TEMPLATE.size(), pos - REQUEST_TEMPLATE.size()));
+          auto request = http_request_t::parse(request_str);
+          query_t::const_iterator prime_str;
+          if(request.path != "/is_prime" || (prime_str = request.query.find("possible_prime")) == request.query.cend() || prime_str->second.size() != 1)
+            throw std::runtime_error("");
+          size_t possible_prime = std::stoul(prime_str->second.front());
+          LOG_INFO(request.path);
           worker_t::result_t result{true};
           result.messages.emplace_back(static_cast<const char*>(static_cast<const void*>(&possible_prime)), sizeof(size_t));
           return result;
@@ -102,7 +105,7 @@ int main(int argc, char** argv) {
         if(divisor < high)
           prime = 2;
         worker_t::result_t result{false};
-        result.messages.emplace_back(http_response_t::generic(200, "OK", headers_t{}, std::to_string(prime)));
+        result.messages.emplace_back(http_response_t::generic(200, "OK", headers_t{{"Connection", "Keep-Alive"}}, std::to_string(prime)));
         return result;
       }
     )));

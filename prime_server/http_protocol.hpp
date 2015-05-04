@@ -244,8 +244,8 @@ namespace prime_server {
     headers_t headers;
     std::string body;
 
-    std::string get() { return get(path, headers); };
-    std::string post() { return post(path, body, headers); };
+    std::string get() { return get(path, headers); }
+    std::string post() { return post(path, body, headers); }
     std::string head() { return head(path, headers); }
     std::string delete_() { return delete_(path, headers); }
     std::string trace() { return trace(path, headers); }
