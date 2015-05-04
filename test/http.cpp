@@ -89,13 +89,30 @@ namespace {
 
 
   void test_request() {
-    std::string http = prime_server::http_request_t::get("e_chliises_schtoeckli", headers_t{});
+    std::string http = http_request_t::get("e_chliises_schtoeckli", headers_t{});
     if(http != "GET e_chliises_schtoeckli HTTP/1.0\r\n\r\n")
       throw std::runtime_error("Request was not well-formed");
   }
 
+  void test_request_parsing() {
+    auto request = http_request_t::parse("GET /wos_haescht?nen_stei=2&ne_bluem=3&ziit=5%20minuet HTTP/1.0\r\nHost: localhost:8002\r\nUser-Agent: ApacheBench/2.3\r\n\r\n");
+    //TODO: tighten up this test
+    if(request.method != method_t::GET)
+      throw std::runtime_error("Request parsing failed");
+    if(request.path != "/wos_haescht")
+      throw std::runtime_error("Request parsing failed");
+    if(request.version != "HTTP/1.0")
+      throw std::runtime_error("Request parsing failed");
+    /*
+    if(request.query != query_t{ {"nen_stei", {"2"}}, {"ne_bluem", {"3"}}, {"ziit", {"5%20minuet"}} })
+    if(request.headers != headers_t{ {"Host", "localhost:8002"}, {"User-Agent", "ApacheBench/2.3"} })
+    */
+    if(request.body != "")
+      throw std::runtime_error("Request parsing failed");
+  }
+
   void test_response() {
-    std::string http = prime_server::http_response_t::generic(200, "OK", headers_t{}, "e_chliises_schtoeckli");
+    std::string http = http_response_t::generic(200, "OK", headers_t{}, "e_chliises_schtoeckli");
     if(http != ("HTTP/1.0 200 OK\r\nContent-Length: 21\r\n\r\ne_chliises_schtoeckli\r\n\r\n"))
       throw std::runtime_error("Response was not well-formed");
   }
@@ -124,7 +141,7 @@ namespace {
             request = random_string(10);
             inserted = requests.insert(request);
           }
-          request = prime_server::http_request_t::get(request, headers_t{});
+          request = http_request_t::get(request, headers_t{});
         }//blank request means we are done
         else
           request.clear();
@@ -174,7 +191,7 @@ namespace {
       [] (const std::list<zmq::message_t>& job) {
         worker_t::result_t result{false};
         result.messages.emplace_back(static_cast<const char*>(job.front().data()), job.front().size());
-        result.messages.back() = prime_server::http_response_t::generic(200, "OK", headers_t{}, result.messages.back());
+        result.messages.back() = http_response_t::generic(200, "OK", headers_t{}, result.messages.back());
         return result;
       }
     )));
@@ -197,6 +214,8 @@ int main() {
   suite.test(TEST_CASE(test_streaming_server));
 
   suite.test(TEST_CASE(test_request));
+
+  suite.test(TEST_CASE(test_request_parsing));
 
   suite.test(TEST_CASE(test_response));
 

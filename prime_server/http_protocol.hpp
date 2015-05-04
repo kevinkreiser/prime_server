@@ -6,6 +6,7 @@
 #include <limits>
 #include <cctype>
 #include <unordered_map>
+#include <list>
 
 namespace {
 
@@ -22,10 +23,20 @@ namespace {
     return true;
   }
 
-  //TODO:
-  std::string url_encode(const std::string& unencoded) {
-    throw std::runtime_error("unimplemented");
-  }
+  std::string consume_until(const std::string& delimeter, std::string::const_iterator& start, const std::string::const_iterator& end) {
+    std::string::const_iterator current = start;
+    auto i = delimeter.cbegin();
+    while(i != delimeter.cend() && current != end) {
+      if(*i != *current)
+        i = delimeter.cbegin();
+      if(*i == *current)
+        ++i;
+      ++current;
+    }
+    auto part = std::string(start, current - (i == delimeter.cend() ? delimeter.size() : 0));
+    start = current;
+    return part;
+  };
 
   //TODO: implement a ring buffer and pass into it a bunch of fixed string that you want to detect
   //then you can ask the buffer on each iteration whether any of the strings are currently met
@@ -40,6 +51,16 @@ namespace {
 //http://www.w3.org/Protocols/rfc2616/rfc2616-sec4.html#sec4.4
 
 namespace prime_server {
+
+  //TODO:
+  std::string url_encode(const std::string& unencoded) {
+    throw std::runtime_error("unimplemented");
+  }
+
+  //TODO:
+  std::string url_decode(const std::string& unencoded) {
+    throw std::runtime_error("unimplemented");
+  }
 
   class http_client_t : public client_t {
    public:
@@ -213,7 +234,10 @@ namespace prime_server {
 
   using headers_t = std::unordered_map<std::string, std::string>;
   using query_t = std::unordered_map<std::string, std::list<std::string> >;
+  enum class method_t : size_t { GET, POST, PUT, HEAD, DELETE, TRACE, CONNECT };
+  const std::unordered_map<std::string, method_t> STRING_TO_METHOD{ {"GET", method_t::GET}, {"POST", method_t::POST}, {"PUT", method_t::PUT}, {"HEAD", method_t::HEAD}, {"DELETE", method_t::DELETE}, {"TRACE", method_t::TRACE}, {"CONNECT", method_t::CONNECT} };
   struct http_request_t {
+    method_t method;
     std::string path;
     query_t query;
     std::string version;
@@ -229,7 +253,60 @@ namespace prime_server {
 
     static http_request_t parse(const std::string& bytes) {
       http_request_t request;
-      //TODO:
+
+      //nice way to eat bytes up to a certain point
+      std::string::const_iterator start = bytes.cbegin();
+      auto consume_header = [&start, &bytes, &request]() {
+        auto part = consume_until("\r\n", start, bytes.cend());
+        //hit the end of request or begin of body
+        if(part.size() == 0)
+         return false;
+        auto pos = part.find(": ");
+        if(pos == std::string::npos)
+          throw std::runtime_error("Expected http header");
+        request.headers.insert({part.substr(0, pos), part.substr(pos + 2)});
+        return true;
+      };
+
+      //method
+      auto method_str = consume_until(" ", start, bytes.cend());
+      auto method = STRING_TO_METHOD.find(method_str);
+      if(method == STRING_TO_METHOD.end())
+        throw std::runtime_error("Unknown http method");
+      request.method = method->second;
+      //path
+      request.path = consume_until(" ", start, bytes.cend());
+      //version
+      request.version = consume_until("\r\n", start, bytes.cend());
+      if(request.version != "HTTP/1.0" && request.version != "HTTP/1.1")
+        throw std::runtime_error("Unknown http version");
+
+      //split off the query
+      auto pos = request.path.find('?');
+      if(pos != std::string::npos) {
+        auto query = request.path.substr(pos + 1);
+        request.path.resize(pos);
+        std::string key, value;
+        std::string::const_iterator start = query.cbegin();
+        while((key = consume_until("=", start, query.cend())).size() && (value = consume_until("&", start, query.cend())).size()) {
+          auto kv = request.query.find(key);
+          if(kv == request.query.cend())
+            request.query.insert({key, {value}});
+          else
+            kv->second.push_back(value);
+        }
+      }
+
+      //headers
+      while(consume_header());
+
+      //body
+      auto length_str = request.headers.find("Content-Length");
+      if(length_str == request.headers.end())
+        return request;
+      auto length = std::stoul(length_str->second);
+      request.body = bytes.substr(start - bytes.cbegin());
+
       return request;
     }
     static std::string get(const std::string& path, const headers_t& headers,
@@ -350,133 +427,6 @@ namespace prime_server {
       return response;
     }
   };
-
-  //requests look like this
-  //GET /primes?possible_prime=147 HTTP/1.1\r\nUser-Agent: fake\r\nHost: ipc\r\nAccept: */*\r\n\r\n
-  //GET /help?blah=4 HTTP/1.1\r\nHost: localhost:8002\r\nUser-Agent: Mozilla/5.0 ... \r\n\r\n
-
-/*
-  class http_request_t {
-    enum class method_t { GET }; //, POST, PUT, HEAD, DELETE, TRACE, CONNECT };
-    static const std::unordered_map<std::string, method_t> METHODS{ {"GET", method_t::GET} }; //, {"POST", method_t::POST}, {"PUT", method_t::PUT}, {"HEAD", method_t::HEAD}, {"DELETE", method_t::DELETE}, {"TRACE", method_t::TRACE}, {"CONNECT", method_t::CONNECT} };
-
-    http_protocol_t() = delete;
-    http_protocol_t(const char* str, size_t len): request(str, len) {
-      auto next = parse_method(request.begin(), request.end());
-      next = parse_path(next, request.end());
-      next = parse_version(next, request.end());
-      if(method == request.end() || path == request.end() || version == request.end())
-        throw std::runtime_error("Invalid resource request");
-      //TODO:
-      //next = parse_headers(next, request.end());
-      //if(method == method_t::POST)
-      //  next = parse_post(next, request.end());
-    }
-
-    //the raw request line
-    std::string request;
-    //the method GET POST HEAD...
-    method_t method;
-    //path /what/you/want
-    const char* path;
-    //query items
-    std::unordered_map<std::string, std::list<const char*> > query;
-    //version of http
-    const char* version;
-    //TODO: std::unordered_map<std::string, std::list<const char *> > headers;
-    //TODO: post data
-
-   private:
-    std::string::iterator parse_method(std::string::iterator begin, std::string::iterator end) {
-      char* method_str = begin;
-      //go through the range
-      while(begin != end) {
-        if(*begin == ' ') {
-          *begin = '\0';
-          ++begin;
-          break;
-        }
-        ++begin;
-      }
-      auto method_itr = METHODS.find(method_str);
-      if(method_itr == METHODS.end())
-        throw std::runtime_error("Invalid http method");
-      method = method_itr->second;
-      return begin;
-    }
-    std::string::iterator parse_path(std::string::iterator begin, std::string::iterator end) {
-      path = begin;
-      bool has_query = false;
-      //go through the range
-      while(begin != end) {
-        if(*begin == ' ') {
-          *begin = '\0';
-          ++begin;
-          break;
-        }
-        else if(*begin == '?') {
-          *begin = '\0';
-          has_query = true;
-          ++begin;
-          break;
-        }
-        ++begin;
-      }
-      //check for query bits
-      if(has_query) {
-        return parse_query(begin, end);
-      }
-      return begin;
-    }
-    std::string::iterator parse_query(std::string::iterator begin, std::string::iterator end) {
-      char* key = begin;
-      char* value = nullptr;
-      //go through the range
-      while(begin != end) {
-        switch(*begin) {
-          case ' ':
-            begin = '\0';
-            return ++begin;
-            break;
-          case '&':
-            begin = '\0';
-            if(key != begin) {
-              //update
-              auto kv_itr = query.find(key);
-              if(kv_itr != query.end())
-                kv_itr->second.push_back(value);
-              //new one
-              else
-                query.insert({key, {value}});
-            }
-            key = ++begin;
-            value = nullptr;
-            break;
-          case '=':
-            begin = '\0';
-            value = ++begin;
-            break;
-          default:
-            ++begin;
-            break;
-        }
-      }
-    }
-    std::string::iterator parse_version(std::string::iterator begin, std::string::iterator end) {
-      version = begin;
-      //go through the range
-      while(begin != end) {
-        if(*begin == '\r' && begin + 1 != end && *(begin + 1) == '\n') {
-          *begin = '\0';
-          begin += 2;
-          break;
-        }
-        ++begin;
-      }
-      return begin;
-    }
-  };
-*/
 
 }
 
