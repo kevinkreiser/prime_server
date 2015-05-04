@@ -40,21 +40,23 @@ The library comes with a standalone binary which is essentially just a server or
     time prime_serverd 1000000 1
     time prime_serverd 1000000 8
     
-    #run an http server
-    prime_serverd tcp://*:8007 &
+    #try the sample python only server
+    python py/prime_serverd.py &> /dev/null &
+    server_pid=$1
+    
+    #hit it with ab
+    ab -n 1000 -c 8 http://localhost:8002/is_prime?possible_prime=32416190071
+    kill $server_pid
+    
+    #run zmq based http server
+    prime_serverd tcp://*:8002 &> /dev/null &
     server_pid=$!
     
-    #TODO:
-    #generate an input file of requests
-    for i in {1..1000000}; do
-      2 * $i + 3 >> input_file
-    done
-    
-    #TODO:
-    #something with ab or xargs..
-    
-    rm -f input_file
+    #hit it with ab
+    ab -n 1000 -c 8 http://localhost:8002/is_prime?possible_prime=32416190071
     kill $server_pid
+    
+    #be semi-amazed that its close to 100x faster
 
 The Point
 ---------
