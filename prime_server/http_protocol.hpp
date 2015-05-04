@@ -22,6 +22,11 @@ namespace {
     return true;
   }
 
+  //TODO:
+  std::string url_encode(const std::string& unencoded) {
+    throw std::runtime_error("unimplemented");
+  }
+
   //TODO: implement a ring buffer and pass into it a bunch of fixed string that you want to detect
   //then you can ask the buffer on each iteration whether any of the strings are currently met
   //you can also remove match strings from the buffer. the buffer only grows in size if you add
@@ -207,24 +212,118 @@ namespace prime_server {
 
 
   using headers_t = std::unordered_map<std::string, std::string>;
+  using query_t = std::unordered_map<std::string, std::list<std::string> >;
   struct http_request_t {
-    static std::string get(const std::string& uri/*, add headers*/) {
-      return "GET " + uri + " HTTP/1.0\r\n\r\n";
-    }
-    static std::string post(const std::string& uri, const std::string& body/*, add headers*/) {
-      return "POST " + uri + " HTTP/1.0\r\nContent-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body + "\r\n\r\n";
-    }
+    std::string path;
+    query_t query;
+    std::string version;
+    headers_t headers;
+    std::string body;
 
-    static std::string head(const std::string& uri/*, add headers*/) {
+    std::string get() { return get(path, headers); };
+    std::string post() { return post(path, body, headers); };
+    std::string head() { return head(path, headers); }
+    std::string delete_() { return delete_(path, headers); }
+    std::string trace() { return trace(path, headers); }
+    std::string connect() { return connect(path, headers); }
+
+    static http_request_t parse(const std::string& bytes) {
+      http_request_t request;
+      //TODO:
+      return request;
+    }
+    static std::string get(const std::string& path, const headers_t& headers,
+                           const query_t& query = query_t{}, const std::string& version = "HTTP/1.0") {
+      std::string request = "GET " + path;
+
+      //query string
+      if(query.size()) {
+        request.push_back('?');
+        bool amp = false;
+        for(const auto& kv : query) {
+          //TODO: support blank parameters?
+          for(const auto& v : kv.second) {
+            if(amp)
+              request.push_back('&');
+            amp = true;
+            //TODO: url encode
+            request += kv.first;
+            request.push_back('=');
+            request += v;
+          }
+        }
+      }
+
+      //version
+      request.push_back(' ');
+      request += version;
+      request += "\r\n";
+
+      //headers
+      for(const auto& header : headers) {
+        request += header.first;
+        request += ": ";
+        request += header.second;
+        request += "\r\n";
+      }
+
+      //done
+      request += "\r\n";
+      return request;
+    }
+    static std::string post(const std::string& path, const std::string& body, const headers_t& headers,
+                            const query_t& query = query_t{}, const std::string& version = "HTTP/1.0") {
+      std::string request = "POST " + path;
+
+      //query string
+      if(query.size()) {
+        request.push_back('?');
+        bool amp = false;
+        for(const auto& kv : query) {
+          //TODO: support blank parameters?
+          for(const auto& v : kv.second) {
+            if(amp)
+              request.push_back('&');
+            amp = true;
+            //TODO: url encode
+            request += kv.first;
+            request.push_back('=');
+            request += v;
+          }
+        }
+      }
+
+      //version
+      request.push_back(' ');
+      request += version;
+      request += "\r\n";
+
+      //headers
+      for(const auto& header : headers) {
+        request += header.first;
+        request += ": ";
+        request += header.second;
+        request += "\r\n";
+      }
+
+      //body
+      request += "Content-Length: ";
+      request += std::to_string(body.size());
+      request += "\r\n\r\n";
+      request += body;
+      request += "\r\n\r\n";
+      return request;
+    }
+    static std::string head(const std::string& path, const headers_t& headers) {
       throw std::runtime_error("unimplemented");
     }
-    static std::string delete_(const std::string& uri/*, add headers*/) {
+    static std::string delete_(const std::string& path, const headers_t& headers) {
       throw std::runtime_error("unimplemented");
     }
-    static std::string trace(const std::string& uri/*, add headers*/) {
+    static std::string trace(const std::string& path, const headers_t& headers) {
       throw std::runtime_error("unimplemented");
     }
-    static std::string connect(const std::string& uri/*, add headers*/) {
+    static std::string connect(const std::string& path, const headers_t& headers) {
       throw std::runtime_error("unimplemented");
     }
   };

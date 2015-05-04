@@ -187,9 +187,9 @@ namespace prime_server {
 
       //TODO: let the response determine whether to disconnect the client or not
       //right now this isnt even http 1.0 compliant
-      requests.erase(std::string(static_cast<const char*>(messages.front().data()), messages.front().size()));
+      /*requests.erase(std::string(static_cast<const char*>(messages.front().data()), messages.front().size()));
       client.send(messages.front(), ZMQ_SNDMORE | ZMQ_DONTWAIT);
-      client.send<std::string>("", ZMQ_DONTWAIT);
+      client.send<std::string>("", ZMQ_DONTWAIT);*/
     }
     void handle_request(std::list<zmq::message_t>& messages) {
       //cant be more than 2 messages

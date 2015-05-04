@@ -89,7 +89,7 @@ namespace {
 
 
   void test_request() {
-    std::string http = prime_server::http_request_t::get("e_chliises_schtoeckli");
+    std::string http = prime_server::http_request_t::get("e_chliises_schtoeckli", headers_t{});
     if(http != "GET e_chliises_schtoeckli HTTP/1.0\r\n\r\n")
       throw std::runtime_error("Request was not well-formed");
   }
@@ -124,7 +124,7 @@ namespace {
             request = random_string(10);
             inserted = requests.insert(request);
           }
-          request = prime_server::http_request_t::get(request);
+          request = prime_server::http_request_t::get(request, headers_t{});
         }//blank request means we are done
         else
           request.clear();

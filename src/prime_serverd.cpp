@@ -125,7 +125,7 @@ int main(int argc, char** argv) {
       [&request, requests, &produced_requests]() {
         //blank request means we are done
         if(produced_requests < requests)
-          request = http_request_t::get("/is_prime?possible_prime=" + std::to_string(produced_requests++ * 2 + 3));
+          request = http_request_t::get("/is_prime?possible_prime=" + std::to_string(produced_requests++ * 2 + 3), headers_t{});
         else
           request.clear();
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
