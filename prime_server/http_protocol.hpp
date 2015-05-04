@@ -22,6 +22,11 @@ namespace {
     return true;
   }
 
+  //TODO: implement a ring buffer and pass into it a bunch of fixed string that you want to detect
+  //then you can ask the buffer on each iteration whether any of the strings are currently met
+  //you can also remove match strings from the buffer. the buffer only grows in size if you add
+  //a string larger than the buffer's size, can probably use the keep on open strategy. anyway
+  //the buffer can be used as a state in the fsm
   const std::string CONTENT_LENGTH("\r\nContent-Length: ");
   const std::string DOUBLE_RETURN("\r\n\r\n");
 }
