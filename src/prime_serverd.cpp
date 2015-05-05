@@ -57,9 +57,8 @@ int main(int argc, char** argv) {
       [] (const std::list<zmq::message_t>& job) {
         //request should look like
         ///is_prime?possible_prime=SOME_NUMBER
-        std::string request_str(static_cast<const char*>(job.front().data()), job.front().size());
         try{
-          auto request = http_request_t::parse(request_str);
+          auto request = http_request_t::parse(static_cast<const char*>(job.front().data()), job.front().size());
           query_t::const_iterator prime_str;
           if(request.path != "/is_prime" || (prime_str = request.query.find("possible_prime")) == request.query.cend() || prime_str->second.size() != 1)
             throw std::runtime_error("");

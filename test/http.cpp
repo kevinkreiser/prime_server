@@ -95,7 +95,8 @@ namespace {
   }
 
   void test_request_parsing() {
-    auto request = http_request_t::parse("GET /wos_haescht?nen_stei=2&ne_bluem=3&ziit=5%20minuet HTTP/1.0\r\nHost: localhost:8002\r\nUser-Agent: ApacheBench/2.3\r\n\r\n");
+    std::string request_str("GET /wos_haescht?nen_stei=2&ne_bluem=3&ziit=5%20minuet HTTP/1.0\r\nHost: localhost:8002\r\nUser-Agent: ApacheBench/2.3\r\n\r\n");
+    auto request = http_request_t::parse(request_str.c_str(), request_str.size());
     //TODO: tighten up this test
     if(request.method != method_t::GET)
       throw std::runtime_error("Request parsing failed");

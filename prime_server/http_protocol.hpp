@@ -23,21 +23,6 @@ namespace {
     return true;
   }
 
-  std::string consume_until(const std::string& delimeter, std::string::const_iterator& start, const std::string::const_iterator& end) {
-    std::string::const_iterator current = start;
-    auto i = delimeter.cbegin();
-    while(i != delimeter.cend() && current != end) {
-      if(*i != *current)
-        i = delimeter.cbegin();
-      if(*i == *current)
-        ++i;
-      ++current;
-    }
-    auto part = std::string(start, current - (i == delimeter.cend() ? delimeter.size() : 0));
-    start = current;
-    return part;
-  };
-
   //TODO: implement a ring buffer and pass into it a bunch of fixed string that you want to detect
   //then you can ask the buffer on each iteration whether any of the strings are currently met
   //you can also remove match strings from the buffer. the buffer only grows in size if you add
@@ -237,6 +222,7 @@ namespace prime_server {
   enum class method_t : size_t { GET, POST, PUT, HEAD, DELETE, TRACE, CONNECT };
   const std::unordered_map<std::string, method_t> STRING_TO_METHOD{ {"GET", method_t::GET}, {"POST", method_t::POST}, {"PUT", method_t::PUT}, {"HEAD", method_t::HEAD}, {"DELETE", method_t::DELETE}, {"TRACE", method_t::TRACE}, {"CONNECT", method_t::CONNECT} };
   struct http_request_t {
+   public:
     method_t method;
     std::string path;
     query_t query;
@@ -251,64 +237,6 @@ namespace prime_server {
     std::string trace() { return trace(path, headers); }
     std::string connect() { return connect(path, headers); }
 
-    static http_request_t parse(const std::string& bytes) {
-      http_request_t request;
-
-      //nice way to eat bytes up to a certain point
-      std::string::const_iterator start = bytes.cbegin();
-      auto consume_header = [&start, &bytes, &request]() {
-        auto part = consume_until("\r\n", start, bytes.cend());
-        //hit the end of request or begin of body
-        if(part.size() == 0)
-         return false;
-        auto pos = part.find(": ");
-        if(pos == std::string::npos)
-          throw std::runtime_error("Expected http header");
-        request.headers.insert({part.substr(0, pos), part.substr(pos + 2)});
-        return true;
-      };
-
-      //method
-      auto method_str = consume_until(" ", start, bytes.cend());
-      auto method = STRING_TO_METHOD.find(method_str);
-      if(method == STRING_TO_METHOD.end())
-        throw std::runtime_error("Unknown http method");
-      request.method = method->second;
-      //path
-      request.path = consume_until(" ", start, bytes.cend());
-      //version
-      request.version = consume_until("\r\n", start, bytes.cend());
-      if(request.version != "HTTP/1.0" && request.version != "HTTP/1.1")
-        throw std::runtime_error("Unknown http version");
-
-      //split off the query
-      auto pos = request.path.find('?');
-      if(pos != std::string::npos) {
-        auto query = request.path.substr(pos + 1);
-        request.path.resize(pos);
-        std::string key, value;
-        std::string::const_iterator start = query.cbegin();
-        while((key = consume_until("=", start, query.cend())).size() && (value = consume_until("&", start, query.cend())).size()) {
-          auto kv = request.query.find(key);
-          if(kv == request.query.cend())
-            request.query.insert({key, {value}});
-          else
-            kv->second.push_back(value);
-        }
-      }
-
-      //headers
-      while(consume_header());
-
-      //body
-      auto length_str = request.headers.find("Content-Length");
-      if(length_str == request.headers.end())
-        return request;
-      auto length = std::stoul(length_str->second);
-      request.body = bytes.substr(start - bytes.cbegin());
-
-      return request;
-    }
     static std::string get(const std::string& path, const headers_t& headers,
                            const query_t& query = query_t{}, const std::string& version = "HTTP/1.0") {
       std::string request = "GET " + path;
@@ -403,10 +331,154 @@ namespace prime_server {
     static std::string connect(const std::string& path, const headers_t& headers) {
       throw std::runtime_error("unimplemented");
     }
+
+    static http_request_t parse(const char* start, size_t length) {
+      http_request_t request;
+      request.clear();
+      auto requests = request.stream(start, length);
+      if(requests.size() == 0)
+        throw std::runtime_error("Incomplete http request");
+      return requests.front();
+    }
+
+    std::list<http_request_t> stream(const char* start, size_t length) {
+      std::list<http_request_t> requests;
+      cursor = start;
+      end = start + length;
+      while(start != end) {
+        //grab up to the next return
+        if(!consume_until())
+          break;
+
+        //what are we looking to parse
+        switch(state) {
+          case METHOD: {
+            auto itr = STRING_TO_METHOD.find(partial_buffer);
+            if(itr == STRING_TO_METHOD.end())
+              throw std::runtime_error("Unknown http method");
+            method = itr->second;
+            state = PATH;
+            break;
+          }
+          case PATH: {
+            path.swap(partial_buffer);
+            delimeter = "\r\n";
+            state = VERSION;
+            break;
+          }
+          case VERSION: {
+            version.swap(partial_buffer);
+            if(version != "HTTP/1.0" && version != "HTTP/1.1")
+              throw std::runtime_error("Unknown http version");
+            //split off the query bits
+            auto pos = path.find('?');
+            size_t key_pos = pos, value_pos;
+            while(key_pos++ != std::string::npos && (value_pos = path.find('=', key_pos)) != std::string::npos) {
+              auto key = path.substr(key_pos, value_pos++ - key_pos);
+              key_pos = path.find('&', value_pos);
+              auto value = path.substr(value_pos, key_pos - value_pos);
+
+              auto kv = query.find(key);
+              if(kv == query.cend())
+                query.insert({key, {value}});
+              else
+                kv->second.emplace_back(std::move(value));
+            }
+            path.resize(pos);
+            state = HEADERS;
+            break;
+          }
+          case HEADERS: {
+            //a header is here
+            if(partial_buffer.size()) {
+              auto pos = partial_buffer.find(": ");
+              if(pos == std::string::npos)
+                throw std::runtime_error("Expected http header");
+              headers.insert({partial_buffer.substr(0, pos), partial_buffer.substr(pos + 2)});
+            }//the end or body
+            else {
+              auto length_str = headers.find("Content-Length");
+              if(length_str != headers.end()) {
+                body_length = std::stoul(length_str->second);
+                state = BODY;
+              }
+              else {
+                //TODO: check for chunked
+                requests.push_back(http_request_t{method, path, query, version, headers, body});
+                clear();
+              }
+            }
+            break;
+          }
+          case BODY: {
+            //TODO: actually use body length
+            body.swap(partial_buffer);
+            state = END;
+            break;
+          }
+          case CHUNKS: {
+            //TODO: actually parse out the length and chunk by alternating
+            //TODO: return 501
+            throw std::runtime_error("not implemented");
+          }
+          case END: {
+            if(partial_buffer.size())
+              throw std::runtime_error("Unexpected data near end of http request");
+            requests.push_back(http_request_t{method, path, query, version, headers, body});
+            clear();
+            break;
+          }
+        }
+
+        //next piece
+        partial_buffer.clear();
+      }
+
+      return requests;
+    }
+
+
+    //state for streaming parsing
+    const char *cursor, *end, *delimeter;
+    std::string partial_buffer;
+    size_t partial_length;
+    enum state_t { METHOD, PATH, VERSION, HEADERS, BODY, CHUNKS, END };
+    state_t state;
+    size_t body_length;
+
+    bool consume_until() {
+      //go until we run out or we found the delimeter
+      const char* current = cursor;
+      char c;
+      while((c = *(delimeter + partial_length)) != '\0' && current != end) {
+        if(c != *current)
+          partial_length = 0;
+        else
+          ++partial_length;
+        ++current;
+      }
+      //we found the delimeter
+      if(c == '\0') {
+        partial_buffer.append(cursor, current - partial_length);
+        partial_length = 0;
+        cursor = current;
+        return true;
+      }
+      //we ran out
+      partial_buffer.assign(cursor, current - cursor);
+      return false;
+    }
+    void clear() {
+      state = METHOD;
+      delimeter = " ";
+      partial_length = 0;
+      path.clear();
+      query.clear();
+      version.clear();
+      headers.clear();
+      body.clear();
+    }
   };
-
-  //TODO: support gzip encoded responses natively or let applications to do this themselves?
-
 
   struct http_response_t {
     static std::string generic(unsigned code, const std::string message, const headers_t& headers, const std::string& body = "") {
