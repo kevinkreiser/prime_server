@@ -168,59 +168,18 @@ namespace prime_server {
     std::string buffer;
   };
 
-  //TODO: dont use a string, make another object to keep the machines state
-  class http_server_t : public server_t<std::string> {
-   public:
-    using server_t<std::string>::server_t;
-    virtual ~http_server_t(){}
-   protected:
-    virtual size_t stream_requests(const void* message, size_t size, const std::string& requester, std::string& buffer) {
-      //um..
-      size_t forwarded = 0;
-      if(size == 0)
-        return forwarded;
-
-      //box out the message a bit so we can iterate
-      const char* begin = static_cast<const char*>(message);
-      const char* end = begin + size;
-
-      //do we have a partial request
-      if(buffer.size()) {
-        while(begin < end) {
-          buffer.push_back(*begin);
-          ++begin;
-          if(buffer.size() > 4 && buffer.find("\r\n\r\n", buffer.size() - 4) != std::string::npos) {
-            this->proxy.send(requester, ZMQ_DONTWAIT | ZMQ_SNDMORE);
-            this->proxy.send(buffer, ZMQ_DONTWAIT);
-            ++forwarded;
-            break;
-          }
-        }
-      }
-
-      //keep getting pieces while they are there
-      if(begin < end && *begin != 'G')
-        throw std::runtime_error("Http protocol request cannot begin with anything other than 'GET'");
-      const char* current = begin;
-      while(current < end) {
-        ++current;
-        if(current - begin > 4 && startswith(current - 4, "\r\n\r\n")) {
-          this->proxy.send(requester, ZMQ_DONTWAIT | ZMQ_SNDMORE);
-          this->proxy.send(static_cast<const void*>(begin), current - begin, ZMQ_DONTWAIT);
-          ++forwarded;
-          begin = current;
-        }
-      }
-      buffer.assign(begin, end - begin);
-      return forwarded;
-    }
-  };
-
 
   using headers_t = std::unordered_map<std::string, std::string>;
   using query_t = std::unordered_map<std::string, std::list<std::string> >;
-  enum class method_t : size_t { GET, POST, PUT, HEAD, DELETE, TRACE, CONNECT };
-  const std::unordered_map<std::string, method_t> STRING_TO_METHOD{ {"GET", method_t::GET}, {"POST", method_t::POST}, {"PUT", method_t::PUT}, {"HEAD", method_t::HEAD}, {"DELETE", method_t::DELETE}, {"TRACE", method_t::TRACE}, {"CONNECT", method_t::CONNECT} };
+  enum method_t { GET, POST, PUT, HEAD, DELETE, TRACE, CONNECT };
+  const std::unordered_map<std::string, method_t> STRING_TO_METHOD {
+    {"GET", method_t::GET}, {"POST", method_t::POST}, {"PUT", method_t::PUT}, {"HEAD", method_t::HEAD},
+    {"DELETE", method_t::DELETE}, {"TRACE", method_t::TRACE}, {"CONNECT", method_t::CONNECT}
+  };
+  const std::unordered_map<method_t, std::string, std::hash<int> > METHOD_TO_STRING{
+    {method_t::GET, "GET"}, {method_t::POST, "POST"}, {method_t::PUT, "PUT"}, {method_t::HEAD, "HEAD"},
+    {method_t::DELETE, "DELETE"}, {method_t::TRACE, "TRACE"}, {method_t::CONNECT, "CONNECT"}
+  };
   struct http_request_t {
    public:
     method_t method;
@@ -230,55 +189,35 @@ namespace prime_server {
     headers_t headers;
     std::string body;
 
-    std::string get() { return get(path, headers); }
-    std::string post() { return post(path, body, headers); }
-    std::string head() { return head(path, headers); }
-    std::string delete_() { return delete_(path, headers); }
-    std::string trace() { return trace(path, headers); }
-    std::string connect() { return connect(path, headers); }
-
-    static std::string get(const std::string& path, const headers_t& headers,
-                           const query_t& query = query_t{}, const std::string& version = "HTTP/1.0") {
-      std::string request = "GET " + path;
-
-      //query string
-      if(query.size()) {
-        request.push_back('?');
-        bool amp = false;
-        for(const auto& kv : query) {
-          //TODO: support blank parameters?
-          for(const auto& v : kv.second) {
-            if(amp)
-              request.push_back('&');
-            amp = true;
-            //TODO: url encode
-            request += kv.first;
-            request.push_back('=');
-            request += v;
-          }
-        }
-      }
-
-      //version
-      request.push_back(' ');
-      request += version;
-      request += "\r\n";
-
-      //headers
-      for(const auto& header : headers) {
-        request += header.first;
-        request += ": ";
-        request += header.second;
-        request += "\r\n";
-      }
-
-      //done
-      request += "\r\n";
-      return request;
+    http_request_t() {
+      path = version = body = "";
+      cursor = end = nullptr;
+      flush_stream();
     }
-    static std::string post(const std::string& path, const std::string& body, const headers_t& headers,
-                            const query_t& query = query_t{}, const std::string& version = "HTTP/1.0") {
-      std::string request = "POST " + path;
+
+    http_request_t(const method_t& method, const std::string& path, const std::string& body = "", const query_t& query = query_t{},
+                   const headers_t& headers = headers_t{}, const std::string& version = "HTTP/1.1") :
+                   method(method), path(path), body(body), query(query), headers(headers), version(version) {
+      state = METHOD;
+      delimeter = " ";
+      partial_length = 0;
+      body_length = 0;
+      consumed = 0;
+      partial_buffer.clear();
+      cursor = end = nullptr;
+    }
+
+    std::string to_string() const {
+      return to_string(method, path, body, query, headers, version);
+    }
+
+    static std::string to_string(const method_t& method, const std::string& path, const std::string& body = "", const query_t& query = query_t{},
+                                 const headers_t& headers = headers_t{}, const std::string& version = "HTTP/1.1") {
+      auto itr = METHOD_TO_STRING.find(method);
+      if(itr == METHOD_TO_STRING.end())
+        throw std::runtime_error("Unsupported http request method");
+      std::string request = itr->second + ' ';
+      request += path;
 
       //query string
       if(query.size()) {
@@ -312,36 +251,26 @@ namespace prime_server {
       }
 
       //body
-      request += "Content-Length: ";
-      request += std::to_string(body.size());
-      request += "\r\n\r\n";
-      request += body;
-      request += "\r\n\r\n";
+      if((body.size() || method == method_t::POST) && headers.find("Content-Length") == headers.end()) {
+        request += "Content-Length: ";
+        request += std::to_string(body.size());
+        request += "\r\n\r\n";
+        request += body;
+        request += "\r\n";
+      }
+      request += "\r\n";
       return request;
     }
-    static std::string head(const std::string& path, const headers_t& headers) {
-      throw std::runtime_error("unimplemented");
-    }
-    static std::string delete_(const std::string& path, const headers_t& headers) {
-      throw std::runtime_error("unimplemented");
-    }
-    static std::string trace(const std::string& path, const headers_t& headers) {
-      throw std::runtime_error("unimplemented");
-    }
-    static std::string connect(const std::string& path, const headers_t& headers) {
-      throw std::runtime_error("unimplemented");
-    }
 
-    static http_request_t parse(const char* start, size_t length) {
+    static http_request_t from_string(const char* start, size_t length) {
       http_request_t request;
-      request.clear();
-      auto requests = request.stream(start, length);
+      auto requests = request.from_stream(start, length);
       if(requests.size() == 0)
         throw std::runtime_error("Incomplete http request");
-      return requests.front();
+      return std::move(requests.front());
     }
 
-    std::list<http_request_t> stream(const char* start, size_t length) {
+    std::list<http_request_t> from_stream(const char* start, size_t length) {
       std::list<http_request_t> requests;
       cursor = start;
       end = start + length;
@@ -384,7 +313,8 @@ namespace prime_server {
               else
                 kv->second.emplace_back(std::move(value));
             }
-            path.resize(pos);
+            if(pos != std::string::npos)
+              path.resize(pos);
             state = HEADERS;
             break;
           }
@@ -404,8 +334,8 @@ namespace prime_server {
               }
               else {
                 //TODO: check for chunked
-                requests.push_back(http_request_t{method, path, query, version, headers, body});
-                clear();
+                requests.push_back(http_request_t(method, path, body, query, headers, version));
+                flush_stream();
               }
             }
             break;
@@ -424,8 +354,8 @@ namespace prime_server {
           case END: {
             if(partial_buffer.size())
               throw std::runtime_error("Unexpected data near end of http request");
-            requests.push_back(http_request_t{method, path, query, version, headers, body});
-            clear();
+            requests.push_back(http_request_t(method, path, body, query, headers, version));
+            flush_stream();
             break;
           }
         }
@@ -436,8 +366,25 @@ namespace prime_server {
 
       return requests;
     }
+    void flush_stream() {
+      state = METHOD;
+      delimeter = " ";
+      partial_length = 0;
+      body_length = 0;
+      consumed = 0;
+      partial_buffer.clear();
+      path.clear();
+      query.clear();
+      version.clear();
+      headers.clear();
+      body.clear();
+    }
+    size_t size() const {
+      return consumed + partial_buffer.size();
+    }
 
 
+   protected:
     //state for streaming parsing
     const char *cursor, *end, *delimeter;
     std::string partial_buffer;
@@ -445,6 +392,7 @@ namespace prime_server {
     enum state_t { METHOD, PATH, VERSION, HEADERS, BODY, CHUNKS, END };
     state_t state;
     size_t body_length;
+    size_t consumed;
 
     bool consume_until() {
       //go until we run out or we found the delimeter
@@ -459,25 +407,21 @@ namespace prime_server {
       }
       //we found the delimeter
       if(c == '\0') {
-        partial_buffer.append(cursor, current - partial_length);
+        size_t length = current - cursor;
+        if(length < partial_length)
+          partial_buffer.resize(partial_buffer.size() - (partial_length - length));
+        else
+          partial_buffer.append(cursor, current - partial_length);
         partial_length = 0;
         cursor = current;
+        consumed += length;
         return true;
       }
       //we ran out
       partial_buffer.assign(cursor, current - cursor);
       return false;
     }
-    void clear() {
-      state = METHOD;
-      delimeter = " ";
-      partial_length = 0;
-      path.clear();
-      query.clear();
-      version.clear();
-      headers.clear();
-      body.clear();
-    }
+
   };
 
   struct http_response_t {
@@ -499,6 +443,21 @@ namespace prime_server {
       return response;
     }
   };
+
+  class http_server_t : public server_t<http_request_t> {
+     public:
+      using server_t<http_request_t>::server_t;
+      virtual ~http_server_t(){}
+     protected:
+      virtual size_t stream_requests(const void* message, size_t size, const std::string& requester, http_request_t& request) {
+        auto requests = request.from_stream(static_cast<const char*>(message), size);
+        for(const auto& parsed_request : requests) {
+          this->proxy.send(requester, ZMQ_DONTWAIT | ZMQ_SNDMORE);
+          this->proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT);
+        }
+        return requests.size();
+      }
+    };
 
 }
 

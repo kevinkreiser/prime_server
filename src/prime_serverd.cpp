@@ -58,7 +58,7 @@ int main(int argc, char** argv) {
         //request should look like
         ///is_prime?possible_prime=SOME_NUMBER
         try{
-          auto request = http_request_t::parse(static_cast<const char*>(job.front().data()), job.front().size());
+          auto request = http_request_t::from_string(static_cast<const char*>(job.front().data()), job.front().size());
           query_t::const_iterator prime_str;
           if(request.path != "/is_prime" || (prime_str = request.query.find("possible_prime")) == request.query.cend() || prime_str->second.size() != 1)
             throw std::runtime_error("");
@@ -127,7 +127,7 @@ int main(int argc, char** argv) {
       [&request, requests, &produced_requests]() {
         //blank request means we are done
         if(produced_requests < requests)
-          request = http_request_t::get("/is_prime?possible_prime=" + std::to_string(produced_requests++ * 2 + 3), headers_t{});
+          request = http_request_t::to_string(method_t::GET, "/is_prime?possible_prime=" + std::to_string(produced_requests++ * 2 + 3));
         else
           request.clear();
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());

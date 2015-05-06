@@ -26,6 +26,11 @@ namespace {
     }
   };
 
+  struct testable_http_request_t : public http_request_t {
+   public:
+    using http_request_t::partial_buffer;
+  };
+
   class testable_http_client_t : public http_client_t {
    public:
     using http_client_t::http_client_t;
@@ -38,15 +43,15 @@ namespace {
     testable_http_server_t server(context, "ipc://test_http_server", "ipc://test_http_proxy_upstream", "ipc://test_http_results");
     server.passify();
 
-    std::string buffer;
-    std::string incoming("GET /irgendwelle/pfad HTTP1.1\r");
-    auto forwarded = server.stream_requests(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", buffer);
-    incoming ="\n\r\nGET /annrer/pfad?aafrag=gel HTTP1.0\r\n\r\nsell siehscht du au noed";
-    forwarded += server.stream_requests(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", buffer);
+    testable_http_request_t request;
+    std::string incoming("GET /irgendwelle/pfad HTTP/1.1\r");
+    auto forwarded = server.stream_requests(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", request);
+    incoming ="\n\r\nGET /annrer/pfad?aafrag=gel HTTP/1.0\r\n\r\nsell_siehscht_du_au_noed";
+    forwarded += server.stream_requests(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", request);
 
     if(forwarded != 2)
       throw std::runtime_error("Wrong number of requests were forwarded");
-    if(buffer != "sell siehscht du au noed")
+    if(request.partial_buffer != "sell_siehscht_du_au_noed")
       throw std::runtime_error("Unexpected partial request data");
   }
 
@@ -64,7 +69,7 @@ namespace {
       });
 
     bool more;
-    std::string incoming = "HTTP1.0 OK\r\nContent-Lengt";
+    std::string incoming = "HTTP/1.0 OK\r\nContent-Lengt";
     auto reported_responses = client.stream_responses(static_cast<const void*>(incoming.data()), incoming.size(), more);
     incoming = "h: 6\r\n\r\nguet\r\n\r\n\r";
     reported_responses += client.stream_responses(static_cast<const void*>(incoming.data()), incoming.size(), more);
@@ -72,12 +77,12 @@ namespace {
     if(all != "")
       throw std::runtime_error("Unexpected response data");
 
-    incoming = "\nHTTP1.0 OK\r\n\r\nsell siehscht du au noed";
+    incoming = "\nHTTP/1.0 OK\r\n\r\nsell siehscht du au noed";
     reported_responses += client.stream_responses(static_cast<const void*>(incoming.data()), incoming.size(), more);
 
     if(!more)
       throw std::runtime_error("Expected the client to want more responses");
-    if(all != "HTTP1.0 OK\r\nContent-Length: 6\r\n\r\nguet\r\n\r\n\r\nHTTP1.0 OK\r\n\r\n")
+    if(all != "HTTP/1.0 OK\r\nContent-Length: 6\r\n\r\nguet\r\n\r\n\r\nHTTP/1.0 OK\r\n\r\n")
       throw std::runtime_error("Unexpected response data");
     if(responses != 2)
       throw std::runtime_error("Wrong number of responses were collected");
@@ -89,14 +94,14 @@ namespace {
 
 
   void test_request() {
-    std::string http = http_request_t::get("e_chliises_schtoeckli", headers_t{});
-    if(http != "GET e_chliises_schtoeckli HTTP/1.0\r\n\r\n")
+    std::string http = http_request_t::to_string(method_t::GET, "e_chliises_schtoeckli");
+    if(http != "GET e_chliises_schtoeckli HTTP/1.1\r\n\r\n")
       throw std::runtime_error("Request was not well-formed");
   }
 
   void test_request_parsing() {
     std::string request_str("GET /wos_haescht?nen_stei=2&ne_bluem=3&ziit=5%20minuet HTTP/1.0\r\nHost: localhost:8002\r\nUser-Agent: ApacheBench/2.3\r\n\r\n");
-    auto request = http_request_t::parse(request_str.c_str(), request_str.size());
+    auto request = http_request_t::from_string(request_str.c_str(), request_str.size());
     //TODO: tighten up this test
     if(request.method != method_t::GET)
       throw std::runtime_error("Request parsing failed");
@@ -142,7 +147,7 @@ namespace {
             request = random_string(10);
             inserted = requests.insert(request);
           }
-          request = http_request_t::get(request, headers_t{});
+          request = http_request_t::to_string(method_t::GET, request);
         }//blank request means we are done
         else
           request.clear();
