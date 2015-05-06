@@ -16,7 +16,8 @@ namespace {
   class testable_http_server_t : public http_server_t {
    public:
     using http_server_t::http_server_t;
-    using http_server_t::stream_requests;
+    using http_server_t::enqueue;
+    using http_server_t::request_id;
     //zmq is great, it will hold on to unsent messages so that if you are disconnected
     //and reconnect, they eventually do get sent, for this test we actually want them
     //dropped since we arent really testing their delivery here
@@ -45,11 +46,11 @@ namespace {
 
     testable_http_request_t request;
     std::string incoming("GET /irgendwelle/pfad HTTP/1.1\r");
-    auto forwarded = server.stream_requests(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", request);
+    server.enqueue(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", request);
     incoming ="\n\r\nGET /annrer/pfad?aafrag=gel HTTP/1.0\r\n\r\nsell_siehscht_du_au_noed";
-    forwarded += server.stream_requests(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", request);
+    server.enqueue(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", request);
 
-    if(forwarded != 2)
+    if(server.request_id != 2)
       throw std::runtime_error("Wrong number of requests were forwarded");
     if(request.partial_buffer != "sell_siehscht_du_au_noed")
       throw std::runtime_error("Unexpected partial request data");
@@ -119,7 +120,7 @@ namespace {
 
   void test_response() {
     std::string http = http_response_t::generic(200, "OK", headers_t{}, "e_chliises_schtoeckli");
-    if(http != ("HTTP/1.0 200 OK\r\nContent-Length: 21\r\n\r\ne_chliises_schtoeckli\r\n\r\n"))
+    if(http != ("HTTP/1.1 200 OK\r\nContent-Length: 21\r\n\r\ne_chliises_schtoeckli\r\n\r\n"))
       throw std::runtime_error("Response was not well-formed");
   }
 
@@ -194,7 +195,7 @@ namespace {
     //echo worker
     std::thread worker(std::bind(&worker_t::work,
       worker_t(context, "ipc://test_http_proxy_downstream", "ipc://NONE", "ipc://test_http_results",
-      [] (const std::list<zmq::message_t>& job) {
+      [] (const std::list<zmq::message_t>& job, void*) {
         worker_t::result_t result{false};
         result.messages.emplace_back(static_cast<const char*>(job.front().data()), job.front().size());
         result.messages.back() = http_response_t::generic(200, "OK", headers_t{}, result.messages.back());

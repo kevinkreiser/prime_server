@@ -9,6 +9,8 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <stdexcept>
+#include <type_traits>
+#include <cstdint>
 
 #include <prime_server/zmq.hpp>
 #include <prime_server/logging.hpp>
@@ -113,9 +115,10 @@ namespace prime_server {
   };
 
   //server sits between a clients and a load balanced backend
-  template <class request_container>
+  template <class request_container_t, class request_info_t>
   class server_t {
    public:
+    static_assert(std::is_pod<request_info_t>::value, "server requires POD types for request info");
     server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint):
       client(context, ZMQ_STREAM), proxy(context, ZMQ_DEALER), loopback(context, ZMQ_SUB) {
 
@@ -139,12 +142,14 @@ namespace prime_server {
       loopback.setsockopt(ZMQ_SUBSCRIBE, "", 0);
       loopback.bind(result_endpoint.c_str());
 
+      sessions.reserve(1024);
       requests.reserve(1024);
     }
     virtual ~server_t(){}
     void serve() {
       while(true) {
         //check for activity on the client socket and the result socket
+        //TODO: set a timeout based on session inactivity timeout or request timeout
         zmq::pollitem_t items[] = { { loopback, 0, ZMQ_POLLIN, 0 }, { client, 0, ZMQ_POLLIN, 0 } };
         zmq::poll(items, 2, -1);
 
@@ -169,58 +174,65 @@ namespace prime_server {
             LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " server_t: " + e.what());
           }
         }
+
+        //TODO: kill stale sessions
+        //TODO: kill long requests requests
       }
     }
    protected:
     void handle_response(std::list<zmq::message_t>& messages) {
-      if(messages.size() < 2) {
-        LOG_ERROR("Cannot reply without address infomation");
+      if(messages.size() < 3) {
+        LOG_ERROR("Cannot reply without address and request information");
         return;
       }
-      if(messages.size() > 2) {
+      if(messages.size() > 3) {
         LOG_WARN("Cannot reply with more than one message, dropping additional");
-        messages.resize(2);
+        messages.resize(3);
       }
       if(messages.back().size() == 0)
         LOG_WARN("Sending empty messages will disconnect the client");
-      client.send_all(messages, ZMQ_DONTWAIT);
+      client.send(messages.front(), ZMQ_SNDMORE | ZMQ_DONTWAIT);
+      client.send(messages.back(), ZMQ_DONTWAIT);
 
-      //TODO: let the response determine whether to disconnect the client or not
+      //cleanup request or session
+      dequeue(*static_cast<request_info_t*>(std::next(messages.begin())->data()));
     }
     void handle_request(std::list<zmq::message_t>& messages) {
-      //cant be more than 2 messages
+      //must be identity and request data
       if(messages.size() != 2) {
-        LOG_WARN("Ignoring request: too many parts");
+        LOG_WARN("Ignoring request: wrong number of parts");
         return;
       }
 
       //get some info about the client
       auto requester = std::string(static_cast<const char*>(messages.front().data()), messages.front().size());
-      auto request = requests.find(requester);
+      auto session = sessions.find(requester);
       auto& body = *std::next(messages.begin());
 
       //open or close connection
       if(body.size() == 0) {
         //new client
-        if(request == requests.end()) {
-          requests.emplace(requester, request_container{});
+        if(session == sessions.end()) {
+          sessions.emplace(requester, request_container_t{});
         }//TODO: check if disconnecting client has a partial request waiting here
         else {
-          requests.erase(request);
+          sessions.erase(session);
         }
       }//actual request data
       else {
-        if(request != requests.end()) {
+        if(session != sessions.end()) {
           //proxy any whole bits onward
-          request_container& streaming = request->second;
-          stream_requests(body.data(), body.size(), requester, streaming);
+          request_container_t& streaming = session->second;
+          enqueue(body.data(), body.size(), requester, streaming);
 
           //hangup if this is all too much (in the buffer)
           //TODO: 414 for http clients
-          if(request->second.size() > MAX_REQUEST_SIZE) {
-            requests.erase(request);
+          //TODO: kill all outstanding requests
+          if(session->second.size() > MAX_REQUEST_SIZE) {
+            sessions.erase(session);
             body.reset();
-            client.send_all(messages, ZMQ_DONTWAIT);
+            client.send(messages.front(), ZMQ_SNDMORE | ZMQ_DONTWAIT);
+            client.send(body, ZMQ_DONTWAIT);
             return;
           }
         }
@@ -228,12 +240,28 @@ namespace prime_server {
           LOG_WARN("Ignoring request: unknown client");
       }
     }
-    virtual size_t stream_requests(const void*, size_t, const std::string&, request_container&) = 0;
+    //implementing class shall:
+    //  take the request_container pump more bytes into and get back out >= 0 whole request objects
+    //  for each whole request:
+    //    send the requester as a message to the proxy
+    //    send the request id as a message to the proxy
+    //    send the request as a message to the proxy
+    //    record the request with its id
+    virtual void enqueue(const void* bytes, size_t length, const std::string& requester, request_container_t& streaming_request) = 0;
+    //implementing class shall:
+    //  remove the outstanding request as it was either satisfied or timed-out
+    //  depending on the original request or the result the session may also be terminated
+    virtual void dequeue(const request_info_t& request_info) = 0;
+
     zmq::socket_t client;
     zmq::socket_t proxy;
     zmq::socket_t loopback;
-    //TODO: have a reverse look up by time of connection, kill connections that stick around for a long time
-    std::unordered_map<std::string, request_container> requests;
+    //a record of what open connections we have
+    //TODO: keep time of last session activity and clear out stale sessions
+    std::unordered_map<std::string, request_container_t> sessions;
+    //a record of what requests we have in progress
+    //TODO: keep time of request and kill requests that stick around for a long time
+    std::unordered_map<uint64_t, std::string> requests;
   };
 
   //proxy messages between layers of a backend load balancing in between
@@ -282,17 +310,17 @@ namespace prime_server {
           try {
             //get the request
             auto messages = upstream.recv_all(ZMQ_DONTWAIT);
-            //strip the from address and replace with first bored worker
+            //strip the from address (previous hop)
             messages.pop_front();
             auto worker_address = fifo.front();
             workers.erase(worker_address);
             fifo.pop();
-            //send it on to the worker
+            //send it on to the first bored worker
             downstream.send(worker_address, ZMQ_DONTWAIT | ZMQ_SNDMORE);
             downstream.send_all(messages, ZMQ_DONTWAIT);
           }
           catch (const std::exception& e) {
-            //TODO: recover from a worker dying just before you send it work
+            //TODO: recover from a worker dying just before you sent it work
             LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " proxy_t: " + e.what());
           }
         }
@@ -310,7 +338,7 @@ namespace prime_server {
       bool intermediate;
       std::list<std::string> messages;
     };
-    using work_function_t = std::function<result_t (const std::list<zmq::message_t>&)>;
+    using work_function_t = std::function<result_t (const std::list<zmq::message_t>&, void* request_info)>;
 
     worker_t(zmq::context_t& context, const std::string& upstream_proxy_endpoint, const std::string& downstream_proxy_endpoint,
       const std::string& result_endpoint, const work_function_t& work_function):
@@ -346,16 +374,20 @@ namespace prime_server {
             auto messages = upstream_proxy.recv_all(0);
             auto address = std::move(messages.front());
             messages.pop_front();
-            auto result = work_function(messages);
+            auto request_info = std::move(messages.front());
+            messages.pop_front();
+            auto result = work_function(messages, request_info.data());
             //should we send this on to the next proxy
             if(result.intermediate) {
               downstream_proxy.send(address, ZMQ_SNDMORE);
+              downstream_proxy.send(request_info, ZMQ_SNDMORE);
               downstream_proxy.send_all(result.messages, 0);
             }//or are we done
             else {
               if(result.messages.size() > 1)
                 LOG_WARN("Cannot send more than one result message, additional parts are dropped");
               loopback.send(address, ZMQ_SNDMORE);
+              loopback.send(request_info, ZMQ_SNDMORE);
               loopback.send_all(result.messages, 0);
             }
           }

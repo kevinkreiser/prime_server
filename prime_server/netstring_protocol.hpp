@@ -4,6 +4,7 @@
 #include <prime_server/prime_server.hpp>
 
 #include <cctype>
+#include <cstdint>
 
 namespace prime_server {
 
@@ -88,17 +89,14 @@ namespace prime_server {
     std::string buffer;
   };
 
-  class netstring_server_t : public server_t<std::string> {
+  class netstring_server_t : public server_t<std::string, uint64_t> {
    public:
-    using server_t<std::string>::server_t;
+    netstring_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint):
+      server_t<std::string, uint64_t>::server_t(context, client_endpoint, proxy_endpoint, result_endpoint), request_id(0) {
+    }
     virtual ~netstring_server_t(){}
    protected:
-    virtual size_t stream_requests(const void* message, size_t size, const std::string& requester, std::string& buffer) {
-      //um..
-      size_t forwarded = 0;
-      if(size == 0)
-        return forwarded;
-
+    virtual void enqueue(const void* message, size_t size, const std::string& requester, std::string& buffer) {
       //box out the message a bit so we can iterate
       const char* begin = static_cast<const char*>(message);
       const char* end = begin + size;
@@ -115,7 +113,7 @@ namespace prime_server {
               break;
           }
           if(begin == end)
-            return forwarded;
+            return;
           pos = buffer.size() - 1;
         }
 
@@ -126,13 +124,16 @@ namespace prime_server {
         //not enough
         if(length > end - begin) {
           buffer.append(begin, end - begin);
-          return forwarded;
+          return;
         }//we have a full message here
         else {
           buffer.append(begin, length);
+          //send on the request
           this->proxy.send(requester, ZMQ_DONTWAIT | ZMQ_SNDMORE);
+          this->proxy.send(static_cast<void*>(&request_id), sizeof(request_id), ZMQ_DONTWAIT | ZMQ_SNDMORE);
           this->proxy.send(static_cast<void *>(&buffer[pos + 1]), length - 1, ZMQ_DONTWAIT);
-          ++forwarded;
+          //remember we are working on it
+          this->requests.emplace(request_id++, requester);
           begin += length;
         }
       }
@@ -160,15 +161,22 @@ namespace prime_server {
         if(next_delim > end)
           break;
 
-        //tell where this piece is
+        //send on the request
         this->proxy.send(requester, ZMQ_DONTWAIT | ZMQ_SNDMORE);
+        this->proxy.send(static_cast<void*>(&request_id), sizeof(request_id), ZMQ_DONTWAIT | ZMQ_SNDMORE);
         this->proxy.send(static_cast<const void*>(piece), length, ZMQ_DONTWAIT);
-        ++forwarded;
+        //remember we are working on it
+        this->requests.emplace(request_id++, requester);
         delim = next_delim;
       }
       buffer.assign(delim, end - delim);
-      return forwarded;
     }
+    virtual void dequeue(const uint64_t& request_info) {
+      auto removed = requests.erase(request_info);
+      if(removed != 1)
+        LOG_WARN("Unknown or timed-out request id");
+    }
+    uint64_t request_id;
   };
 
   struct netstring_request_t {

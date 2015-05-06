@@ -7,6 +7,7 @@
 #include <cctype>
 #include <unordered_map>
 #include <list>
+#include <cstdint>
 
 namespace {
 
@@ -23,17 +24,9 @@ namespace {
     return true;
   }
 
-  //TODO: implement a ring buffer and pass into it a bunch of fixed string that you want to detect
-  //then you can ask the buffer on each iteration whether any of the strings are currently met
-  //you can also remove match strings from the buffer. the buffer only grows in size if you add
-  //a string larger than the buffer's size, can probably use the keep on open strategy. anyway
-  //the buffer can be used as a state in the fsm
   const std::string CONTENT_LENGTH("\r\nContent-Length: ");
   const std::string DOUBLE_RETURN("\r\n\r\n");
 }
-
-//http1.1 is a complete mess of a protocol.. lets not implement it for now..
-//http://www.w3.org/Protocols/rfc2616/rfc2616-sec4.html#sec4.4
 
 namespace prime_server {
 
@@ -180,16 +173,26 @@ namespace prime_server {
     {method_t::GET, "GET"}, {method_t::POST, "POST"}, {method_t::PUT, "PUT"}, {method_t::HEAD, "HEAD"},
     {method_t::DELETE, "DELETE"}, {method_t::TRACE, "TRACE"}, {method_t::CONNECT, "CONNECT"}
   };
-  struct http_request_t {
+  struct http_entity_t {
+    std::string version;
+    headers_t headers;
+    std::string body;
+    http_entity_t(const std::string& version, const headers_t& headers, const std::string& body):
+      version(version), headers(headers), body(body) {
+    }
+
+    virtual ~http_entity_t(){}
+    virtual std::string to_string() const = 0;
+    //TODO: virtual http_entity_t from_string(const char*, size_t length) = 0
+  };
+
+  struct http_request_t : public http_entity_t {
    public:
     method_t method;
     std::string path;
     query_t query;
-    std::string version;
-    headers_t headers;
-    std::string body;
 
-    http_request_t() {
+    http_request_t():http_entity_t("", headers_t{}, ""){
       path = version = body = "";
       cursor = end = nullptr;
       flush_stream();
@@ -197,7 +200,7 @@ namespace prime_server {
 
     http_request_t(const method_t& method, const std::string& path, const std::string& body = "", const query_t& query = query_t{},
                    const headers_t& headers = headers_t{}, const std::string& version = "HTTP/1.1") :
-                   method(method), path(path), body(body), query(query), headers(headers), version(version) {
+                   http_entity_t(version, headers, body), method(method), path(path), query(query) {
       state = METHOD;
       delimeter = " ";
       partial_length = 0;
@@ -207,7 +210,24 @@ namespace prime_server {
       cursor = end = nullptr;
     }
 
-    std::string to_string() const {
+    struct info_t {
+      uint64_t id                         :32; //the request id
+      uint64_t version                    :3;  //protocol specific space for versioning info
+      uint64_t connection_keep_alive      :1;  //header present or not
+      uint64_t connection_close           :1;  //header present or not
+      uint64_t spare                      :27; //unused information
+    };
+    info_t to_info(uint64_t id) const {
+      auto header = headers.find("Connection");
+      return info_t {
+        id,
+        static_cast<uint64_t>(version == "HTTP/1.0" ? 0 : 1),
+        static_cast<uint64_t>(header != headers.end() && header->second == "Keep-Alive"),
+        static_cast<uint64_t>(header != headers.end() && header->second == "Close")
+      };
+    }
+
+    virtual std::string to_string() const {
       return to_string(method, path, body, query, headers, version);
     }
 
@@ -424,9 +444,37 @@ namespace prime_server {
 
   };
 
-  struct http_response_t {
-    static std::string generic(unsigned code, const std::string message, const headers_t& headers, const std::string& body = "") {
-      auto response = "HTTP/1.0 " + std::to_string(code) + ' ' + message + "\r\n";
+  //TODO: let this subclass exception and make 'message' be the 'what'
+  //then the caught exceptions that we want to actuall return to the client
+  //can be handled more easily
+  struct http_response_t : public http_entity_t {
+    unsigned code;
+    std::string message;
+
+    http_response_t(unsigned code, const std::string& message, const std::string& body = "", const headers_t& headers = headers_t{},
+                    const std::string& version = "HTTP/1.1") :
+                    http_entity_t(version, headers, body), code(code), message(message) {
+    }
+
+    void from_info(const http_request_t::info_t* info) {
+      if(info->version == 0) {
+        version = "HTTP/1.0";
+        if(info->connection_keep_alive)
+          headers.emplace("Connection", "Keep-Alive");
+      }
+      else {
+        version = "HTTP/1.1";
+        if(info->connection_close)
+          headers.emplace("Connection", "Close");
+      }
+    }
+
+    virtual std::string to_string() const {
+      return generic(code, message, headers, body);
+    }
+
+    static std::string generic(unsigned code, const std::string message, const headers_t& headers = headers_t{}, const std::string& body = "") {
+      auto response = "HTTP/1.1 " + std::to_string(code) + ' ' + message + "\r\n";
       for(const auto& header : headers) {
         response += header.first;
         response += ": ";
@@ -444,19 +492,43 @@ namespace prime_server {
     }
   };
 
-  class http_server_t : public server_t<http_request_t> {
+  class http_server_t : public server_t<http_request_t, http_request_t::info_t> {
      public:
-      using server_t<http_request_t>::server_t;
+      http_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint):
+        server_t<http_request_t, http_request_t::info_t>::server_t(context, client_endpoint, proxy_endpoint, result_endpoint), request_id(0) {
+      }
       virtual ~http_server_t(){}
      protected:
-      virtual size_t stream_requests(const void* message, size_t size, const std::string& requester, http_request_t& request) {
+      virtual void enqueue(const void* message, size_t size, const std::string& requester, http_request_t& request) {
         auto requests = request.from_stream(static_cast<const char*>(message), size);
         for(const auto& parsed_request : requests) {
+          //figure out if we are expecting to close this request or not
+          auto info = parsed_request.to_info(request_id);
+          //send on the request
           this->proxy.send(requester, ZMQ_DONTWAIT | ZMQ_SNDMORE);
+          this->proxy.send(static_cast<const void*>(&info), sizeof(info), ZMQ_DONTWAIT | ZMQ_SNDMORE);
           this->proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT);
+          //remember we are working on it
+          this->requests.emplace(request_id++, requester);
         }
-        return requests.size();
       }
+      virtual void dequeue(const http_request_t::info_t& request_info) {
+        auto request = requests.find(request_info.id);
+        if(request != requests.end()) {
+          //close the session
+          if((request_info.version == 0 && !request_info.connection_keep_alive) ||
+             (request_info.version == 1 && request_info.connection_close)){
+            this->client.send(request->second, ZMQ_DONTWAIT | ZMQ_SNDMORE);
+            this->client.send(static_cast<const void*>(""), 0, ZMQ_DONTWAIT);
+            sessions.erase(request->second);
+          }
+          requests.erase(request);
+        }
+        else
+          LOG_WARN("Unknown or timed-out request id");
+      }
+     protected:
+      uint64_t request_id;
     };
 
 }

@@ -16,7 +16,8 @@ namespace {
   class testable_netstring_server_t : public netstring_server_t {
    public:
     using netstring_server_t::netstring_server_t;
-    using netstring_server_t::stream_requests;
+    using netstring_server_t::enqueue;
+    using netstring_server_t::request_id;
     //zmq is great, it will hold on to unsent messages so that if you are disconnected
     //and reconnect, they eventually do get sent, for this test we actually want them
     //dropped since we arent really testing their delivery here
@@ -40,10 +41,10 @@ namespace {
 
     std::string buffer;
     std::string incoming("1");
-    auto forwarded = server.stream_requests(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", buffer);
+    server.enqueue(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", buffer);
     incoming = "2:abgeschnitte,3:mer,5:welle,5:luege,5:oeb's,4:guet,4:isch,du_siehscht_mi_noed";
-    forwarded += server.stream_requests(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", buffer);
-    if(forwarded != 7)
+    server.enqueue(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", buffer);
+    if(server.request_id != 7)
       throw std::runtime_error("Wrong number of requests were forwarded");
     if(buffer != "du_siehscht_mi_noed")
       throw std::runtime_error("Unexpected partial request data");
@@ -154,7 +155,7 @@ namespace {
     //echo worker
     std::thread worker(std::bind(&worker_t::work,
       worker_t(context, "ipc://test_netstring_proxy_downstream", "ipc://NONE", "ipc://test_netstring_results",
-      [] (const std::list<zmq::message_t>& job) {
+      [] (const std::list<zmq::message_t>& job, void*) {
         worker_t::result_t result{false};
         result.messages.emplace_back(static_cast<const char*>(job.front().data()), job.front().size());
         netstring_response_t::format(result.messages.back());
