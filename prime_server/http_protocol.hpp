@@ -9,6 +9,8 @@
 #include <list>
 #include <cstdint>
 
+#include <curl/curl.h>
+
 namespace {
 
   //check if base starts with pattern
@@ -30,14 +32,22 @@ namespace {
 
 namespace prime_server {
 
-  //TODO:
   std::string url_encode(const std::string& unencoded) {
-    throw std::runtime_error("unimplemented");
+    char* encoded = curl_escape(unencoded.c_str(), unencoded.size());
+    if(encoded == nullptr)
+      throw std::runtime_error("url encoding failed");
+    std::string encoded_str(encoded);
+    curl_free(encoded);
+    return encoded_str;
   }
 
-  //TODO:
-  std::string url_decode(const std::string& unencoded) {
-    throw std::runtime_error("unimplemented");
+  std::string url_decode(const std::string& encoded) {
+    char* decoded = curl_unescape(encoded.c_str(), encoded.size());
+    if(decoded == nullptr)
+      throw std::runtime_error("url decoding failed");
+    std::string decoded_str(decoded);
+    curl_free(decoded);
+    return decoded_str;
   }
 
   class http_client_t : public client_t {
@@ -237,25 +247,26 @@ namespace prime_server {
       if(itr == METHOD_TO_STRING.end())
         throw std::runtime_error("Unsupported http request method");
       std::string request = itr->second + ' ';
-      request += path;
 
-      //query string
+
+      //path and query string
+      std::string pq = path;
       if(query.size()) {
-        request.push_back('?');
+        pq.push_back('?');
         bool amp = false;
         for(const auto& kv : query) {
           //TODO: support blank parameters?
           for(const auto& v : kv.second) {
             if(amp)
-              request.push_back('&');
+              pq.push_back('&');
             amp = true;
-            //TODO: url encode
-            request += kv.first;
-            request.push_back('=');
-            request += v;
+            pq += kv.first;
+            pq.push_back('=');
+            pq += v;
           }
         }
       }
+      request += url_encode(pq);
 
       //version
       request.push_back(' ');
@@ -310,7 +321,7 @@ namespace prime_server {
             break;
           }
           case PATH: {
-            path.swap(partial_buffer);
+            path = url_decode(partial_buffer);
             delimeter = "\r\n";
             state = VERSION;
             break;

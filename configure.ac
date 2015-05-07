@@ -22,7 +22,7 @@ AC_LANG_CPLUSPLUS
 AX_CXX_COMPILE_STDCXX_11([noext],[mandatory])
 
 # check zmq version
-PKG_CHECK_MODULES([DEPS], [libzmq >= 4.0])
+PKG_CHECK_MODULES([DEPS], [libzmq >= 4.0 libcurl >= 7.22.0])
 
 # optionally enable coverage information
 CHECK_COVERAGE

@@ -21,6 +21,9 @@ Grab some deps
     ./configure --without-libsodium
     make -j8
     sudo make install
+    
+    # grab curl (for url de/encode)
+    sudo apt-get install libcurl4-openssl-dev
 
 Build and Install
 -----------------
