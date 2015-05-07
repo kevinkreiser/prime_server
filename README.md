@@ -61,7 +61,7 @@ The library comes with a standalone binary which is essentially just a server or
 The Point
 ---------
 
-What we want is a tool that lets you build a system that is pipelined and parallelized ie. the zmq "butterfly" or "parallel pipeline" pattern. See http://zeromq.org/tutorials:butterfly. Should end up looking something like:
+What we want is a tool that lets you build a system that is pipelined and parallelized ie. the zmq "butterfly" or "parallel pipeline" pattern. See http://zeromq.org/tutorials:butterfly. It should end up looking something like:
 
                            (input)        request_producer
                                           /      |       \
@@ -90,8 +90,8 @@ This seems pretty decent for some offline scientific code that just pumps jobs i
                    |_________________________|____________________________|___________ ....
 
 
-A client (a browser or just a thread within this process) makes a request to a server. The server listens for new requests and replies when the backend bits send back results. The backend is comprised of load balancing proxies between layers of worker pools. In real life you may run these in different processes or on different machines. We only using threads in order to simulate this, so please note the lack of classic mutex patterns (thank you zmq!).
+A client (a browser or just a separate thread) makes a request to a server. The server listens for new requests and replies when the backend bits send back results. The backend is comprised of load balancing proxies between layers of worker pools. In real life you may run these in different processes or on different machines. We only use threads in order to simulate this, so please note the lack of any mutex/locking patterns (thank you zmq!).
 
-So this system lets you handle one type of request that can decomposed into multiple steps. That is useful if certain steps take longer than others because you can scale them individually. It doesn't really handle multiple types of requests unless workers learn more than one job. To fix this we could upgrade the workers to be able to forward work to more than one proxy. This would allow heterogeneous workflows without having to make smarter/larger pluripotent workers and therefore would allow scaling of various workflows independently of each other. An easier approach would be just running a separate cluster per workflow, pros and cons there too.
+So this system lets you handle one type of request that can be decomposed into multiple steps. That is useful if certain steps take longer than others because you can scale them individually. It doesn't really handle multiple types of requests unless workers learn more than one job. To fix this we could upgrade the workers to be able to forward work to more than one proxy. This would allow heterogeneous workflows without having to make smarter/larger pluripotent workers and therefore would allow scaling of various workflows independently of each other. An easier approach would be just running a separate cluster per workflow, pros and cons there too.
 
-You may be asking yourself, why on earth are all the worker pools hooked into the loopback. This has two important functions. The first one is that a request could enter and error state at any stage of the pipeline, its important to be able to signal this back to the client as soon as possible. This basically leads to the second more general idea that, indeed, certain requests have known results (error or otherwise) without going through all stages of the pipeline.
+You may be asking yourself, why on earth are all the worker pools hooked into the loopback. This has two important functions. The first one is that a request could enter an error state at any stage of the pipeline. Its important to be able to signal this back to the client as soon as possible. This basically leads to the second more general idea that, indeed, certain requests have known results (error or otherwise) without going through all stages of the pipeline.

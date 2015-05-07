@@ -27,7 +27,6 @@
  *
  */
 
-
 namespace {
 
   //TODO: make this configurable
