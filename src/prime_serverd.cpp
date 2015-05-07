@@ -63,7 +63,7 @@ int main(int argc, char** argv) {
           if(request.path != "/is_prime" || (prime_str = request.query.find("possible_prime")) == request.query.cend() || prime_str->second.size() != 1)
             throw std::runtime_error("");
           size_t possible_prime = std::stoul(prime_str->second.front());
-          LOG_INFO(request.path);
+          //LOG_INFO(request.path);
           worker_t::result_t result{true};
           result.messages.emplace_back(static_cast<const char*>(static_cast<const void*>(&possible_prime)), sizeof(size_t));
           return result;
