@@ -3,6 +3,8 @@
 
 #include <curl/curl.h>
 
+//TODO: someone please replace the http protocol, its a giant mess. kthxbye
+
 namespace {
 
   //check if base starts with pattern
@@ -413,18 +415,18 @@ namespace prime_server {
   std::string http_response_t::generic(unsigned code, const std::string message, const headers_t& headers, const std::string& body) {
     auto response = "HTTP/1.1 " + std::to_string(code) + ' ' + message + "\r\n";
     for(const auto& header : headers) {
+      if(header.first == "Content-Length")
+        continue;
       response += header.first;
       response += ": ";
       response += header.second;
       response += "\r\n";
     }
-    if(body.size()){
-      response += "Content-Length: ";
-      response += std::to_string(body.size());
-      response += "\r\n\r\n";
-      response += body + "\r\n";
-    }
-    response.append("\r\n");
+    response += "Content-Length: ";
+    response += std::to_string(body.size());
+    response += "\r\n\r\n";
+    if(body.size())
+      response += body + "\r\n\r\n";
     return response;
   }
 
@@ -455,7 +457,8 @@ namespace prime_server {
     auto request = requests.find(request_info.id);
     if(request != requests.end()) {
       //close the session
-      if(request_info.connection_close || !request_info.connection_keep_alive) {
+      if((request_info.version == 0 && !request_info.connection_keep_alive) ||
+         (request_info.version == 1 && request_info.connection_close)){
         this->client.send(request->second, ZMQ_DONTWAIT | ZMQ_SNDMORE);
         this->client.send(static_cast<const void*>(""), 0, ZMQ_DONTWAIT);
         sessions.erase(request->second);

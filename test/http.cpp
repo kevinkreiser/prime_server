@@ -141,7 +141,7 @@ namespace {
     std::string request;
     http_client_t client(context, "ipc://test_http_server",
       [&requests, &request]() {
-        //we want 10k requests
+        //we want more requests
         if(requests.size() < total) {
           std::pair<std::unordered_set<std::string>::iterator, bool> inserted = std::make_pair(requests.end(), false);
           while(inserted.second == false) {
