@@ -1,8 +1,8 @@
 AC_INIT([prime_server],
-	[0.0.1],
-	[https://github.com/kevinkreiser/autotools_prime_server/issues],
-	[prime_server-0.0.1],
-	[https://github.com/kevinkreiser/autotools_prime_server])
+	[m4_esyscmd([./version.sh])],
+	[https://github.com/kevinkreiser/prime_server/issues],
+	[prime_server-[m4_esyscmd([./version.sh])]],
+	[https://github.com/kevinkreiser/prime_server])
 AM_INIT_AUTOMAKE([subdir-objects parallel-tests])
 LT_INIT
 AC_SUBST([LIBTOOL_DEPS])
@@ -10,6 +10,13 @@ AC_SUBST([LIBTOOL_DEPS])
 AM_SILENT_RULES([yes])
 AC_CONFIG_HEADERS([prime_server/config.h])
 AC_CONFIG_MACRO_DIR([m4])
+
+# set pkgconfigdir, allow override
+AC_ARG_WITH(	[pkgconfigdir],
+		AS_HELP_STRING([--with-pkgconfigdir=PATH], [Path to the pkgconfig directory [[LIBDIR/pkgconfig]]]),
+		[pkgconfigdir="$withval"],
+		[pkgconfigdir='${libdir}/pkgconfig'])
+AC_SUBST([pkgconfigdir])
 
 AC_PROG_CXX
 AC_PROG_INSTALL
@@ -27,9 +34,9 @@ PKG_CHECK_MODULES([DEPS], [libzmq >= 4.0 libcurl >= 7.22.0])
 # optionally enable coverage information
 CHECK_COVERAGE
 
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([Makefile src/libprime_server.pc])
 
-# Debian resets this to no, but this break both Spot and the libtool
+# Debian resets this to no, but this breaks both Spot and the libtool
 # test suite itself.  Instead of requiring developer to install a
 # non-patched version of Libtool on any Debian they use, we just
 # cancel the effect of Debian's patch here.

@@ -1,6 +1,12 @@
 #ifndef __PRIME_SERVER_HPP__
 #define __PRIME_SERVER_HPP__
 
+//some version info
+#define PRIME_SERVER_VERSION_MAJOR 0
+#define PRIME_SERVER_VERSION_MINOR 1
+#define PRIME_SERVER_VERSION_PATCH 0
+
+
 #include <functional>
 #include <string>
 #include <queue>

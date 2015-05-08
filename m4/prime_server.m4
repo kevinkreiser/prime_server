@@ -29,8 +29,8 @@ AC_DEFUN([CHECK_PRIME_SERVER],
         AC_CACHE_CHECK(whether the prime_server library is available, ax_cv_prime_server,
         	[AC_LANG_PUSH([C++])
 		AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[@%:@include <prime_server/prime_server.hpp>]],
-			[[using namespace prime_server;
-			prime_server::echo("blah");]])],
+			[[zmq::context_t c;
+			 prime_server::proxy_t(c,"ipc://up","ipc://down");]])],
 			ax_cv_prime_server=yes, ax_cv_prime_server=no)
 		AC_LANG_POP([C++])
 	])
