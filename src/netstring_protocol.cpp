@@ -80,8 +80,8 @@ namespace prime_server {
     return collected;
   }
 
-  netstring_server_t::netstring_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint):
-    server_t<std::string, uint64_t>::server_t(context, client_endpoint, proxy_endpoint, result_endpoint), request_id(0) {
+  netstring_server_t::netstring_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log):
+    server_t<std::string, uint64_t>::server_t(context, client_endpoint, proxy_endpoint, result_endpoint, log), request_id(0) {
   }
   netstring_server_t::~netstring_server_t(){}
   void netstring_server_t::enqueue(const void* message, size_t size, const std::string& requester, std::string& buffer) {
@@ -120,6 +120,12 @@ namespace prime_server {
         this->proxy.send(requester, ZMQ_DONTWAIT | ZMQ_SNDMORE);
         this->proxy.send(static_cast<void*>(&request_id), sizeof(request_id), ZMQ_DONTWAIT | ZMQ_SNDMORE);
         this->proxy.send(static_cast<void *>(&buffer[pos + 1]), length - 1, ZMQ_DONTWAIT);
+        if(log) {
+          std::string log_line = std::to_string(request_id);
+          log_line.push_back(' ');
+          log_line.append(&buffer[pos + 1], length - 1);
+          LOG_INFO(log_line);
+        }
         //remember we are working on it
         this->requests.emplace(request_id++, requester);
         begin += length;
@@ -153,6 +159,12 @@ namespace prime_server {
       this->proxy.send(requester, ZMQ_DONTWAIT | ZMQ_SNDMORE);
       this->proxy.send(static_cast<void*>(&request_id), sizeof(request_id), ZMQ_DONTWAIT | ZMQ_SNDMORE);
       this->proxy.send(static_cast<const void*>(piece), length, ZMQ_DONTWAIT);
+      if(log) {
+        std::string log_line = std::to_string(request_id);
+        log_line.push_back(' ');
+        log_line.append(piece, length);
+        LOG_INFO(log_line);
+      }
       //remember we are working on it
       this->requests.emplace(request_id++, requester);
       delim = next_delim;
@@ -162,7 +174,9 @@ namespace prime_server {
   void netstring_server_t::dequeue(const uint64_t& request_info) {
     auto removed = requests.erase(request_info);
     if(removed != 1)
-      LOG_WARN("Unknown or timed-out request id");
+      LOG_WARN("Unknown or timed-out request id: " + std::to_string(request_info));
+    if(log)
+      LOG_INFO(std::to_string(request_info) + " REPLIED");
   }
 
   void netstring_request_t::format(std::string& message) {

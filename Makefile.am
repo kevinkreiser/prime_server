@@ -54,11 +54,28 @@ libprime_server_la_CPPFLAGS = $(DEPS_CFLAGS)
 libprime_server_la_LIBADD = $(DEPS_LIBS)
 
 #distributed executables
-bin_PROGRAMS = prime_serverd
+bin_PROGRAMS = \
+	prime_serverd \
+	prime_httpd \
+	prime_proxyd \
+	prime_workerd
 prime_serverd_SOURCES = \
         src/prime_serverd.cpp
 prime_serverd_CPPFLAGS = $(DEPS_CFLAGS)
 prime_serverd_LDADD = $(DEPS_LIBS) libprime_server.la
+prime_httpd_SOURCES = \
+        src/prime_httpd.cpp
+prime_httpd_CPPFLAGS = $(DEPS_CFLAGS)
+prime_httpd_LDADD = $(DEPS_LIBS) libprime_server.la
+prime_proxyd_SOURCES = \
+        src/prime_proxyd.cpp
+prime_proxyd_CPPFLAGS = $(DEPS_CFLAGS)
+prime_proxyd_LDADD = $(DEPS_LIBS) libprime_server.la
+prime_workerd_SOURCES = \
+        src/prime_workerd.cpp
+prime_workerd_CPPFLAGS = $(DEPS_CFLAGS)
+prime_workerd_LDADD = $(DEPS_LIBS) libprime_server.la
+
 
 
 # tests

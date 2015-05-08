@@ -55,7 +55,7 @@ namespace prime_server {
   class server_t {
    public:
     static_assert(std::is_pod<request_info_t>::value, "server requires POD types for request info");
-    server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint);
+    server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log = false);
     virtual ~server_t();
     void serve();
    protected:
@@ -68,15 +68,18 @@ namespace prime_server {
     //    send the request id as a message to the proxy
     //    send the request as a message to the proxy
     //    record the request with its id
+    //    log the request if log == true
     virtual void enqueue(const void* bytes, size_t length, const std::string& requester, request_container_t& streaming_request) = 0;
     //implementing class shall:
     //  remove the outstanding request as it was either satisfied or timed-out
     //  depending on the original request or the result the session may also be terminated
+    //  log the response if log == true
     virtual void dequeue(const request_info_t& request_info) = 0;
 
     zmq::socket_t client;
     zmq::socket_t proxy;
     zmq::socket_t loopback;
+    bool log;
     //a record of what open connections we have
     //TODO: keep time of last session activity and clear out stale sessions
     std::unordered_map<std::string, request_container_t> sessions;
@@ -102,7 +105,7 @@ namespace prime_server {
       bool intermediate;
       std::list<std::string> messages;
     };
-    using work_function_t = std::function<result_t (const std::list<zmq::message_t>&, void* request_info)>;
+    using work_function_t = std::function<result_t (const std::list<zmq::message_t>&, void*)>;
 
     worker_t(zmq::context_t& context, const std::string& upstream_proxy_endpoint, const std::string& downstream_proxy_endpoint,
       const std::string& result_endpoint, const work_function_t& work_function);

@@ -18,7 +18,7 @@ namespace prime_server {
 
   class netstring_server_t : public server_t<std::string, uint64_t> {
    public:
-    netstring_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint);
+    netstring_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log = false);
     virtual ~netstring_server_t();
    protected:
     virtual void enqueue(const void* message, size_t size, const std::string& requester, std::string& buffer);

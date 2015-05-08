@@ -81,8 +81,8 @@ namespace prime_server {
   }
 
   template <class request_container_t, class request_info_t>
-  server_t<request_container_t, request_info_t>::server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint):
-    client(context, ZMQ_STREAM), proxy(context, ZMQ_DEALER), loopback(context, ZMQ_SUB) {
+  server_t<request_container_t, request_info_t>::server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint,
+    const std::string& result_endpoint, bool log): client(context, ZMQ_STREAM), proxy(context, ZMQ_DEALER), loopback(context, ZMQ_SUB), log(log) {
 
     int disabled = 0;
     client.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));

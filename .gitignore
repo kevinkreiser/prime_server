@@ -36,6 +36,9 @@ libtool
 .libs/
 libprime_server.la
 prime_serverd
+prime_httpd
+prime_proxyd
+prime_workerd
 
 # tests
 test-suite.log

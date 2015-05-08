@@ -43,7 +43,7 @@ int main(int argc, char** argv) {
 
   //server
   std::thread server_thread = std::thread(std::bind(&http_server_t::serve,
-    http_server_t(context, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint)));
+    http_server_t(context, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint, requests == 0)));
 
   //load balancer for parsing
   std::thread parse_proxy(std::bind(&proxy_t::forward, proxy_t(context, parse_proxy_endpoint + "_upstream", parse_proxy_endpoint + "_downstream")));
@@ -63,7 +63,6 @@ int main(int argc, char** argv) {
           if(request.path != "/is_prime" || (prime_str = request.query.find("possible_prime")) == request.query.cend() || prime_str->second.size() != 1)
             throw std::runtime_error("");
           size_t possible_prime = std::stoul(prime_str->second.front());
-          //LOG_INFO(request.path);
           worker_t::result_t result{true};
           result.messages.emplace_back(static_cast<const char*>(static_cast<const void*>(&possible_prime)), sizeof(size_t));
           return result;

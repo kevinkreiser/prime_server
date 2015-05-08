@@ -75,6 +75,7 @@ namespace prime_server {
 
     info_t to_info(uint64_t id) const;
     virtual std::string to_string() const;
+    static std::string to_log(const method_t& method, const std::string& path, const query_t& query = query_t{}, const std::string& version = "HTTP/1.1");
     static std::string to_string(const method_t& method, const std::string& path, const std::string& body = "", const query_t& query = query_t{},
                                  const headers_t& headers = headers_t{}, const std::string& version = "HTTP/1.1");
     static http_request_t from_string(const char* start, size_t length);
@@ -115,7 +116,7 @@ namespace prime_server {
 
   class http_server_t : public server_t<http_request_t, http_request_t::info_t> {
    public:
-    http_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint);
+    http_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log = false);
     virtual ~http_server_t();
    protected:
     virtual void enqueue(const void* message, size_t size, const std::string& requester, http_request_t& request);

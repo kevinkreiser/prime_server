@@ -186,8 +186,7 @@ namespace prime_server {
     return to_string(method, path, body, query, headers, version);
   }
 
-  std::string http_request_t::to_string(const method_t& method, const std::string& path, const std::string& body, const query_t& query,
-                               const headers_t& headers, const std::string& version) {
+  std::string http_request_t::to_log(const method_t& method, const std::string& path, const query_t& query, const std::string& version) {
     auto itr = METHOD_TO_STRING.find(method);
     if(itr == METHOD_TO_STRING.end())
       throw std::runtime_error("Unsupported http request method");
@@ -216,6 +215,12 @@ namespace prime_server {
     //version
     request.push_back(' ');
     request += version;
+    return request;
+  }
+
+  std::string http_request_t::to_string(const method_t& method, const std::string& path, const std::string& body, const query_t& query,
+                               const headers_t& headers, const std::string& version) {
+    auto request = to_log(method, path, query, version);
     request += "\r\n";
 
     //headers
@@ -394,16 +399,11 @@ namespace prime_server {
   }
 
   void http_response_t::from_info(const http_request_t::info_t* info) {
-    if(info->version == 0) {
-      version = "HTTP/1.0";
+      version = info->version ? "HTTP/1.1" : "HTTP/1.0";
       if(info->connection_keep_alive)
         headers.emplace("Connection", "Keep-Alive");
-    }
-    else {
-      version = "HTTP/1.1";
       if(info->connection_close)
         headers.emplace("Connection", "Close");
-    }
   }
 
   std::string http_response_t::to_string() const {
@@ -428,8 +428,8 @@ namespace prime_server {
     return response;
   }
 
-  http_server_t::http_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint):
-    server_t<http_request_t, http_request_t::info_t>::server_t(context, client_endpoint, proxy_endpoint, result_endpoint), request_id(0) {
+  http_server_t::http_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log):
+    server_t<http_request_t, http_request_t::info_t>::server_t(context, client_endpoint, proxy_endpoint, result_endpoint, log), request_id(0) {
   }
   http_server_t::~http_server_t(){}
 
@@ -442,6 +442,11 @@ namespace prime_server {
       this->proxy.send(requester, ZMQ_DONTWAIT | ZMQ_SNDMORE);
       this->proxy.send(static_cast<const void*>(&info), sizeof(info), ZMQ_DONTWAIT | ZMQ_SNDMORE);
       this->proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT);
+      if(log) {
+        std::string log_line = std::to_string(request_id);
+        log_line.push_back(' ');
+        LOG_INFO(log_line + http_request_t::to_log(parsed_request.method, parsed_request.path, parsed_request.query, parsed_request.version));
+      }
       //remember we are working on it
       this->requests.emplace(request_id++, requester);
     }
@@ -450,15 +455,16 @@ namespace prime_server {
     auto request = requests.find(request_info.id);
     if(request != requests.end()) {
       //close the session
-      if((request_info.version == 0 && !request_info.connection_keep_alive) ||
-         (request_info.version == 1 && request_info.connection_close)){
+      if(request_info.connection_close || !request_info.connection_keep_alive) {
         this->client.send(request->second, ZMQ_DONTWAIT | ZMQ_SNDMORE);
         this->client.send(static_cast<const void*>(""), 0, ZMQ_DONTWAIT);
         sessions.erase(request->second);
       }
       requests.erase(request);
+      if(log)
+        LOG_INFO(std::to_string(request_info.id) + " REPLIED");
     }
     else
-      LOG_WARN("Unknown or timed-out request id");
+      LOG_WARN("Unknown or timed-out request id: " + std::to_string(request_info.id));
   }
 }
