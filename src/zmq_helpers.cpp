@@ -1,14 +1,8 @@
-#include <zmq.h>
-#include <memory>
-#include <stdexcept>
-#include <list>
-#include <cassert>
-
+#include "zmq_helpers.hpp"
 
 namespace zmq {
 
-  struct context_t {
-    context_t(/*TODO: add options*/) {
+    context_t::context_t(/*TODO: add options*/) {
       //make the c context
       auto* context = zmq_ctx_new();
       if(!context)
@@ -20,15 +14,11 @@ namespace zmq {
           assert(zmq_ctx_term(context) == 0);
         });
     }
-    operator void*() {
+    context_t::operator void*() {
       return ptr.get();
     }
-   protected:
-    std::shared_ptr<void> ptr;
-  };
 
-  struct message_t {
-    explicit message_t(size_t size = 0) {
+    message_t::message_t(size_t size) {
       //make the c message
       zmq_msg_t* message = new zmq_msg_t();
       if(zmq_msg_init_size(message, size) != 0)
@@ -41,29 +31,26 @@ namespace zmq {
           delete message;
         });
     }
-    void reset(size_t size = 0) {
+    void message_t::reset(size_t size) {
       assert(zmq_msg_close(ptr.get()) == 0);
       if(zmq_msg_init_size(ptr.get(), size) != 0)
         throw std::runtime_error(zmq_strerror(zmq_errno()));
     }
-    operator zmq_msg_t*() {
+    message_t::operator zmq_msg_t*() {
       return ptr.get();
     }
-    void* data() {
+    void* message_t::data() {
       return zmq_msg_data(ptr.get());
     }
-    const void* data() const {
+    const void* message_t::data() const {
       return zmq_msg_data(const_cast<zmq_msg_t*>(ptr.get()));
     }
-    size_t size() const {
+    size_t message_t::size() const {
       return zmq_msg_size(const_cast<zmq_msg_t*>(ptr.get()));
     }
-   protected:
-    std::shared_ptr<zmq_msg_t> ptr;
-  };
 
-  struct socket_t {
-    socket_t(const context_t& context, int socket_type):context(context) {
+
+    socket_t::socket_t(const context_t& context, int socket_type):context(context) {
       //make the c socket
       auto* socket = zmq_socket(this->context, socket_type);
       if(!socket)
@@ -76,27 +63,27 @@ namespace zmq {
         });
     }
     //set an option on this socket
-    void setsockopt(int option, const void* value, size_t value_length) {
+    void socket_t::setsockopt(int option, const void* value, size_t value_length) {
       if(zmq_setsockopt(ptr.get(), option, value, value_length) != 0)
         throw std::runtime_error(zmq_strerror(zmq_errno()));
     }
     //get an option from this socket
-    void getsockopt(int option, void* value, size_t* value_length) {
+    void socket_t::getsockopt(int option, void* value, size_t* value_length) {
       if(zmq_getsockopt(ptr.get(), option, value, value_length) != 0)
         throw std::runtime_error(zmq_strerror(zmq_errno()));
     }
     //connect the socket
-    void connect(const char* address) {
+    void socket_t::connect(const char* address) {
       if(zmq_connect(ptr.get(), address) != 0)
         throw std::runtime_error(zmq_strerror(zmq_errno()));
     }
     //bind the socket
-    void bind(const char* address) {
+    void socket_t::bind(const char* address) {
       if(zmq_bind(ptr.get(), address) != 0)
         throw std::runtime_error(zmq_strerror(zmq_errno()));
     }
     //read a single message from this socket
-    bool recv(message_t& message, int flags) {
+    bool socket_t::recv(message_t& message, int flags) {
       auto byte_count = zmq_msg_recv(message, ptr.get(), flags);
       //ignore EAGAIN it just means you asked for non-blocking and there wasn't anything
       if(byte_count == -1 && zmq_errno() != EAGAIN)
@@ -104,7 +91,7 @@ namespace zmq {
       return byte_count >= 0;
     }
     //read all of the messages on this socket
-    std::list<message_t> recv_all(int flags) {
+    std::list<message_t> socket_t::recv_all(int flags) {
       //grab all message parts
       std::list<message_t> messages;
       int more;
@@ -118,7 +105,7 @@ namespace zmq {
       return messages;
     }
     //send some bytes
-    bool send(const void* bytes, size_t count, int flags) {
+    bool socket_t::send(const void* bytes, size_t count, int flags) {
       auto byte_count = zmq_send(ptr.get(), bytes, count, flags);
       //ignore EAGAIN it just means you asked for non-blocking and we couldnt send the message
       if(byte_count == -1 && zmq_errno() != EAGAIN)
@@ -127,35 +114,34 @@ namespace zmq {
     }
     //send a single message
     template <class container_t>
-    bool send(const container_t& message, int flags) {
+    bool socket_t::send(const container_t& message, int flags) {
       return send(static_cast<const void*>(message.data()), message.size(), flags);
     }
     //send all the messages over this socket
     template <class container_t>
-    size_t send_all(const std::list<container_t>& messages, int flags) {
+    size_t socket_t::send_all(const std::list<container_t>& messages, int flags) {
       const auto* last_message = &messages.back();
       size_t total = 0;
       for(const auto& message : messages)
         total += static_cast<size_t>(send<container_t>(message, (last_message == &message ? 0 : ZMQ_SNDMORE) | flags));
       return total;
     }
-    operator void*() {
+    socket_t::operator void*() {
       return ptr.get();
     }
-   protected:
-    //keep a copy of context so that, if the one used to make
-    //this socket goes out of scope, we aren't screwed
-    context_t context;
-    std::shared_ptr<void> ptr;
-  };
 
   //check for events on a bunch of sockets, multiplexing ftw
-  using pollitem_t = zmq_pollitem_t;
-  int poll(pollitem_t* items, int count, long timeout = -1) {
+  int poll(pollitem_t* items, int count, long timeout) {
     int signaled_events;
     if((signaled_events = zmq_poll(items, count, timeout)) < 0)
       throw std::runtime_error(zmq_strerror(zmq_errno()));
     return signaled_events;
   }
+
+  //explicit instantiations for templated sending of data
+  template bool socket_t::send<std::string>(const std::string&,int);
+  template bool socket_t::send<zmq::message_t>(const zmq::message_t&,int);
+  template size_t socket_t::send_all<std::string>(const std::list<std::string>&,int);
+  template size_t socket_t::send_all<zmq::message_t>(const std::list<zmq::message_t>&,int);
 
 }

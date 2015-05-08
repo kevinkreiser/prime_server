@@ -34,7 +34,7 @@ PKG_CHECK_MODULES([DEPS], [libzmq >= 4.0 libcurl >= 7.22.0])
 # optionally enable coverage information
 CHECK_COVERAGE
 
-AC_CONFIG_FILES([Makefile src/libprime_server.pc])
+AC_CONFIG_FILES([Makefile libprime_server.pc])
 
 # Debian resets this to no, but this breaks both Spot and the libtool
 # test suite itself.  Instead of requiring developer to install a

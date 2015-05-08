@@ -19,7 +19,7 @@ Makefile
 prime_server/config.h
 prime_server/config.h.in
 prime_server/stamp-h1
-src/libprime_server.pc
+libprime_server.pc
 ltmain.sh
 m4/libtool.m4
 m4/ltoptions.m4
