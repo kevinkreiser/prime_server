@@ -409,11 +409,17 @@ namespace prime_server {
   }
 
   std::string http_response_t::to_string() const {
-    return generic(code, message, headers, body);
+    return generic(code, message, headers, body, version);
   }
 
-  std::string http_response_t::generic(unsigned code, const std::string message, const headers_t& headers, const std::string& body) {
-    auto response = "HTTP/1.1 " + std::to_string(code) + ' ' + message + "\r\n";
+  std::string http_response_t::generic(unsigned code, const std::string message, const headers_t& headers, const std::string& body, const std::string& version) {
+    auto response = version;
+    response.push_back(' ');
+    response += std::to_string(code);
+    response.push_back(' ');
+    response += message;
+    response += "\r\n";
+
     for(const auto& header : headers) {
       if(header.first == "Content-Length")
         continue;

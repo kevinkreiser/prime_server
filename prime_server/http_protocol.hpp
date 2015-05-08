@@ -111,7 +111,7 @@ namespace prime_server {
 
     virtual std::string to_string() const;
 
-    static std::string generic(unsigned code, const std::string message, const headers_t& headers = headers_t{}, const std::string& body = "");
+    static std::string generic(unsigned code, const std::string message, const headers_t& headers = headers_t{}, const std::string& body = "", const std::string& version = "HTTP/1.1");
   };
 
   class http_server_t : public server_t<http_request_t, http_request_t::info_t> {
