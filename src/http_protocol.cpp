@@ -461,6 +461,4 @@ namespace prime_server {
     else
       LOG_WARN("Unknown or timed-out request id");
   }
-
-  template class server_t<http_request_t, http_request_t::info_t>;
 }

@@ -2,6 +2,7 @@
 #define __HTTP_PROTOCOL_HPP__
 
 #include <prime_server/prime_server.hpp>
+#include <prime_server/zmq_helpers.hpp>
 
 #include <unordered_map>
 #include <list>
