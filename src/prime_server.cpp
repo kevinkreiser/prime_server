@@ -271,9 +271,9 @@ namespace prime_server {
   }
 
   worker_t::worker_t(zmq::context_t& context, const std::string& upstream_proxy_endpoint, const std::string& downstream_proxy_endpoint,
-    const std::string& result_endpoint, const work_function_t& work_function):
+    const std::string& result_endpoint, const work_function_t& work_function, const cleanup_function_t& cleanup_function):
     upstream_proxy(context, ZMQ_DEALER), downstream_proxy(context, ZMQ_DEALER), loopback(context, ZMQ_PUB),
-    work_function(work_function), heart_beat(5000) {
+    work_function(work_function), cleanup_function(cleanup_function), heart_beat(5000) {
 
     int disabled = 0;
 
@@ -320,6 +320,8 @@ namespace prime_server {
             loopback.send(request_info, ZMQ_SNDMORE);
             loopback.send_all(result.messages, 0);
           }
+          //cleanup
+          cleanup_function();
         }
         catch(const std::exception& e) {
           LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what());

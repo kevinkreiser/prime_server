@@ -106,9 +106,10 @@ namespace prime_server {
       std::list<std::string> messages;
     };
     using work_function_t = std::function<result_t (const std::list<zmq::message_t>&, void*)>;
+    using cleanup_function_t = std::function<void ()>;
 
     worker_t(zmq::context_t& context, const std::string& upstream_proxy_endpoint, const std::string& downstream_proxy_endpoint,
-      const std::string& result_endpoint, const work_function_t& work_function);
+      const std::string& result_endpoint, const work_function_t& work_function, const cleanup_function_t& cleanup_function = [](){});
     void work();
    protected:
     void advertise();
@@ -116,6 +117,7 @@ namespace prime_server {
     zmq::socket_t downstream_proxy;
     zmq::socket_t loopback;
     work_function_t work_function;
+    cleanup_function_t cleanup_function;
     long heart_beat;
   };
 
