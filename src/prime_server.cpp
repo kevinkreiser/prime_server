@@ -34,9 +34,13 @@ namespace prime_server {
   }
   client_t::~client_t(){}
   void client_t::batch() {
+#if ZMQ_VERSION_MAJOR >= 4
+#if ZMQ_VERSION_MINOR >= 1
     //swallow the first response as its just for connecting
     //TODO: make sure it looks right
     server.recv_all(0);
+#endif
+#endif
 
     //need the identity to identify our connection when we send stuff
     uint8_t identity[256];
@@ -176,6 +180,12 @@ namespace prime_server {
     //get some info about the client
     auto requester = std::string(static_cast<const char*>(messages.front().data()), messages.front().size());
     auto session = sessions.find(requester);
+#if ZMQ_VERSION_MAJOR <= 4
+#if ZMQ_VERSION_MINOR <= 1
+    if(session == sessions.end())
+      session = sessions.insert({requester, request_container_t{}}).first;
+#endif
+#endif
     auto& body = *std::next(messages.begin());
 
     //open or close connection
