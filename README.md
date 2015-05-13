@@ -14,16 +14,8 @@ Build Status
 Grab some deps
 --------------
 
-    # grab the latest zmq library:
-    git clone https://github.com/zeromq/libzmq.git
-    cd libzmq
-    ./autogen.sh
-    ./configure --without-libsodium
-    make -j8
-    sudo make install
-    
-    # grab curl (for url de/encode)
-    sudo apt-get install libcurl4-openssl-dev
+    # grab curl (for url de/encode) and zmq for the awesomeness
+    sudo apt-get install libcurl4-openssl-dev libzmq3-dev
 
 Build and Install
 -----------------
