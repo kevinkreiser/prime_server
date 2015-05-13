@@ -51,12 +51,12 @@ int main(int argc, char** argv) {
         body.assign((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
 
         http_response_t response(200, "OK", body);
-        response.from_info(static_cast<http_request_t::info_t*>(request_info));
+        response.from_info(*static_cast<http_request_t::info_t*>(request_info));
         result.messages.emplace_back(response.to_string());
       }
       catch(...) {
         http_response_t response(404, "Not Found");
-        response.from_info(static_cast<http_request_t::info_t*>(request_info));
+        response.from_info(*static_cast<http_request_t::info_t*>(request_info));
         result.messages.emplace_back(response.to_string());
       }
       return result;

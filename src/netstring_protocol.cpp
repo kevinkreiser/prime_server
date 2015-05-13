@@ -171,7 +171,7 @@ namespace prime_server {
     }
     buffer.assign(delim, end - delim);
   }
-  void netstring_server_t::dequeue(const uint64_t& request_info) {
+  void netstring_server_t::dequeue(const uint64_t& request_info, size_t length) {
     auto removed = requests.erase(request_info);
     if(removed != 1)
       LOG_WARN("Unknown or timed-out request id: " + std::to_string(request_info));

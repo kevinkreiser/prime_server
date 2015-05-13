@@ -170,7 +170,6 @@ namespace prime_server {
     partial_length = 0;
     body_length = 0;
     consumed = 0;
-    partial_buffer.clear();
     cursor = end = nullptr;
   }
 
@@ -188,12 +187,12 @@ namespace prime_server {
     return to_string(method, path, body, query, headers, version);
   }
 
-  std::string http_request_t::to_log(const method_t& method, const std::string& path, const query_t& query, const std::string& version) {
+  std::string http_request_t::to_string(const method_t& method, const std::string& path, const std::string& body, const query_t& query,
+                               const headers_t& headers, const std::string& version) {
     auto itr = METHOD_TO_STRING.find(method);
     if(itr == METHOD_TO_STRING.end())
       throw std::runtime_error("Unsupported http request method");
     std::string request = itr->second + ' ';
-
 
     //path and query string
     std::string pq = path;
@@ -217,12 +216,6 @@ namespace prime_server {
     //version
     request.push_back(' ');
     request += version;
-    return request;
-  }
-
-  std::string http_request_t::to_string(const method_t& method, const std::string& path, const std::string& body, const query_t& query,
-                               const headers_t& headers, const std::string& version) {
-    auto request = to_log(method, path, query, version);
     request += "\r\n";
 
     //headers
@@ -268,20 +261,23 @@ namespace prime_server {
           auto itr = STRING_TO_METHOD.find(partial_buffer);
           if(itr == STRING_TO_METHOD.end())
             throw std::runtime_error("Unknown http method");
+          log_line = partial_buffer + delimeter;
           method = itr->second;
           state = PATH;
           break;
         }
         case PATH: {
+          log_line += partial_buffer + delimeter;
           path = url_decode(partial_buffer);
           delimeter = "\r\n";
           state = VERSION;
           break;
         }
         case VERSION: {
-          version.swap(partial_buffer);
-          if(version != "HTTP/1.0" && version != "HTTP/1.1")
+          if(partial_buffer != "HTTP/1.0" && partial_buffer != "HTTP/1.1")
             throw std::runtime_error("Unknown http version");
+          log_line += partial_buffer;
+          version.swap(partial_buffer);
           //split off the query bits
           auto pos = path.find('?');
           size_t key_pos = pos, value_pos;
@@ -400,12 +396,14 @@ namespace prime_server {
                   http_entity_t(version, headers, body), code(code), message(message) {
   }
 
-  void http_response_t::from_info(const http_request_t::info_t* info) {
-      version = info->version ? "HTTP/1.1" : "HTTP/1.0";
-      if(info->connection_keep_alive)
-        headers.emplace("Connection", "Keep-Alive");
-      if(info->connection_close)
-        headers.emplace("Connection", "Close");
+  void http_response_t::from_info(http_request_t::info_t& info) {
+    version = info.version ? "HTTP/1.1" : "HTTP/1.0";
+    if(info.connection_keep_alive)
+      headers.emplace("Connection", "Keep-Alive");
+    if(info.connection_close)
+      headers.emplace("Connection", "Close");
+    //its useful to let the person getting this what the return code ended up being
+    info.response_code = code;
   }
 
   std::string http_response_t::to_string() const {
@@ -451,15 +449,19 @@ namespace prime_server {
       this->proxy.send(static_cast<const void*>(&info), sizeof(info), ZMQ_DONTWAIT | ZMQ_SNDMORE);
       this->proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT);
       if(log) {
-        std::string log_line = std::to_string(request_id);
+        auto log_line = std::to_string(request_id);
         log_line.push_back(' ');
-        LOG_INFO(log_line + http_request_t::to_log(parsed_request.method, parsed_request.path, parsed_request.query, parsed_request.version));
+        log_line += logging::timestamp();
+        log_line.push_back(' ');
+        log_line += request.log_line;
+        log_line.push_back('\n');
+        logging::log(log_line);
       }
       //remember we are working on it
       this->requests.emplace(request_id++, requester);
     }
   }
-  void http_server_t::dequeue(const http_request_t::info_t& request_info) {
+  void http_server_t::dequeue(const http_request_t::info_t& request_info, size_t length) {
     auto request = requests.find(request_info.id);
     if(request != requests.end()) {
       //close the session
@@ -470,8 +472,17 @@ namespace prime_server {
         sessions.erase(request->second);
       }
       requests.erase(request);
-      if(log)
-        LOG_INFO(std::to_string(request_info.id) + " REPLIED");
+      if(log) {
+        auto log_line = std::to_string(request_info.id);
+        log_line.push_back(' ');
+        log_line += logging::timestamp();
+        log_line.push_back(' ');
+        log_line += std::to_string(request_info.response_code);
+        log_line.push_back(' ');
+        log_line += std::to_string(length);
+        log_line.push_back('\n');
+        logging::log(log_line);
+      }
     }
     else
       LOG_WARN("Unknown or timed-out request id: " + std::to_string(request_info.id));

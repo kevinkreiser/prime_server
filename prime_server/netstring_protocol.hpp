@@ -22,7 +22,7 @@ namespace prime_server {
     virtual ~netstring_server_t();
    protected:
     virtual void enqueue(const void* message, size_t size, const std::string& requester, std::string& buffer);
-    virtual void dequeue(const uint64_t& request_info);
+    virtual void dequeue(const uint64_t& request_info, size_t length);
     uint64_t request_id;
   };
 

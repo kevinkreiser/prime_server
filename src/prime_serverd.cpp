@@ -70,7 +70,7 @@ int main(int argc, char** argv) {
         catch(...) {
           worker_t::result_t result{false};
           http_response_t response(400, "Bad Request");
-          response.from_info(static_cast<http_request_t::info_t*>(request_info));
+          response.from_info(*static_cast<http_request_t::info_t*>(request_info));
           result.messages.emplace_back(response.to_string());
           return result;
         }
@@ -104,7 +104,7 @@ int main(int argc, char** argv) {
         if(divisor < high)
           prime = 2;
         http_response_t response(200, "OK", std::to_string(prime));
-        response.from_info(static_cast<http_request_t::info_t*>(request_info));
+        response.from_info(*static_cast<http_request_t::info_t*>(request_info));
         worker_t::result_t result{false};
         result.messages.emplace_back(response.to_string());
         return result;

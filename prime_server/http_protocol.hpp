@@ -55,7 +55,9 @@ namespace prime_server {
     //TODO: virtual http_entity_t from_string(const char*, size_t length) = 0
   };
 
+  class http_server_t;
   struct http_request_t : public http_entity_t {
+    friend http_server_t;
    public:
     method_t method;
     std::string path;
@@ -70,12 +72,12 @@ namespace prime_server {
       uint64_t version                    :3;  //protocol specific space for versioning info
       uint64_t connection_keep_alive      :1;  //header present or not
       uint64_t connection_close           :1;  //header present or not
-      uint64_t spare                      :27; //unused information
+      uint64_t response_code              :10; //what the response code was set to when sent back to the client
+      uint64_t spare                      :17; //unused information
     };
 
     info_t to_info(uint64_t id) const;
     virtual std::string to_string() const;
-    static std::string to_log(const method_t& method, const std::string& path, const query_t& query = query_t{}, const std::string& version = "HTTP/1.1");
     static std::string to_string(const method_t& method, const std::string& path, const std::string& body = "", const query_t& query = query_t{},
                                  const headers_t& headers = headers_t{}, const std::string& version = "HTTP/1.1");
     static http_request_t from_string(const char* start, size_t length);
@@ -83,8 +85,8 @@ namespace prime_server {
     void flush_stream();
     size_t size() const;
 
-
    protected:
+    std::string log_line;
     //state for streaming parsing
     const char *cursor, *end, *delimeter;
     std::string partial_buffer;
@@ -101,13 +103,13 @@ namespace prime_server {
   //then the caught exceptions that we want to actuall return to the client
   //can be handled more easily
   struct http_response_t : public http_entity_t {
-    unsigned code;
+    uint16_t code;
     std::string message;
 
     http_response_t(unsigned code, const std::string& message, const std::string& body = "", const headers_t& headers = headers_t{},
                     const std::string& version = "HTTP/1.1");
 
-    void from_info(const http_request_t::info_t* info);
+    void from_info(http_request_t::info_t& info);
 
     virtual std::string to_string() const;
 
@@ -120,7 +122,7 @@ namespace prime_server {
     virtual ~http_server_t();
    protected:
     virtual void enqueue(const void* message, size_t size, const std::string& requester, http_request_t& request);
-    virtual void dequeue(const http_request_t::info_t& request_info);
+    virtual void dequeue(const http_request_t::info_t& request_info, size_t length);
    protected:
     uint64_t request_id;
   };

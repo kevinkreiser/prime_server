@@ -74,7 +74,7 @@ namespace prime_server {
     //  remove the outstanding request as it was either satisfied or timed-out
     //  depending on the original request or the result the session may also be terminated
     //  log the response if log == true
-    virtual void dequeue(const request_info_t& request_info) = 0;
+    virtual void dequeue(const request_info_t& request_info, size_t length) = 0;
 
     zmq::socket_t client;
     zmq::socket_t proxy;

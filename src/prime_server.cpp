@@ -166,7 +166,7 @@ namespace prime_server {
     client.send(messages.back(), ZMQ_DONTWAIT);
 
     //cleanup request or session
-    dequeue(*static_cast<request_info_t*>(std::next(messages.begin())->data()));
+    dequeue(*static_cast<request_info_t*>(std::next(messages.begin())->data()), messages.back().size());
   }
 
   template <class request_container_t, class request_info_t>
