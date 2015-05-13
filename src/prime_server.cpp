@@ -181,7 +181,10 @@ namespace prime_server {
     auto requester = std::string(static_cast<const char*>(messages.front().data()), messages.front().size());
     auto session = sessions.find(requester);
 #if ZMQ_VERSION_MAJOR <= 4
-#if ZMQ_VERSION_MINOR <= 1
+#if ZMQ_VERSION_MINOR < 1
+    //older versions of stream didn't seem to send a blank connection message
+    //despite this seeming to imply they did: http://zeromq.org/docs:4-1-upgrade
+    //maybe it means stream still dont unless you tell them to with NOTIFY?
     if(session == sessions.end())
       session = sessions.insert({requester, request_container_t{}}).first;
 #endif
