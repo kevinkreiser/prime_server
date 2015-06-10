@@ -22,7 +22,6 @@ namespace prime_server {
     bool parse_headers;
     bool parse_length;
     bool parse_body;
-    bool parse_ending;
     std::string content_length;
     size_t length;
 
@@ -88,10 +87,10 @@ namespace prime_server {
    protected:
     std::string log_line;
     //state for streaming parsing
-    const char *cursor, *end, *delimeter;
+    const char *cursor, *end, *delimiter;
     std::string partial_buffer;
     size_t partial_length;
-    enum state_t { METHOD, PATH, VERSION, HEADERS, BODY, CHUNKS, END };
+    enum state_t { METHOD, PATH, VERSION, HEADERS, BODY, CHUNKS };
     state_t state;
     size_t body_length;
     size_t consumed;
@@ -100,7 +99,7 @@ namespace prime_server {
   };
 
   //TODO: let this subclass exception and make 'message' be the 'what'
-  //then the caught exceptions that we want to actuall return to the client
+  //then the caught exceptions that we want to actually return to the client
   //can be handled more easily
   struct http_response_t : public http_entity_t {
     uint16_t code;

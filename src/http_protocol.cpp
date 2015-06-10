@@ -58,24 +58,22 @@ namespace prime_server {
     //box out the message a bit so we can iterate
     const char* begin = static_cast<const char*>(message);
     const char* end = begin + size;
+    bool done = false;
 
     //sample responses:
-    //HTTP/1.0 200 OK\r\nContent-Length: 4\r\nSomeHeader: blah\r\n\r\nbody\r\n\r\n
+    //HTTP/1.0 200 OK\r\nContent-Length: 4\r\nSomeHeader: blah\r\n\r\nbody
     //HTTP/1.0 304 Not Modified\r\nSomeHeader: blah\r\n\r\n
 
-    //this is a very forgiving state machine (ignores content-length's actual value)
+    //this is a very forgiving state machine
     const char* current = begin;
     for(; current < end; ++current) {
       //if we are trying to get the body
       if(parse_body) {
-        //still eating
-        if(length--)
+        //eat until done
+        if(--length == 0)
+          done = true;
+        else
           continue;
-        //done look for the end
-        else {
-          parse_body = false;
-          parse_ending = true;
-        }
       }
 
       //check for the numbers in the length part
@@ -98,41 +96,45 @@ namespace prime_server {
           if(content_length_itr == CONTENT_LENGTH.cend()) {
             parse_headers = false;
             parse_length = true;
-            parse_ending = false;
           }
         }
         else
           content_length_itr =  CONTENT_LENGTH.cbegin();
       }
 
-      //check for double return
+      //check for double return separating headers from body or marking end
       if(*current == *double_return_itr) {
         ++double_return_itr;
         //found the double return
         if(double_return_itr == DOUBLE_RETURN.cend()) {
           //we just found an ending but because there was a length header we aren't done
-          if(!parse_ending) {
+          if(length)
             parse_body = true;
-            double_return_itr = DOUBLE_RETURN.cbegin();
-            continue;
-          }//ready to send from buffer
-          else if(buffer.size()) {
-            buffer.append(begin, (current - begin) + 1);
-            more = collect_function(static_cast<const void*>(buffer.data()), buffer.size());
-            buffer.clear();
-            ++collected;
-            begin = current + 1;
-          }//ready to send from stream
-          else {
-            more = collect_function(static_cast<const void*>(begin), (current - begin) + 1);
-            ++collected;
-            begin = current + 1;
-          }
-          reset();
+          else
+            done = true;
         }
       }
       else
         double_return_itr = DOUBLE_RETURN.cbegin();
+
+      //we have one ready
+      if(done) {
+        //ready to send from buffer
+        if(buffer.size()) {
+          buffer.append(begin, (current - begin) + 1);
+          more = collect_function(static_cast<const void*>(buffer.data()), buffer.size());
+          buffer.clear();
+          ++collected;
+          begin = current + 1;
+        }//ready to send from stream
+        else {
+          more = collect_function(static_cast<const void*>(begin), (current - begin) + 1);
+          ++collected;
+          begin = current + 1;
+        }
+        reset();
+        done = false;
+      }
     }
 
     buffer.append(begin, current - begin);
@@ -142,7 +144,6 @@ namespace prime_server {
     parse_headers = true;
     parse_length = false;
     parse_body = false;
-    parse_ending = true;
     content_length.clear();
     length = 0;
     double_return_itr = DOUBLE_RETURN.cbegin();
@@ -166,7 +167,7 @@ namespace prime_server {
                  const headers_t& headers, const std::string& version) :
                  http_entity_t(version, headers, body), method(method), path(path), query(query) {
     state = METHOD;
-    delimeter = " ";
+    delimiter = " ";
     partial_length = 0;
     body_length = 0;
     consumed = 0;
@@ -261,15 +262,15 @@ namespace prime_server {
           auto itr = STRING_TO_METHOD.find(partial_buffer);
           if(itr == STRING_TO_METHOD.end())
             throw std::runtime_error("Unknown http method");
-          log_line = partial_buffer + delimeter;
+          log_line = partial_buffer + delimiter;
           method = itr->second;
           state = PATH;
           break;
         }
         case PATH: {
-          log_line += partial_buffer + delimeter;
+          log_line += partial_buffer + delimiter;
           path = url_decode(partial_buffer);
-          delimeter = "\r\n";
+          delimiter = "\r\n";
           state = VERSION;
           break;
         }
@@ -320,22 +321,15 @@ namespace prime_server {
           break;
         }
         case BODY: {
-          //TODO: actually use body length
           body.swap(partial_buffer);
-          state = END;
+          requests.push_back(http_request_t(method, path, body, query, headers, version));
+          flush_stream();
           break;
         }
         case CHUNKS: {
           //TODO: actually parse out the length and chunk by alternating
           //TODO: return 501
           throw std::runtime_error("not implemented");
-        }
-        case END: {
-          if(partial_buffer.size())
-            throw std::runtime_error("Unexpected data near end of http request");
-          requests.push_back(http_request_t(method, path, body, query, headers, version));
-          flush_stream();
-          break;
         }
       }
 
@@ -347,7 +341,7 @@ namespace prime_server {
   }
   void http_request_t::flush_stream() {
     state = METHOD;
-    delimeter = " ";
+    delimiter = " ";
     partial_length = 0;
     body_length = 0;
     consumed = 0;
@@ -363,19 +357,25 @@ namespace prime_server {
   }
 
   bool http_request_t::consume_until() {
-    //go until we run out or we found the delimeter
     const char* current = cursor;
     char c;
-    while((c = *(delimeter + partial_length)) != '\0' && current != end) {
-      if(c != *current)
-        partial_length = 0;
-      else
-        ++partial_length;
-      ++current;
+    //go until we consumed enough bytes
+    if(body_length) {
+      while(current++ != end && --body_length);
+      c = body_length != 0;
+    }//go until delimiter
+    else {
+      while((c = *(delimiter + partial_length)) != '\0' && current != end) {
+        if(c != *current)
+          partial_length = 0;
+        else
+          ++partial_length;
+        ++current;
+      }
     }
-    //we found the delimeter
+    //we found the delimiter
+    size_t length = current - cursor;
     if(c == '\0') {
-      size_t length = current - cursor;
       if(length < partial_length)
         partial_buffer.resize(partial_buffer.size() - (partial_length - length));
       else
@@ -386,7 +386,7 @@ namespace prime_server {
       return true;
     }
     //we ran out
-    partial_buffer.assign(cursor, current - cursor);
+    partial_buffer.assign(cursor, length);
     return false;
   }
 
@@ -426,11 +426,14 @@ namespace prime_server {
       response += header.second;
       response += "\r\n";
     }
-    response += "Content-Length: ";
-    response += std::to_string(body.size());
-    response += "\r\n\r\n";
-    if(body.size())
-      response += body + "\r\n\r\n";
+    if(body.size()) {
+      response += "Content-Length: ";
+      response += std::to_string(body.size());
+      response += "\r\n\r\n";
+      response += body;
+    }
+    else
+      response += "\r\n";
     return response;
   }
 

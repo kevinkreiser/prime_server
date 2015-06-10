@@ -47,7 +47,7 @@ namespace {
     testable_http_request_t request;
     std::string incoming("GET /irgendwelle/pfad HTTP/1.1\r");
     server.enqueue(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", request);
-    incoming ="\n\r\nGET /annrer/pfad?aafrag=gel HTTP/1.0\r\n\r\nsell_siehscht_du_au_noed";
+    incoming ="\nContent-Length: 7\r\n\r\ngohtlosGET /annrer/pfad?aafrag=gel HTTP/1.0\r\n\r\nsell_siehscht_du_au_noed";
     server.enqueue(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", request);
 
     if(server.request_id != 2)
@@ -72,7 +72,7 @@ namespace {
     bool more;
     std::string incoming = "HTTP/1.0 OK\r\nContent-Lengt";
     auto reported_responses = client.stream_responses(static_cast<const void*>(incoming.data()), incoming.size(), more);
-    incoming = "h: 6\r\n\r\nguet\r\n\r\n\r";
+    incoming = "h: 6\r\n\r\nguet\r";
     reported_responses += client.stream_responses(static_cast<const void*>(incoming.data()), incoming.size(), more);
 
     if(all != "")
@@ -83,7 +83,7 @@ namespace {
 
     if(!more)
       throw std::runtime_error("Expected the client to want more responses");
-    if(all != "HTTP/1.0 OK\r\nContent-Length: 6\r\n\r\nguet\r\n\r\n\r\nHTTP/1.0 OK\r\n\r\n")
+    if(all != "HTTP/1.0 OK\r\nContent-Length: 6\r\n\r\nguet\r\nHTTP/1.0 OK\r\n\r\n")
       throw std::runtime_error("Unexpected response data");
     if(responses != 2)
       throw std::runtime_error("Wrong number of responses were collected");
@@ -116,11 +116,16 @@ namespace {
     */
     if(request.body != "")
       throw std::runtime_error("Request parsing failed");
+
+    request_str = "GET /blah HTTP/1.0\r\nHost: *\r\nContent-Length: 5\r\nUser-Agent: fake-agent\r\n\r\nhello";
+    request = http_request_t::from_string(request_str.c_str(), request_str.size());
+    if(request.body != "hello")
+      throw std::runtime_error("Request parsing failed");
   }
 
   void test_response() {
     std::string http = http_response_t::generic(200, "OK", headers_t{}, "e_chliises_schtoeckli");
-    if(http != ("HTTP/1.1 200 OK\r\nContent-Length: 21\r\n\r\ne_chliises_schtoeckli\r\n\r\n"))
+    if(http != "HTTP/1.1 200 OK\r\nContent-Length: 21\r\n\r\ne_chliises_schtoeckli")
       throw std::runtime_error("Response was not well-formed");
   }
 
@@ -195,10 +200,12 @@ namespace {
     //echo worker
     std::thread worker(std::bind(&worker_t::work,
       worker_t(context, "ipc://test_http_proxy_downstream", "ipc://NONE", "ipc://test_http_results",
-      [] (const std::list<zmq::message_t>& job, void*) {
+      [] (const std::list<zmq::message_t>& job, void* request_info) {
         worker_t::result_t result{false};
-        result.messages.emplace_back(static_cast<const char*>(job.front().data()), job.front().size());
-        result.messages.back() = http_response_t::generic(200, "OK", headers_t{}, result.messages.back());
+        http_response_t response(200, "OK",
+          std::string(static_cast<const char*>(job.front().data()), job.front().size()));
+        response.from_info(*static_cast<http_request_t::info_t*>(request_info));
+        result.messages.emplace_back(response.to_string());
         return result;
       }
     )));
