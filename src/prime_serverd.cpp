@@ -136,7 +136,7 @@ int main(int argc, char** argv) {
       },
       [requests, &primes, &collected_results] (const void* message, size_t length) {
         //get the result and tell if there is more or not
-        std::string response_str(static_cast<const char*>(message), length - 4);
+        std::string response_str(static_cast<const char*>(message), length);
         try {
           size_t number = std::stoul(response_str.substr(response_str.rfind('\n')));
           primes.insert(number);
