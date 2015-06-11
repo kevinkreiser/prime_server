@@ -60,16 +60,35 @@ int main(int argc, char** argv) {
         try{
           auto request = http_request_t::from_string(static_cast<const char*>(job.front().data()), job.front().size());
           query_t::const_iterator prime_str;
-          if(request.path != "/is_prime" || (prime_str = request.query.find("possible_prime")) == request.query.cend() || prime_str->second.size() != 1)
-            throw std::runtime_error("");
-          size_t possible_prime = std::stoul(prime_str->second.front());
+          size_t possible_prime;
+          //get
+          if(request.method == method_t::GET) {
+            if(request.path != "/is_prime" || (prime_str = request.query.find("possible_prime")) == request.query.cend() || prime_str->second.size() != 1)
+              throw std::runtime_error("GET requests should look like: 'is_prime?possible_prime=SOME_NUMBER'");
+            else
+              possible_prime = std::stoul(prime_str->second.front());
+          }//post
+          else if(request.method == method_t::POST) {
+            try {
+              if(request.body.empty())
+                throw;
+              possible_prime = std::stoul(request.body);
+            }
+            catch(...) {
+              throw std::runtime_error("POST requests should have a path of 'is_prime' and a body with 'SOME_NUMBER'");
+            }
+          }//not supported
+          else {
+            throw std::runtime_error("Only GET and POST requests supported");
+          }
+
           worker_t::result_t result{true};
           result.messages.emplace_back(static_cast<const char*>(static_cast<const void*>(&possible_prime)), sizeof(size_t));
           return result;
         }
-        catch(...) {
+        catch(const std::exception& e) {
           worker_t::result_t result{false};
-          http_response_t response(400, "Bad Request");
+          http_response_t response(400, "Bad Request", e.what());
           response.from_info(*static_cast<http_request_t::info_t*>(request_info));
           result.messages.emplace_back(response.to_string());
           return result;
