@@ -221,6 +221,8 @@ namespace prime_server {
 
     //headers
     for(const auto& header : headers) {
+      if(header.first == "Content-Length")
+        continue;
       request += header.first;
       request += ": ";
       request += header.second;
@@ -228,14 +230,14 @@ namespace prime_server {
     }
 
     //body
-    if((body.size() || method == method_t::POST) && headers.find("Content-Length") == headers.end()) {
+    if(body.size() || method == method_t::POST) {
       request += "Content-Length: ";
       request += std::to_string(body.size());
       request += "\r\n\r\n";
       request += body;
-      request += "\r\n";
     }
-    request += "\r\n";
+    else
+      request += "\r\n";
     return request;
   }
 
