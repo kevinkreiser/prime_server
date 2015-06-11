@@ -54,6 +54,8 @@ namespace {
       throw std::runtime_error("Wrong number of requests were forwarded");
     if(request.partial_buffer != "sell_siehscht_du_au_noed")
       throw std::runtime_error("Unexpected partial request data");
+
+
   }
 
   void test_streaming_client() {
@@ -121,6 +123,11 @@ namespace {
     request = http_request_t::from_string(request_str.c_str(), request_str.size());
     if(request.body != "hello")
       throw std::runtime_error("Request parsing failed");
+
+    request_str = "POST %2Fis_prime HTTP/1.1\r\nPragma: no-cache\r\nConnection: keep-alive\r\nContent-Type: text/xml; charset=UTF-8\r\nAccept-Encoding: gzip, deflate\r\nAccept-Language: de,en-US;q=0.7,en;q=0.3\r\nAccept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\nUser-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:35.0) Gecko/20100101 Firefox/35.0\r\nCache-Control: no-cache\r\nContent-Length: 11\r\nHost: localhost:8002\r\n\r\n32416190071";
+    request = http_request_t::from_string(request_str.c_str(), request_str.size());
+    if(request.body != "32416190071")
+      throw std::runtime_error("Request parsing failed");
   }
 
   void test_response() {
@@ -153,7 +160,10 @@ namespace {
             request = random_string(10);
             inserted = requests.insert(request);
           }
-          request = http_request_t::to_string(method_t::GET, request);
+          if(requests.size() % 2)
+            request = http_request_t::to_string(method_t::GET, request);
+          else
+            request = http_request_t::to_string(method_t::POST, "", request);
         }//blank request means we are done
         else
           request.clear();
@@ -161,19 +171,8 @@ namespace {
       },
       [&requests, &received](const void* data, size_t size) {
         //get the result and tell if there is more or not
-        const char* begin = static_cast<const char*>(data);
-        const char* end = begin + size;
-        size_t space = 0;
-        while(space < 4 && begin < end) {
-          if(*begin == ' ')
-            ++space;
-          ++begin;
-        }
-        while(space < 5 && --end > begin) {
-          if(*end == ' ')
-            ++space;
-        }
-        std::string response(begin, end - begin);
+        std::string response(static_cast<const char*>(data), size);
+        response = response.substr(response.rfind("\r\n\r\n") + 4);
         if(requests.find(response) == requests.end())
           throw std::runtime_error("Unexpected response!");
         return ++received < total;
@@ -201,10 +200,19 @@ namespace {
     std::thread worker(std::bind(&worker_t::work,
       worker_t(context, "ipc://test_http_proxy_downstream", "ipc://NONE", "ipc://test_http_results",
       [] (const std::list<zmq::message_t>& job, void* request_info) {
-        worker_t::result_t result{false};
-        http_response_t response(200, "OK",
-          std::string(static_cast<const char*>(job.front().data()), job.front().size()));
+        //could be a get or a post
+        auto request = http_request_t::from_string(static_cast<const char*>(job.front().data()), job.front().size());
+        http_response_t response(200, "OK");
+        if(request.method == method_t::POST)
+          response.body = request.body;
+        else if(request.method == method_t::GET)
+          response.body = request.path;
+        else
+          throw std::runtime_error("Wrong method, get or post expected");
         response.from_info(*static_cast<http_request_t::info_t*>(request_info));
+
+        //send it back
+        worker_t::result_t result{false};
         result.messages.emplace_back(response.to_string());
         return result;
       }
