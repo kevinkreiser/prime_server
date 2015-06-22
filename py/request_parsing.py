@@ -1,77 +1,77 @@
-from BaseHTTPServer import BaseHTTPRequestHandler
-from StringIO import StringIO
+#!/usr/bin/env python
+
+import sys
+import threading
+from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+from SocketServer import ThreadingMixIn
 from cgi import urlparse
 import json
-import zmq
+from StringIO import StringIO
 
-class HTTPRequest(BaseHTTPRequestHandler):
-  def __init__(self, request_text):
-    self.rfile = StringIO(request_text)
-    self.raw_requestline = self.rfile.readline()
-    self.error_code = self.error_message = None
-    self.parse_request()
+#enable threaded server
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+  pass
 
-  def send_error(self, code, message):
-    self.error_code = code
-    self.error_message = message
+#custom handler for getting routes
+class RequestHandler(BaseHTTPRequestHandler):
 
-#get a request from a client and pass on to the backend to fulfill it
-def handle_request(req_rep_socket):
-  #get the message details, should be something like ['connection_identity', '']
-  message_parts  = req_rep_socket.recv_multipart(zmq.NOBLOCK)
-  if len(message_parts) != 2 or len(message_parts[0]) == 0 or len(message_parts[1]) != 0:
-    raise Exception('Invalid request')
-  #recv the rest of the request
-  #TODO: make this more robust to DOS attacks (limit long requests)
-  try:
-    while message_parts[-1].endswith('\r\n\r\n') == False:
-      message_parts.extend(req_rep_socket.recv_multipart(zmq.NOBLOCK))
-  except:
-    pass
+  def __init__(self, *args):
+    BaseHTTPRequestHandler.__init__(self, *args)
 
-  #mash the bits together after the identity frames
-  identity = message_parts[0]
-  request_text = ''.join(message_parts[3:])
+  #parse the request because we dont get this for free!
+  def handle_request(self):
+    #turn the request into json for some echo output
+    split = self.path.split('?')
+    query = {}
+    if len(split) == 2:
+      self.path = split[0]
+      query = urlparse.parse_qs(split[1])
+    d = {'method': self.command, 'path': self.path, 'version': self.request_version, 'headers': self.headers.dict, 'query': query}
+    return json.dumps(d, separators=(',',':'))
 
-  #turn the request into json for some echo output
-  request = HTTPRequest(request_text)
-  split = request.path.split('?')
-  query = {}
-  if len(split) == 2:
-    request.path = split[0]    
-    query = urlparse.parse_qs(split[1])
-  d = {'error_code': request.error_code, 'method': request.command, 'path': request.path, 'version': request.request_version, 'headers': request.headers.dict, 'query': query}
-  response = json.dumps(d, separators=(',',':'))
+  #send a success
+  def succeed(self, response):
+    self.send_response(200)
 
-  #reply with junk for now
-  req_rep_socket.send_multipart([identity,
-    'HTTP/1.0 200 OK\r\nContent-Type: application/json;charset=utf-8\r\nContent-Length: %s\r\n\r\n%s\r\n' % (len(response), response)], zmq.NOBLOCK)
-  #close connection
-  req_rep_socket.send_multipart([identity, ''], zmq.NOBLOCK)
+    #set some basic info
+    self.send_header('Access-Control-Allow-Origin','*')
+    self.send_header('Content-type', 'application/json;charset=utf-8')
+    self.send_header('Content-length', len(response))
+    self.end_headers()
 
-if __name__ == '__main__':
+    #hand it back
+    self.wfile.write(response)
 
-  #basically a thread for IO
-  context = zmq.Context.instance()
+  #send a fail
+  def fail(self, error):
+    self.send_response(400)
 
-  #receive requests from clients
-  req_rep_socket = context.socket(zmq.ROUTER)
-  req_rep_socket.router_raw = True
-  req_rep_socket.set_hwm(0)
-  req_rep_socket.bind('tcp://*:8002')
+    #set some basic info
+    self.send_header('Access-Control-Allow-Origin','*')
+    self.send_header('Content-type', 'text/plain;charset=utf-8')
+    self.send_header('Content-length', len(error))
+    self.end_headers()
 
-  #multiplexing through this guy
-  poller = zmq.Poller()
-  poller.register(req_rep_socket, zmq.POLLIN)
+    #hand it back
+    self.wfile.write(str(error))
 
-  #go until we quit
-  while True:
-    #wait for activity on one of the sockets
+  #handle the request
+  def do_GET(self):
+    #get out the bits we care about
     try:
-      sockets = dict(poller.poll())
-    except KeyboardInterrupt:
-      break
+      response = self.handle_request()
+      self.succeed(response)
+    except Exception as e:
+      self.fail(str(e))
 
-    #look for new requests
-    if req_rep_socket in sockets:
-      handle_request(req_rep_socket)
+#go off and wait for connections
+if __name__ == '__main__':
+  #setup the server
+  server = ('0.0.0.0', 8002)
+  RequestHandler.protocol_version = 'HTTP/1.0'
+  httpd = ThreadedHTTPServer(server, RequestHandler)
+
+  try:
+    httpd.serve_forever()
+  except KeyboardInterrupt:
+    httpd.server_close()

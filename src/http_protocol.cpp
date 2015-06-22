@@ -249,6 +249,52 @@ namespace prime_server {
     return std::move(requests.front());
   }
 
+  query_t http_request_t::split_path_query(std::string& path) {
+    //check for a query bit
+    auto query_begin = path.find("?");
+    auto key_start = path.begin() + query_begin + 1, value_start = path.end();
+    query_t query;
+    auto kv = query.end();
+    //split up the keys and values
+    for(auto c = key_start; c != path.end(); ++c) {
+      switch(*c) {
+        case '&':
+          //we have a key where we can put this value
+          if(kv != query.end())
+            kv->second.emplace_back(std::string(value_start, c));
+          //there mustn't have been a value
+          else
+            query[std::string(key_start, c)].emplace_back();
+          //next key
+          key_start = c + 1;
+          kv = query.end();
+          break;
+        case '=':
+          //no place to store a value yet
+          if(kv == query.end()) {
+            //so make one
+            std::string key(key_start, c);
+            query[key];
+            kv = query.find(key);
+            //value is here
+            value_start = c + 1;
+          }
+          break;
+      }
+    }
+    //get the last one
+    if(key_start < path.end()) {
+      if(kv != query.end())
+        kv->second.emplace_back(std::string(value_start, path.end()));
+      else
+        query[std::string(key_start, path.end())].emplace_back();
+    }
+    //truncate the path
+    if(query_begin != std::string::npos)
+      path.resize(query_begin);
+    return query;
+  }
+
   std::list<http_request_t> http_request_t::from_stream(const char* start, size_t length) {
     std::list<http_request_t> requests;
     cursor = start;
@@ -281,22 +327,7 @@ namespace prime_server {
             throw std::runtime_error("Unknown http version");
           log_line += partial_buffer;
           version.swap(partial_buffer);
-          //split off the query bits
-          auto pos = path.find('?');
-          size_t key_pos = pos, value_pos;
-          while(key_pos++ != std::string::npos && (value_pos = path.find('=', key_pos)) != std::string::npos) {
-            auto key = path.substr(key_pos, value_pos++ - key_pos);
-            key_pos = path.find('&', value_pos);
-            auto value = path.substr(value_pos, key_pos - value_pos);
-
-            auto kv = query.find(key);
-            if(kv == query.cend())
-              query.insert({key, {value}});
-            else
-              kv->second.emplace_back(std::move(value));
-          }
-          if(pos != std::string::npos)
-            path.resize(pos);
+          query = split_path_query(path);
           state = HEADERS;
           break;
         }

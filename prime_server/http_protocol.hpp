@@ -80,6 +80,7 @@ namespace prime_server {
     static std::string to_string(const method_t& method, const std::string& path, const std::string& body = "", const query_t& query = query_t{},
                                  const headers_t& headers = headers_t{}, const std::string& version = "HTTP/1.1");
     static http_request_t from_string(const char* start, size_t length);
+    static query_t split_path_query(std::string& path);
     std::list<http_request_t> from_stream(const char* start, size_t length);
     void flush_stream();
     size_t size() const;

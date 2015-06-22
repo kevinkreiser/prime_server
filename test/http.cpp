@@ -124,10 +124,45 @@ namespace {
     if(request.body != "hello")
       throw std::runtime_error("Request parsing failed");
 
-    request_str = "POST %2Fis_prime HTTP/1.1\r\nPragma: no-cache\r\nConnection: keep-alive\r\nContent-Type: text/xml; charset=UTF-8\r\nAccept-Encoding: gzip, deflate\r\nAccept-Language: de,en-US;q=0.7,en;q=0.3\r\nAccept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\nUser-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:35.0) Gecko/20100101 Firefox/35.0\r\nCache-Control: no-cache\r\nContent-Length: 11\r\nHost: localhost:8002\r\n\r\n32416190071";
+    request_str = "POST /is_prime HTTP/1.1\r\nPragma: no-cache\r\nConnection: keep-alive\r\nContent-Type: text/xml; charset=UTF-8\r\nAccept-Encoding: gzip, deflate\r\nAccept-Language: de,en-US;q=0.7,en;q=0.3\r\nAccept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\nUser-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:35.0) Gecko/20100101 Firefox/35.0\r\nCache-Control: no-cache\r\nContent-Length: 11\r\nHost: localhost:8002\r\n\r\n32416190071";
     request = http_request_t::from_string(request_str.c_str(), request_str.size());
     if(request.body != "32416190071")
       throw std::runtime_error("Request parsing failed");
+  }
+
+  void test_query_parsing() {
+    std::string path("/blah?");
+    auto query = http_request_t::split_path_query(path);
+    if(path != "/blah" || query.size() > 0)
+      throw std::runtime_error("query parsing failed");
+
+    path = "/blah?&&n&n=&n=b==c&=&a=1&1=2&x=y=z=4&=b&&";
+    query = http_request_t::split_path_query(path);
+    if(path != "/blah")
+      throw std::runtime_error("wrong path");
+    if(query.size() != 5)
+      throw std::runtime_error("wrong keys");
+    if(query[""] != query_t::value_type::second_type{"", "","","b", ""})
+      throw std::runtime_error("wrong values");
+    if(query["n"] != query_t::value_type::second_type{"", "", "b==c"})
+      throw std::runtime_error("wrong values");
+    if(query["a"] != query_t::value_type::second_type{"1"})
+      throw std::runtime_error("wrong values");
+    if(query["1"] != query_t::value_type::second_type{"2"})
+      throw std::runtime_error("wrong values");
+    if(query["x"] != query_t::value_type::second_type{"y=z=4"})
+      throw std::runtime_error("wrong values");
+
+    path = "/blah?foo=bar&foo=baz&case=simple";
+    query = http_request_t::split_path_query(path);
+    if(path != "/blah")
+      throw std::runtime_error("wrong path");
+    if(query.size() != 2)
+      throw std::runtime_error("wrong keys");
+    if(query["foo"] != query_t::value_type::second_type{"bar", "baz"})
+      throw std::runtime_error("wrong values");
+    if(query["case"] != query_t::value_type::second_type{"simple"})
+      throw std::runtime_error("wrong values");
   }
 
   void test_response() {
@@ -238,6 +273,8 @@ int main() {
   suite.test(TEST_CASE(test_request));
 
   suite.test(TEST_CASE(test_request_parsing));
+
+  suite.test(TEST_CASE(test_query_parsing));
 
   suite.test(TEST_CASE(test_response));
 
