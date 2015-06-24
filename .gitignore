@@ -43,6 +43,7 @@ prime_workerd
 # tests
 test-suite.log
 test-driver
+test/zmq
 test/netstring
 test/http
 test/*.log

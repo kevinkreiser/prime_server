@@ -2,6 +2,7 @@
 #include "prime_server.hpp"
 #include "netstring_protocol.hpp"
 
+#include <unistd.h>
 #include <functional>
 #include <memory>
 #include <unordered_set>
@@ -117,7 +118,7 @@ namespace {
         if(requests.size() < total) {
           std::pair<std::unordered_set<std::string>::iterator, bool> inserted = std::make_pair(requests.end(), false);
           while(inserted.second == false) {
-            request = random_string(10);
+            request = random_string(10) + "eifach e chlii Zusatz fer de Nachricht groesser mache. mer welle de Grenz ueberschriite";
             inserted = requests.insert(request);
           }
           netstring_request_t::format(request);
@@ -174,6 +175,9 @@ namespace {
 }
 
 int main() {
+  //make this whole thing bail if it doesnt finish fast
+  alarm(10);
+
   testing::suite suite("netstring");
 
   suite.test(TEST_CASE(test_streaming_client));

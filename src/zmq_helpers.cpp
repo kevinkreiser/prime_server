@@ -49,7 +49,6 @@ namespace zmq {
       return zmq_msg_size(const_cast<zmq_msg_t*>(ptr.get()));
     }
 
-
     socket_t::socket_t(const context_t& context, int socket_type):context(context) {
       //make the c socket
       auto* socket = zmq_socket(this->context, socket_type);

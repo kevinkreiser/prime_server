@@ -182,9 +182,9 @@ namespace prime_server {
     auto session = sessions.find(requester);
 #if ZMQ_VERSION_MAJOR <= 4
 #if ZMQ_VERSION_MINOR < 1
-    //older versions of stream didn't seem to send a blank connection message
-    //despite this seeming to imply they did: http://zeromq.org/docs:4-1-upgrade
-    //maybe it means stream still dont unless you tell them to with NOTIFY?
+    //version 4.0 of stream didn't seem to send a blank connection message
+    //then they did in 4.1: http://zeromq.org/docs:4-1-upgrade
+    //but now they don't again in 4.2 unless you tell them to with NOTIFY
     if(session == sessions.end())
       session = sessions.insert({requester, request_container_t{}}).first;
 #endif

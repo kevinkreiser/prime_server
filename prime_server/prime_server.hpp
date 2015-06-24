@@ -23,9 +23,9 @@
  * - messages coalesce on the socket (makes sense given the name stream right). this means that
  *   you have to do work to break them back up into individual requests (protocol dependent)
  *
- * - there seems to be an internal buffer that, on my machine is around 8192 bytes. this means
- *   that you have to always be careful of partial messages and have some means of knowing when
- *   a message is whole or not.
+ * - there are buffers in zmq for both send (zmq::out_batch_size) and recv (zmq::in_batch_size).
+ *   this means that you have to always be careful of partial messages and have some means of
+ *   knowing when a message is whole or not.
  *
  */
 

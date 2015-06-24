@@ -2,6 +2,7 @@
 #include "prime_server.hpp"
 #include "http_protocol.hpp"
 
+#include <unistd.h>
 #include <functional>
 #include <memory>
 #include <unordered_set>
@@ -264,6 +265,9 @@ namespace {
 }
 
 int main() {
+  //make this whole thing bail if it doesnt finish fast
+  alarm(10);
+
   testing::suite suite("http");
 
   suite.test(TEST_CASE(test_streaming_client));

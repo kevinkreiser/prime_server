@@ -79,7 +79,10 @@ prime_workerd_LDADD = $(DEPS_LIBS) libprime_server.la
 
 
 # tests
-check_PROGRAMS = test/netstring test/http
+check_PROGRAMS = test/zmq test/netstring test/http
+test_zmq_SOURCES = test/zmq.cpp
+test_zmq_CPPFLAGS = $(DEPS_CFLAGS)
+test_zmq_LDADD = $(DEPS_LIBS) libprime_server.la
 test_netstring_SOURCES = test/netstring.cpp
 test_netstring_CPPFLAGS = $(DEPS_CFLAGS)
 test_netstring_LDADD = $(DEPS_LIBS) libprime_server.la
