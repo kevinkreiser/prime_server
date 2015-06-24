@@ -266,7 +266,7 @@ namespace {
 
 int main() {
   //make this whole thing bail if it doesnt finish fast
-  alarm(10);
+  alarm(30);
 
   testing::suite suite("http");
 
