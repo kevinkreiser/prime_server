@@ -157,7 +157,7 @@ namespace prime_server {
 
       //send on the request
       this->proxy.send(requester, ZMQ_DONTWAIT | ZMQ_SNDMORE);
-      this->proxy.send(static_cast<void*>(&request_id), sizeof(request_id), ZMQ_DONTWAIT | ZMQ_SNDMORE);
+      this->proxy.send(static_cast<const void*>(&request_id), sizeof(request_id), ZMQ_DONTWAIT | ZMQ_SNDMORE);
       this->proxy.send(static_cast<const void*>(piece), length, ZMQ_DONTWAIT);
       if(log) {
         std::string log_line = std::to_string(request_id);
