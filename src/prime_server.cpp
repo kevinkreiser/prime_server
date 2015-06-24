@@ -189,6 +189,9 @@ namespace prime_server {
       session = sessions.insert({requester, request_container_t{}}).first;
 #endif
 #endif
+
+    //TODO: if you send a request bigger than zmq::in_batch_size (8192) then you will
+    //get more than one message here. this means we need to pump those bytes in as well
     auto& body = *std::next(messages.begin());
 
     //open or close connection
@@ -319,6 +322,8 @@ namespace prime_server {
           messages.pop_front();
           auto request_info = std::move(messages.front());
           messages.pop_front();
+          //TODO: for each message you send bigger than zmq::in_batch_size (8192) then you will
+          //get more than one message. this means we need to combine them before calling work_function
           auto result = work_function(messages, request_info.data());
           //should we send this on to the next proxy
           if(result.intermediate) {

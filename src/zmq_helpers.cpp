@@ -99,7 +99,7 @@ namespace zmq {
         messages.emplace_back();
         if(!recv(messages.back(), flags))
           messages.pop_back();
-        zmq_getsockopt(ptr.get(), ZMQ_RCVMORE, &more, &more_size);
+        getsockopt(ZMQ_RCVMORE, &more, &more_size);
       } while(more);
       return messages;
     }
