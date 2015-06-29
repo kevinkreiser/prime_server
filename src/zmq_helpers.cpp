@@ -1,4 +1,5 @@
 #include "zmq_helpers.hpp"
+#include <string>
 
 namespace zmq {
 
