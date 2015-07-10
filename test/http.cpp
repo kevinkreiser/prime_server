@@ -55,8 +55,6 @@ namespace {
       throw std::runtime_error("Wrong number of requests were forwarded");
     if(request.partial_buffer != "sell_siehscht_du_au_noed")
       throw std::runtime_error("Unexpected partial request data");
-
-
   }
 
   void test_streaming_client() {
@@ -124,6 +122,8 @@ namespace {
     request = http_request_t::from_string(request_str.c_str(), request_str.size());
     if(request.body != "hello")
       throw std::runtime_error("Request parsing failed");
+    if(request.headers.find("User-Agent") == request.headers.cend() || request.headers.find("User-Agent")->second != "fake-agent")
+      throw std::runtime_error("Request parsing failed");
 
     request_str = "POST /is_prime HTTP/1.1\r\nPragma: no-cache\r\nConnection: keep-alive\r\nContent-Type: text/xml; charset=UTF-8\r\nAccept-Encoding: gzip, deflate\r\nAccept-Language: de,en-US;q=0.7,en;q=0.3\r\nAccept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\nUser-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:35.0) Gecko/20100101 Firefox/35.0\r\nCache-Control: no-cache\r\nContent-Length: 11\r\nHost: localhost:8002\r\n\r\n32416190071";
     request = http_request_t::from_string(request_str.c_str(), request_str.size());
@@ -172,6 +172,32 @@ namespace {
       throw std::runtime_error("Response was not well-formed");
   }
 
+  void test_response_parsing() {
+    std::string response_str("HTTP/1.0 304 Forward\r\nHost: localhost:8002\r\nUser-Agent: ApacheBench/2.3\r\n\r\n");
+    auto response = http_response_t::from_string(response_str.c_str(), response_str.size());
+    //TODO: tighten up this test
+    if(response.code != 304)
+      throw std::runtime_error("Response parsing failed");
+    if(response.message != "Forward")
+      throw std::runtime_error("Response parsing failed");
+    if(response.version != "HTTP/1.0")
+      throw std::runtime_error("Response parsing failed");
+    if(response.body != "")
+      throw std::runtime_error("Response parsing failed");
+
+    response_str = "HTTP/1.0 404 Not Found\r\nHost: *\r\nContent-Length: 7\r\nUser-Agent: fake-agent\r\n\r\ngoodbye";
+    response = http_response_t::from_string(response_str.c_str(), response_str.size());
+    if(response.body != "goodbye")
+      throw std::runtime_error("Response parsing failed");
+    if(response.headers.find("User-Agent") == response.headers.cend() || response.headers.find("User-Agent")->second != "fake-agent")
+      throw std::runtime_error("Response parsing failed");
+
+    response_str = "HTTP/1.1 200 OK\r\nPragma: no-cache\r\nConnection: keep-alive\r\nContent-Type: text/xml; charset=UTF-8\r\nContent-Length: 11\r\nHost: localhost:8002\r\n\r\n32416190071";
+    response = http_response_t::from_string(response_str.c_str(), response_str.size());
+    if(response.body != "32416190071")
+      throw std::runtime_error("Response parsing failed");
+  }
+
   constexpr char alpha_numeric[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
   std::string random_string(size_t length) {
@@ -207,9 +233,8 @@ namespace {
       },
       [&requests, &received](const void* data, size_t size) {
         //get the result and tell if there is more or not
-        std::string response(static_cast<const char*>(data), size);
-        response = response.substr(response.rfind("\r\n\r\n") + 4);
-        if(requests.find(response) == requests.end())
+        auto response = http_response_t::from_string(static_cast<const char*>(data), size);
+        if(requests.find(response.body) == requests.end())
           throw std::runtime_error("Unexpected response!");
         return ++received < total;
       }, 100
