@@ -49,6 +49,8 @@ namespace prime_server {
     client_t(context, server_endpoint, request_function, collect_function, batch_size){
     reset();
   }
+
+  //TODO: make a container_t interface to this so that the client can hold the currently parsing response, then call stream_responses below
   size_t http_client_t::stream_responses(const void* message, size_t size, bool& more) {
     //um..
     size_t collected = 0;
@@ -470,12 +472,15 @@ namespace prime_server {
       switch(state) {
         case MESSAGE: {
           //log_line = partial_buffer + delimiter;
-          //TODO:
+          message.swap(partial_buffer);
+          state = HEADERS;
           break;
         }
         case CODE: {
           //log_line += partial_buffer + delimiter;
-          //TODO:
+          code = static_cast<uint16_t>(std::stoul(partial_buffer));
+          delimiter = "\r\n";
+          state = MESSAGE;
           break;
         }
         case VERSION: {
@@ -483,7 +488,7 @@ namespace prime_server {
             throw std::runtime_error("Unknown http version");
           //log_line += partial_buffer;
           version.swap(partial_buffer);
-          state = HEADERS;
+          state = CODE;
           break;
         }
         case HEADERS: {

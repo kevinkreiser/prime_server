@@ -105,6 +105,7 @@ namespace prime_server {
   //then the caught exceptions that we want to actually return to the client
   //can be handled more easily
   struct http_response_t : public http_entity_t {
+   public:
     uint16_t code;
     std::string message;
 
@@ -117,6 +118,9 @@ namespace prime_server {
     std::list<http_response_t> from_stream(const char* start, size_t length);
     static std::string generic(unsigned code, const std::string message, const headers_t& headers = headers_t{}, const std::string& body = "", const std::string& version = "HTTP/1.1");
     void flush_stream();
+
+   protected:
+    std::string log_line;
   };
 
   class http_server_t : public server_t<http_request_t, http_request_t::info_t> {
