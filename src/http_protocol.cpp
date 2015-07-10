@@ -49,6 +49,8 @@ namespace prime_server {
     client_t(context, server_endpoint, request_function, collect_function, batch_size){
     reset();
   }
+
+  //TODO: make a container_t interface to this so that the client can hold the currently parsing response, then call stream_responses below
   size_t http_client_t::stream_responses(const void* message, size_t size, bool& more) {
     //um..
     size_t collected = 0;
@@ -152,26 +154,70 @@ namespace prime_server {
 
   http_entity_t::http_entity_t(const std::string& version, const headers_t& headers, const std::string& body):
     version(version), headers(headers), body(body) {
-  }
-
-  http_entity_t::~http_entity_t(){}
-
-
-  http_request_t::http_request_t():http_entity_t("", headers_t{}, ""){
-    path = version = body = "";
-    cursor = end = nullptr;
-    flush_stream();
-  }
-
-  http_request_t::http_request_t(const method_t& method, const std::string& path, const std::string& body, const query_t& query,
-                 const headers_t& headers, const std::string& version) :
-                 http_entity_t(version, headers, body), method(method), path(path), query(query) {
     state = METHOD;
     delimiter = " ";
     partial_length = 0;
     body_length = 0;
     consumed = 0;
     cursor = end = nullptr;
+  }
+
+  http_entity_t::~http_entity_t(){}
+
+  bool http_entity_t::consume_until() {
+    const char* current = cursor;
+    char c;
+    //go until we consumed enough bytes
+    if(body_length) {
+      while(current++ != end && --body_length);
+      c = body_length != 0;
+    }//go until delimiter
+    else {
+      while((c = *(delimiter + partial_length)) != '\0' && current != end) {
+        if(c != *current)
+          partial_length = 0;
+        else
+          ++partial_length;
+        ++current;
+      }
+    }
+    //we found the delimiter
+    size_t length = current - cursor;
+    if(c == '\0') {
+      if(length < partial_length)
+        partial_buffer.resize(partial_buffer.size() - (partial_length - length));
+      else
+        partial_buffer.append(cursor, current - partial_length);
+      partial_length = 0;
+      cursor = current;
+      consumed += length;
+      return true;
+    }
+    //we ran out
+    partial_buffer.assign(cursor, length);
+    return false;
+  }
+
+  void http_entity_t::flush_stream(const state_t current_state) {
+    state = current_state;
+    delimiter = " ";
+    partial_length = 0;
+    body_length = 0;
+    consumed = 0;
+    partial_buffer.clear();
+    version.clear();
+    headers.clear();
+    body.clear();
+  }
+
+  http_request_t::http_request_t():http_entity_t("", headers_t{}, ""){
+    path = "";
+    flush_stream();
+  }
+
+  http_request_t::http_request_t(const method_t& method, const std::string& path, const std::string& body, const query_t& query,
+                 const headers_t& headers, const std::string& version) :
+                 http_entity_t(version, headers, body), method(method), path(path), query(query) {
   }
 
  http_request_t::info_t http_request_t::to_info(uint64_t id) const {
@@ -373,56 +419,18 @@ namespace prime_server {
     return requests;
   }
   void http_request_t::flush_stream() {
-    state = METHOD;
-    delimiter = " ";
-    partial_length = 0;
-    body_length = 0;
-    consumed = 0;
-    partial_buffer.clear();
+    http_entity_t::flush_stream(METHOD);
     path.clear();
     query.clear();
-    version.clear();
-    headers.clear();
-    body.clear();
   }
   size_t http_request_t::size() const {
     return consumed + partial_buffer.size();
   }
 
-  bool http_request_t::consume_until() {
-    const char* current = cursor;
-    char c;
-    //go until we consumed enough bytes
-    if(body_length) {
-      while(current++ != end && --body_length);
-      c = body_length != 0;
-    }//go until delimiter
-    else {
-      while((c = *(delimiter + partial_length)) != '\0' && current != end) {
-        if(c != *current)
-          partial_length = 0;
-        else
-          ++partial_length;
-        ++current;
-      }
-    }
-    //we found the delimiter
-    size_t length = current - cursor;
-    if(c == '\0') {
-      if(length < partial_length)
-        partial_buffer.resize(partial_buffer.size() - (partial_length - length));
-      else
-        partial_buffer.append(cursor, current - partial_length);
-      partial_length = 0;
-      cursor = current;
-      consumed += length;
-      return true;
-    }
-    //we ran out
-    partial_buffer.assign(cursor, length);
-    return false;
+  http_response_t::http_response_t():http_entity_t("", headers_t{}, ""){
+    message = "";
+    flush_stream();
   }
-
 
   http_response_t::http_response_t(unsigned code, const std::string& message, const std::string& body, const headers_t& headers,
                   const std::string& version) :
@@ -441,6 +449,93 @@ namespace prime_server {
 
   std::string http_response_t::to_string() const {
     return generic(code, message, headers, body, version);
+  }
+
+  http_response_t http_response_t::from_string(const char* start, size_t length) {
+    http_response_t response;
+    auto responses = response.from_stream(start, length);
+    if(responses.size() == 0)
+      throw std::runtime_error("Incomplete http request");
+    return std::move(responses.front());
+  }
+
+  std::list<http_response_t> http_response_t::from_stream(const char* start, size_t length) {
+    std::list<http_response_t> responses;
+    cursor = start;
+    end = start + length;
+    while(start != end) {
+      //grab up to the next return
+      if(!consume_until())
+        break;
+
+      //what are we looking to parse
+      switch(state) {
+        case MESSAGE: {
+          //log_line = partial_buffer + delimiter;
+          message.swap(partial_buffer);
+          state = HEADERS;
+          break;
+        }
+        case CODE: {
+          //log_line += partial_buffer + delimiter;
+          code = static_cast<uint16_t>(std::stoul(partial_buffer));
+          delimiter = "\r\n";
+          state = MESSAGE;
+          break;
+        }
+        case VERSION: {
+          if(partial_buffer != "HTTP/1.0" && partial_buffer != "HTTP/1.1")
+            throw std::runtime_error("Unknown http version");
+          //log_line += partial_buffer;
+          version.swap(partial_buffer);
+          state = CODE;
+          break;
+        }
+        case HEADERS: {
+          //a header is here
+          if(partial_buffer.size()) {
+            auto pos = partial_buffer.find(": ");
+            if(pos == std::string::npos)
+              throw std::runtime_error("Expected http header");
+            headers.insert({partial_buffer.substr(0, pos), partial_buffer.substr(pos + 2)});
+          }//the end or body
+          else {
+            auto length_str = headers.find("Content-Length");
+            if(length_str != headers.end()) {
+              body_length = std::stoul(length_str->second);
+              state = BODY;
+            }
+            else {
+              //TODO: check for chunked
+              responses.push_back(http_response_t(code, message, body, headers, version));
+              flush_stream();
+            }
+          }
+          break;
+        }
+        case BODY: {
+          body.swap(partial_buffer);
+          responses.push_back(http_response_t(code, message, body, headers, version));
+          flush_stream();
+          break;
+        }
+        case CHUNKS: {
+          //TODO: actually parse out the length and chunk by alternating
+          //TODO: return 501
+          throw std::runtime_error("not implemented");
+        }
+      }
+
+      //next piece
+      partial_buffer.clear();
+    }
+
+    return responses;
+  }
+
+  void http_response_t::flush_stream() {
+    http_entity_t::flush_stream(VERSION);
+    message.clear();
   }
 
   std::string http_response_t::generic(unsigned code, const std::string message, const headers_t& headers, const std::string& body, const std::string& version) {

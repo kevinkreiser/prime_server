@@ -51,7 +51,19 @@ namespace prime_server {
 
     virtual ~http_entity_t();
     virtual std::string to_string() const = 0;
-    //TODO: virtual http_entity_t from_string(const char*, size_t length) = 0
+   protected:
+    enum state_t { METHOD, MESSAGE, CODE, PATH, VERSION, HEADERS, BODY, CHUNKS };
+    void flush_stream(const state_t state);
+
+    //state for streaming parsing
+    const char *cursor, *end, *delimiter;
+    std::string partial_buffer;
+    size_t partial_length;
+    state_t state;
+    size_t body_length;
+    size_t consumed;
+
+    bool consume_until();
   };
 
   class http_server_t;
@@ -87,33 +99,28 @@ namespace prime_server {
 
    protected:
     std::string log_line;
-    //state for streaming parsing
-    const char *cursor, *end, *delimiter;
-    std::string partial_buffer;
-    size_t partial_length;
-    enum state_t { METHOD, PATH, VERSION, HEADERS, BODY, CHUNKS };
-    state_t state;
-    size_t body_length;
-    size_t consumed;
-
-    bool consume_until();
   };
 
   //TODO: let this subclass exception and make 'message' be the 'what'
   //then the caught exceptions that we want to actually return to the client
   //can be handled more easily
   struct http_response_t : public http_entity_t {
+   public:
     uint16_t code;
     std::string message;
 
+    http_response_t();
     http_response_t(unsigned code, const std::string& message, const std::string& body = "", const headers_t& headers = headers_t{},
                     const std::string& version = "HTTP/1.1");
-
     void from_info(http_request_t::info_t& info);
-
     virtual std::string to_string() const;
-
+    static http_response_t from_string(const char* start, size_t length);
+    std::list<http_response_t> from_stream(const char* start, size_t length);
     static std::string generic(unsigned code, const std::string message, const headers_t& headers = headers_t{}, const std::string& body = "", const std::string& version = "HTTP/1.1");
+    void flush_stream();
+
+   protected:
+    std::string log_line;
   };
 
   class http_server_t : public server_t<http_request_t, http_request_t::info_t> {
