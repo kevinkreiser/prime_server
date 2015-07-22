@@ -149,7 +149,7 @@ namespace {
 
     //drain the requests
     size_t got = 0;
-    while(got != request_count)
+    while(got != 2 * request_count)
       got += router.recv_all(ZMQ_DONTWAIT).size();
   }
 
