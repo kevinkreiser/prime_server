@@ -249,7 +249,7 @@ namespace {
 
     //server
     std::thread server(std::bind(&http_server_t::serve,
-     http_server_t(context, "ipc://test_http_server", "ipc://test_http_proxy_upstream", "ipc://test_http_results")));
+     http_server_t(context, "ipc://test_http_server", "ipc://test_http_proxy_upstream", "ipc://test_http_results", false, 9000)));
     server.detach();
 
     //load balancer for parsing

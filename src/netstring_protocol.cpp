@@ -80,8 +80,8 @@ namespace prime_server {
     return collected;
   }
 
-  netstring_server_t::netstring_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log):
-    server_t<std::string, uint64_t>::server_t(context, client_endpoint, proxy_endpoint, result_endpoint, log), request_id(0) {
+  netstring_server_t::netstring_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log, size_t max_request_size):
+    server_t<std::string, uint64_t>::server_t(context, client_endpoint, proxy_endpoint, result_endpoint, log, max_request_size), request_id(0) {
   }
   netstring_server_t::~netstring_server_t(){}
   void netstring_server_t::enqueue(const void* message, size_t size, const std::string& requester, std::string& buffer) {

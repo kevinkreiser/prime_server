@@ -8,13 +8,6 @@
 #include "http_protocol.hpp"
 #include "logging.hpp"
 
-namespace {
-
-  //TODO: make this configurable
-  constexpr size_t MAX_REQUEST_SIZE = 1024;
-
-}
-
 namespace prime_server {
 
   client_t::client_t(zmq::context_t& context, const std::string& server_endpoint, const request_function_t& request_function,
@@ -86,7 +79,8 @@ namespace prime_server {
 
   template <class request_container_t, class request_info_t>
   server_t<request_container_t, request_info_t>::server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint,
-    const std::string& result_endpoint, bool log): client(context, ZMQ_STREAM), proxy(context, ZMQ_DEALER), loopback(context, ZMQ_SUB), log(log) {
+    const std::string& result_endpoint, bool log, size_t max_request_size): client(context, ZMQ_STREAM), proxy(context, ZMQ_DEALER), loopback(context, ZMQ_SUB),
+    log(log), max_request_size(max_request_size) {
 
     int disabled = 0;
     client.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
@@ -206,19 +200,28 @@ namespace prime_server {
     }//actual request data
     else {
       if(session != sessions.end()) {
-        //proxy any whole bits onward
-        request_container_t& streaming = session->second;
-        enqueue(body.data(), body.size(), requester, streaming);
-
         //hangup if this is all too much (in the buffer)
-        //TODO: 414 for http clients
-        //TODO: kill all outstanding requests
-        if(session->second.size() > MAX_REQUEST_SIZE) {
+        request_container_t& streaming = session->second;
+        if(body.size() + streaming.size() > max_request_size) {
+          //TODO: 414 for http clients
+          //TODO: find and kill all outstanding requests from this session
           sessions.erase(session);
-          body.reset();
           client.send(messages.front(), ZMQ_SNDMORE | ZMQ_DONTWAIT);
-          client.send(body, ZMQ_DONTWAIT);
+          client.send(static_cast<const void*>(""), 0, ZMQ_DONTWAIT);
+          LOG_WARN("Closed connection: request was too large");
           return;
+        }
+
+        //proxy any whole bits onward
+        try {
+          enqueue(body.data(), body.size(), requester, streaming);
+        }//bogus protocol data
+        catch(const std::exception& e) {
+          //TODO: make sure it didnt put any requests into the system
+          sessions.erase(session);
+          client.send(messages.front(), ZMQ_SNDMORE | ZMQ_DONTWAIT);
+          client.send(static_cast<const void*>(""), 0, ZMQ_DONTWAIT);
+          LOG_WARN("Closed connection: malformed request");
         }
       }
       else
