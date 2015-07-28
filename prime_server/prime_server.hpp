@@ -55,7 +55,7 @@ namespace prime_server {
   class server_t {
    public:
     static_assert(std::is_pod<request_info_t>::value, "server requires POD types for request info");
-    server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log = false);
+    server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log = false, size_t max_request_size = 1024);
     virtual ~server_t();
     void serve();
    protected:
@@ -80,6 +80,7 @@ namespace prime_server {
     zmq::socket_t proxy;
     zmq::socket_t loopback;
     bool log;
+    size_t max_request_size;
     //a record of what open connections we have
     //TODO: keep time of last session activity and clear out stale sessions
     std::unordered_map<std::string, request_container_t> sessions;
