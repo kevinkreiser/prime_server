@@ -276,7 +276,7 @@ namespace prime_server {
     }
 
     //body
-    if(body.size() || method == method_t::POST) {
+    if(body.size()) {
       request += "Content-Length: ";
       request += std::to_string(body.size());
       request += "\r\n\r\n";
