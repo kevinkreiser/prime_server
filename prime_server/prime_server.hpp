@@ -55,7 +55,7 @@ namespace prime_server {
   class server_t {
    public:
     static_assert(std::is_pod<request_info_t>::value, "server requires POD types for request info");
-    server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log = false, size_t max_request_size = 1024);
+    server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log = false, size_t max_request_size = 7168);
     virtual ~server_t();
     void serve();
    protected:
