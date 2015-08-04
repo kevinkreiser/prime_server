@@ -125,7 +125,7 @@ namespace prime_server {
 
   class http_server_t : public server_t<http_request_t, http_request_t::info_t> {
    public:
-    http_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log = false, size_t max_request_size = 1024);
+    http_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log = false, size_t max_request_size = 7168);
     virtual ~http_server_t();
    protected:
     virtual void enqueue(const void* message, size_t size, const std::string& requester, http_request_t& request);
