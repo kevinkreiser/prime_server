@@ -172,10 +172,11 @@ namespace prime_server {
     buffer.assign(delim, end - delim);
   }
   void netstring_server_t::dequeue(const uint64_t& request_info, size_t length) {
+    //NOTE: netstring protocol is always keep alive so we leave the session intact
     auto removed = requests.erase(request_info);
     if(removed != 1)
       LOG_WARN("Unknown or timed-out request id: " + std::to_string(request_info));
-    if(log)
+    else if(log)
       LOG_INFO(std::to_string(request_info) + " REPLIED");
   }
 
