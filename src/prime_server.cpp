@@ -152,6 +152,8 @@ namespace prime_server {
     }
     if(messages.size() > 3) {
       LOG_WARN("Cannot reply with more than one message, dropping additional");
+      //TODO: large responses may get broken up. We could smash them back together here and send them on
+      //we can even detect it by checking the zmq::in/out_batch_size and see if the size matches
       messages.resize(3);
     }
     if(messages.back().size() == 0)

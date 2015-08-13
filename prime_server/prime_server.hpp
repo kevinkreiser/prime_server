@@ -71,7 +71,7 @@ namespace prime_server {
     //    log the request if log == true
     virtual void enqueue(const void* bytes, size_t length, const std::string& requester, request_container_t& streaming_request) = 0;
     //implementing class shall:
-    //  remove the outstanding request as it was either satisfied or timed-out
+    //  remove the outstanding request as it was either satisfied, timed-out, malformed or too large
     //  depending on the original request or the result the session may also be terminated
     //  log the response if log == true
     virtual void dequeue(const request_info_t& request_info, size_t length) = 0;
