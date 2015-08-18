@@ -145,7 +145,8 @@ namespace {
 
     //server
     std::thread server(std::bind(&netstring_server_t::serve,
-      netstring_server_t(context, "ipc://test_netstring_server", "ipc://test_netstring_proxy_upstream", "ipc://test_netstring_results", false, 9000)));
+      netstring_server_t(context, "ipc://test_netstring_server", "ipc://test_netstring_proxy_upstream",
+                         "ipc://test_netstring_results", false, 1024*1024*4 + 512)));
     server.detach();
 
     //load balancer for parsing
@@ -172,6 +173,34 @@ namespace {
     client2.join();
   }
 
+  void test_large_request() {
+
+    zmq::context_t context;
+
+    //make a nice visible ascii string request
+    std::string request(1024*1024*4, ' ');
+    for(size_t i = 0; i < request.size(); ++i)
+      request[i] = (i % 95) + 32;
+    netstring_request_t::format(request);
+
+    //see if we get it back
+    netstring_client_t client(context, "ipc://test_netstring_server",
+      [&request]() {
+        return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
+      },
+      [&request](const void* data, size_t size) {
+        //get the result and tell if there is more or not
+        if(size != request.size())
+          throw std::runtime_error("Unexpected response size!");
+        if(strcmp(static_cast<const char*>(data), request.c_str()) != 0)
+          throw std::runtime_error("Unexpected response data!");
+        return false;
+      }, 1
+    );
+    //request and receive
+    client.batch();
+  }
+
 }
 
 int main() {
@@ -189,6 +218,8 @@ int main() {
   suite.test(TEST_CASE(test_response));
 
   suite.test(TEST_CASE(test_parallel_clients));
+
+  suite.test(TEST_CASE(test_large_request));
 
   return suite.tear_down();
 }

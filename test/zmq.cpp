@@ -63,7 +63,7 @@ namespace {
   void test_batch_overflow_asynchronous() {
     zmq::context_t context;
 
-    std::string request(8500, ' ');
+    std::string request(9000, ' ');
     for(size_t i = 0; i < request.size(); ++i)
       request[i] = (i % 95) + 32;
 

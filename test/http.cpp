@@ -249,7 +249,8 @@ namespace {
 
     //server
     std::thread server(std::bind(&http_server_t::serve,
-     http_server_t(context, "ipc://test_http_server", "ipc://test_http_proxy_upstream", "ipc://test_http_results", false, 9000)));
+     http_server_t(context, "ipc://test_http_server", "ipc://test_http_proxy_upstream",
+                   "ipc://test_http_results", false, 1024*1024*4 + 512)));
     server.detach();
 
     //load balancer for parsing
@@ -287,6 +288,35 @@ namespace {
     client2.join();
   }
 
+  void test_large_request() {
+
+    zmq::context_t context;
+
+    //make a nice visible ascii string request
+    std::string request_body(1024*1024*4, ' ');
+    for(size_t i = 0; i < request_body.size(); ++i)
+      request_body[i] = (i % 95) + 32;
+    auto request = http_request_t::to_string(POST, "/", request_body);
+
+    //see if we get it back
+    http_client_t client(context, "ipc://test_netstring_server",
+      [&request]() {
+        return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
+      },
+      [&request_body](const void* data, size_t size) {
+        auto response = http_response_t::from_string(static_cast<const char*>(data), size);
+        //get the result and tell if there is more or not
+        if(size != request_body.size())
+          throw std::runtime_error("Unexpected response size!");
+        if(response.body != request_body)
+          throw std::runtime_error("Unexpected response data!");
+        return false;
+      }, 1
+    );
+    //request and receive
+    client.batch();
+  }
+
 }
 
 int main() {
@@ -308,5 +338,8 @@ int main() {
   suite.test(TEST_CASE(test_response));
 
   suite.test(TEST_CASE(test_parallel_clients));
+
+  suite.test(TEST_CASE(test_large_request));
+
   return suite.tear_down();
 }
