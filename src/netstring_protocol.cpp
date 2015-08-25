@@ -2,175 +2,131 @@
 #include "logging.hpp"
 
 #include <cctype>
+#include <cstdlib>
 
 namespace prime_server {
 
-  size_t netstring_client_t::stream_responses(const void* message, size_t size, bool& more) {
-    //um..
-    size_t collected = 0;
-    if(size == 0)
-      return collected;
+  netstring_entity_t::netstring_entity_t():body(),body_length(0) {
+  }
 
-    //box out the message a bit so we can iterate
-    const char* begin = static_cast<const char*>(message);
-    const char* end = begin + size;
+  std::string netstring_entity_t::to_string() const {
+    return std::to_string(body.size()) + ':' + body + ',';
+  }
 
-    //do we have a partial response in the buffer
-    if(buffer.size()) {
-      //make sure the buffer has a colon in it and bail otherwise
-      auto pos = buffer.find(':');
-      if(pos == std::string::npos) {
-        while(begin < end) {
-          buffer.push_back(*begin);
-          ++begin;
-          if(buffer.back() == ':')
-            break;
+  std::string netstring_entity_t::to_string(const std::string& body) {
+    return std::to_string(body.size()) + ':' + body + ',';
+  }
+
+  netstring_entity_t netstring_entity_t::from_string(const char* start, size_t length) {
+    netstring_entity_t request;
+    auto requests = request.from_stream(start, length);
+    if(requests.size() == 0)
+      throw std::runtime_error("Incomplete netstring request");
+    return std::move(requests.front());
+  }
+
+  std::list<netstring_entity_t> netstring_entity_t::from_stream(const char* start, size_t length) {
+    std::list<netstring_entity_t> requests;
+    size_t i = 0;
+    while(i < length) {
+      //we are looking for the length
+      if(body_length == 0) {
+        //if its not a digit then we need to see what it is
+        auto c = start[i];
+        if(!std::isdigit(c)){
+          //found the end of the length
+          if(c == ':') {
+            //get the length
+            body.append(start, start + i);
+            body_length = std::stoul(body);
+            //reset for body
+            start += i + 1;
+            length -= i + 1;
+            i = 0;
+            body.clear();
+            continue;
+          }//this isnt what we expect
+          else
+            throw std::runtime_error("Malformed netstring request");
         }
-        if(begin == end)
-          return collected;
-        pos = buffer.size() - 1;
+        //next char
+        ++i;
+        continue;
+      }//we are looking for the body
+      else if(body_length - body.size() < length) {
+        if(start[body_length - body.size()] == ',') {
+          //make a new one
+          requests.emplace_back();
+          requests.back().body = std::move(body);
+          requests.back().body.append(start, start + (body_length - body.size()));
+          requests.back().body_length = body_length;
+          //reset for next
+          start += (body_length - body.size()) + 1;
+          length -= (body_length - body.size()) + 1;
+          i = 0;
+          body_length = 0;
+          body.clear();
+          continue;
+        }//this isnt what we expect
+        else
+          throw std::runtime_error("Malformed netstring request");
       }
-
-      //copy up to what the message calls for, add one for the comma
-      auto length = std::stoul(buffer.substr(0, pos)) + 1;
-      length -= buffer.size() - (pos + 1);
-
-      //not enough
-      if(length > end - begin) {
-        buffer.append(begin, end - begin);
-        return collected;
-      }//we have a full message here
-      else {
-        buffer.append(begin, length);
-        more = collect_function(static_cast<const void *>(&buffer[pos + 1]), length - 1);
-        ++collected;
-        begin += length;
-      }
+      //we werent looking for length, and the body didnt fit in what we had
+      //so we are done for now and need more data
+      break;
     }
+    //whatever is left we want to keep, it could be nothing
+    body.append(start, start + length);
+    return requests;
+  }
 
-    //keep getting pieces if there is enough space for the message length plus a message
-    if(begin < end && !isdigit(*begin))
-      throw std::runtime_error("Netstring protocol message cannot begin with anything but a digit");
-    const char* delim = begin;
-    while(delim < end) {
-      //get next colon
-      const char* next_delim = delim;
-      for(;next_delim < end; ++next_delim)
-        if(*next_delim == ':')
-          break;
-      if(next_delim == end)
-        break;
+  void netstring_entity_t::flush_stream() {
+    body.clear();
+    body_length = 0;
+  }
 
-      //convert the previous portion to a number
-      std::string length_str(delim, next_delim - delim);
-      size_t length = std::stoul(length_str);
-      const char* piece = next_delim + 1;
-      next_delim += length + 2;
+  size_t netstring_entity_t::size() const {
+    //TODO: pedantic, comma, colon and length are part of the request
+    return body.size();
+  }
 
-      //data is past the end which means we dont have it all yet
-      if(next_delim > end)
-        break;
-
-      //tell where this piece is
-      more = collect_function(static_cast<const void*>(piece), length);
-      ++collected;
-      delim = next_delim;
+  size_t netstring_client_t::stream_responses(const void* message, size_t size, bool& more) {
+    auto responses = response.from_stream(static_cast<const char*>(message), size);
+    for(const auto& parsed_response : responses) {
+      //TODO: this is wasteful
+      auto formatted_response = netstring_entity_t::to_string(parsed_response.body);
+      more = collect_function(static_cast<const void *>(formatted_response.c_str()), formatted_response.size());
     }
-    buffer.assign(delim, end - delim);
-    return collected;
+    return responses.size();
   }
 
   netstring_server_t::netstring_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log, size_t max_request_size):
-    server_t<std::string, uint64_t>::server_t(context, client_endpoint, proxy_endpoint, result_endpoint, log, max_request_size), request_id(0) {
+    server_t<netstring_entity_t, uint64_t>::server_t(context, client_endpoint, proxy_endpoint, result_endpoint, log, max_request_size), request_id(0) {
   }
+
   netstring_server_t::~netstring_server_t(){}
-  void netstring_server_t::enqueue(const void* message, size_t size, const std::string& requester, std::string& buffer) {
-    //box out the message a bit so we can iterate
-    const char* begin = static_cast<const char*>(message);
-    const char* end = begin + size;
 
-    //do we have a partial request
-    if(buffer.size()) {
-      //make sure the buffer has a colon in it and bail otherwise
-      auto pos = buffer.find(':');
-      if(pos == std::string::npos) {
-        while(begin < end) {
-          buffer.push_back(*begin);
-          ++begin;
-          if(buffer.back() == ':')
-            break;
-        }
-        if(begin == end)
-          return;
-        pos = buffer.size() - 1;
-      }
-
-      //copy up to what the message calls for, add one for the comma
-      auto length = std::stoul(buffer.substr(0, pos)) + 1;
-      length -= buffer.size() - (pos + 1);
-
-      //not enough
-      if(length > end - begin) {
-        buffer.append(begin, end - begin);
-        return;
-      }//we have a full message here
-      else {
-        buffer.append(begin, length);
-        //send on the request
-        this->proxy.send(requester, ZMQ_DONTWAIT | ZMQ_SNDMORE);
-        this->proxy.send(static_cast<const void*>(&request_id), sizeof(request_id), ZMQ_DONTWAIT | ZMQ_SNDMORE);
-        this->proxy.send(static_cast<const void *>(&buffer[pos + 1]), length - 1, ZMQ_DONTWAIT);
-        if(log) {
-          std::string log_line = std::to_string(request_id);
-          log_line.push_back(' ');
-          log_line.append(&buffer[pos + 1], length - 1);
-          LOG_INFO(log_line);
-        }
-        //remember we are working on it
-        this->requests.emplace(request_id++, requester);
-        begin += length;
-      }
-    }
-
-    //keep getting pieces if there is enough space for the message length plus a message
-    if(begin < end && !isdigit(*begin))
-      throw std::runtime_error("Netstring protocol message cannot begin with anything but a digit");
-    const char* delim = begin;
-    while(delim < end) {
-      //get next colon
-      const char* next_delim = delim;
-      for(;next_delim < end; ++next_delim)
-        if(*next_delim == ':')
-          break;
-      if(next_delim == end)
-        break;
-
-      //convert the previous portion to a number
-      std::string length_str(delim, next_delim - delim);
-      size_t length = std::stoul(length_str);
-      const char* piece = next_delim + 1;
-      next_delim += length + 2;
-
-      //data is past the end which means we dont have it all yet
-      if(next_delim > end)
-        break;
-
+  void netstring_server_t::enqueue(const void* message, size_t size, const std::string& requester, netstring_entity_t& request) {
+    auto requests = request.from_stream(static_cast<const char*>(message), size);
+    for(const auto& parsed_request : requests) {
       //send on the request
       this->proxy.send(requester, ZMQ_DONTWAIT | ZMQ_SNDMORE);
       this->proxy.send(static_cast<const void*>(&request_id), sizeof(request_id), ZMQ_DONTWAIT | ZMQ_SNDMORE);
-      this->proxy.send(static_cast<const void*>(piece), length, ZMQ_DONTWAIT);
+      this->proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT);
       if(log) {
-        std::string log_line = std::to_string(request_id);
+        auto log_line = std::to_string(request_id);
         log_line.push_back(' ');
-        log_line.append(piece, length);
-        LOG_INFO(log_line);
+        log_line += logging::timestamp();
+        log_line.push_back(' ');
+        log_line += request.body;
+        log_line.push_back('\n');
+        logging::log(log_line);
       }
       //remember we are working on it
       this->requests.emplace(request_id++, requester);
-      delim = next_delim;
     }
-    buffer.assign(delim, end - delim);
   }
+
   void netstring_server_t::dequeue(const uint64_t& request_info, size_t length) {
     //NOTE: netstring protocol is always keep alive so we leave the session intact
     auto removed = requests.erase(request_info);
@@ -178,14 +134,6 @@ namespace prime_server {
       LOG_WARN("Unknown or timed-out request id: " + std::to_string(request_info));
     else if(log)
       LOG_INFO(std::to_string(request_info) + " REPLIED");
-  }
-
-  void netstring_request_t::format(std::string& message) {
-    message = std::to_string(message.size()) + ':' + message + ',';
-  }
-
-  void netstring_response_t::format(std::string& message) {
-    message = std::to_string(message.size()) + ':' + message + ',';
   }
 
 }
