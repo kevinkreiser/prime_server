@@ -423,6 +423,7 @@ namespace prime_server {
     path.clear();
     query.clear();
   }
+
   size_t http_request_t::size() const {
     return consumed + partial_buffer.size();
   }
