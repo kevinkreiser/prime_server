@@ -63,15 +63,20 @@ namespace prime_server {
     void handle_request(std::list<zmq::message_t>& messages);
     //implementing class shall:
     //  take the request_container pump more bytes into and get back out >= 0 whole request objects
-    //  for each whole request:
-    //    send the requester as a message to the proxy
-    //    send the request id as a message to the proxy
-    //    send the request as a message to the proxy
-    //    record the request with its id
-    //    log the request if log == true
+    //  while there are bytes to process:
+    //    if the request is malformed or too large
+    //      signal the client appropriately
+    //      return false to terminate the session/connection
+    //      log the request if log == true
+    //    otherwise, for each whole request:
+    //      send the requester as a message to the proxy
+    //      send the request id as a message to the proxy
+    //      send the request as a message to the proxy
+    //      record the request with its id
+    //      log the request if log == true
     virtual void enqueue(const void* bytes, size_t length, const std::string& requester, request_container_t& streaming_request) = 0;
     //implementing class shall:
-    //  remove the outstanding request as it was either satisfied, timed-out, malformed or too large
+    //  remove the outstanding request as it was either satisfied, timed-out
     //  depending on the original request or the result the session may also be terminated
     //  log the response if log == true
     virtual void dequeue(const request_info_t& request_info, size_t length) = 0;

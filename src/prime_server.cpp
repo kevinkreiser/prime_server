@@ -140,7 +140,6 @@ namespace prime_server {
       }
 
       //TODO: kill stale sessions
-      //TODO: kill long requests requests
     }
   }
 
@@ -202,10 +201,20 @@ namespace prime_server {
     }//actual request data
     else {
       if(session != sessions.end()) {
+        /*
+        //proxy any whole bits onward, or if that failed (malformed or large request) close the session
+        if(!enqueue(body.data(), body.size(), requester, session->second)) {
+          sessions.erase(session);
+          client.send(messages.front(), ZMQ_SNDMORE | ZMQ_DONTWAIT);
+          client.send(static_cast<const void*>(""), 0, ZMQ_DONTWAIT);
+        }
+        */
+
+
         //hangup if this is all too much (in the buffer)
         request_container_t& streaming = session->second;
         if(body.size() + streaming.size() > max_request_size) {
-          //TODO: 414 for http clients
+          //TODO: 413 for http clients
           //TODO: find and kill all outstanding requests from this session
           sessions.erase(session);
           client.send(messages.front(), ZMQ_SNDMORE | ZMQ_DONTWAIT);
@@ -219,6 +228,7 @@ namespace prime_server {
           enqueue(body.data(), body.size(), requester, streaming);
         }//bogus protocol data
         catch(const std::exception& e) {
+          //TODO: 400 for http clients
           //TODO: make sure it didnt put any requests into the system
           sessions.erase(session);
           client.send(messages.front(), ZMQ_SNDMORE | ZMQ_DONTWAIT);
@@ -366,7 +376,7 @@ namespace prime_server {
   }
 
   //explicit instantiation for netstring and http
-  template class server_t<std::string, uint64_t>;
+  template class server_t<netstring_entity_t, uint64_t>;
   template class server_t<http_request_t, http_request_t::info_t>;
 
 
