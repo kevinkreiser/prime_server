@@ -5,6 +5,7 @@
 #include <prime_server/zmq_helpers.hpp>
 
 #include <cstdint>
+#include <limits>
 
 namespace prime_server {
 
@@ -13,7 +14,7 @@ namespace prime_server {
     std::string to_string() const;
     static std::string to_string(const std::string& message);
     static netstring_entity_t from_string(const char* start, size_t length);
-    std::list<netstring_entity_t> from_stream(const char* start, size_t length);
+    std::list<netstring_entity_t> from_stream(const char* start, size_t length, size_t max_size = std::numeric_limits<size_t>::max());
     void flush_stream();
     size_t size() const;
 
@@ -34,7 +35,7 @@ namespace prime_server {
     netstring_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log = false, size_t max_request_size = 7168);
     virtual ~netstring_server_t();
    protected:
-    virtual void enqueue(const void* message, size_t size, const std::string& requester, netstring_entity_t& buffer);
+    virtual bool enqueue(const void* message, size_t size, const std::string& requester, netstring_entity_t& buffer);
     virtual void dequeue(const uint64_t& request_info, size_t length);
     uint64_t request_id;
   };
