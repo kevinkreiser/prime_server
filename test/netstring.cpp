@@ -135,13 +135,15 @@ namespace {
     client.batch();
   }
 
+  constexpr size_t MAX_REQUEST_SIZE = 9000;
+
   void test_parallel_clients() {
 
     zmq::context_t context;
 
     //server
     std::thread server(std::bind(&netstring_server_t::serve,
-      netstring_server_t(context, "ipc://test_netstring_server", "ipc://test_netstring_proxy_upstream", "ipc://test_netstring_results", false, 9000)));
+      netstring_server_t(context, "ipc://test_netstring_server", "ipc://test_netstring_proxy_upstream", "ipc://test_netstring_results", false, MAX_REQUEST_SIZE)));
     server.detach();
 
     //load balancer for parsing
@@ -169,6 +171,44 @@ namespace {
     client2.join();
   }
 
+  void test_malformed() {
+    zmq::context_t context;
+    std::string request = "isch_doch_unsinn";
+    netstring_client_t client(context, "ipc://test_netstring_server",
+      [&request]() {
+        return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
+      },
+      [](const void* data, size_t size) {
+        auto response = netstring_entity_t::from_string(static_cast<const char*>(data), size);
+        if(response.body.substr(0, 11) != "BAD_REQUEST")
+          throw std::runtime_error("Expected BAD_REQUEST response!");
+        return false;
+      }, 1
+    );
+    client.batch();
+
+    //TODO: check that you're disconnected
+  }
+
+  void test_too_large() {
+    zmq::context_t context;
+    std::string request = netstring_entity_t::to_string(std::string(MAX_REQUEST_SIZE + 10, '!'));
+    netstring_client_t client(context, "ipc://test_netstring_server",
+      [&request]() {
+        return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
+      },
+      [](const void* data, size_t size) {
+        auto response = netstring_entity_t::from_string(static_cast<const char*>(data), size);
+        if(response.body.substr(0, 8) != "TOO_LONG")
+          throw std::runtime_error("Expected TOO_LONG response!");
+        return false;
+      }, 1
+    );
+    client.batch();
+
+    //TODO: check that you're disconnected
+  }
+
 }
 
 int main() {
@@ -184,6 +224,10 @@ int main() {
   suite.test(TEST_CASE(test_entity));
 
   suite.test(TEST_CASE(test_parallel_clients));
+
+  suite.test(TEST_CASE(test_malformed));
+
+  suite.test(TEST_CASE(test_too_large));
 
   return suite.tear_down();
 }
