@@ -3,8 +3,8 @@
 
 //some version info
 #define PRIME_SERVER_VERSION_MAJOR 0
-#define PRIME_SERVER_VERSION_MINOR 1
-#define PRIME_SERVER_VERSION_PATCH 2
+#define PRIME_SERVER_VERSION_MINOR 2
+#define PRIME_SERVER_VERSION_PATCH 0
 
 
 #include <functional>
@@ -65,8 +65,8 @@ namespace prime_server {
     //  take the request_container pump more bytes into and get back out >= 0 whole request objects
     //  while there are bytes to process:
     //    if the request is malformed or too large
-    //      signal the client appropriately
-    //      return false to terminate the session/connection
+    //      signal the client socket appropriately
+    //      return false if terminating the session/connection is desired
     //      log the request if log == true
     //    otherwise, for each whole request:
     //      send the requester as a message to the proxy
@@ -74,7 +74,7 @@ namespace prime_server {
     //      send the request as a message to the proxy
     //      record the request with its id
     //      log the request if log == true
-    virtual void enqueue(const void* bytes, size_t length, const std::string& requester, request_container_t& streaming_request) = 0;
+    virtual bool enqueue(const void* bytes, size_t length, const std::string& requester, request_container_t& streaming_request) = 0;
     //implementing class shall:
     //  remove the outstanding request as it was either satisfied, timed-out
     //  depending on the original request or the result the session may also be terminated

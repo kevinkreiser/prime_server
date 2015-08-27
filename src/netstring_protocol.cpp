@@ -4,6 +4,20 @@
 #include <cctype>
 #include <cstdlib>
 
+namespace {
+
+  void log_transaction(uint64_t id, const std::string& transaction) {
+    auto log_line = std::to_string(id);
+    log_line.push_back(' ');
+    log_line += logging::timestamp();
+    log_line.push_back(' ');
+    log_line += transaction;
+    log_line.push_back('\n');
+    logging::log(log_line);
+  }
+
+}
+
 namespace prime_server {
 
   netstring_entity_t::netstring_entity_t():body(),body_length(0) {
@@ -25,9 +39,10 @@ namespace prime_server {
     return std::move(requests.front());
   }
 
-  std::list<netstring_entity_t> netstring_entity_t::from_stream(const char* start, size_t length) {
+  std::list<netstring_entity_t> netstring_entity_t::from_stream(const char* start, size_t length, size_t max_size) {
     std::list<netstring_entity_t> requests;
     size_t i = 0;
+    size_t remaining = 0;
     while(i < length) {
       //we are looking for the length
       if(body_length == 0) {
@@ -38,7 +53,10 @@ namespace prime_server {
           if(c == ':') {
             //get the length
             body.append(start, start + i);
-            body_length = std::stoul(body);
+            try { body_length = std::stoul(body); }
+            catch(...) { throw std::runtime_error("BAD_REQUEST: Non-numeric length"); }
+            if(body_length > max_size)
+              throw std::runtime_error("TOO_LONG: Request exceeded max");
             //reset for body
             start += i + 1;
             length -= i + 1;
@@ -47,29 +65,28 @@ namespace prime_server {
             continue;
           }//this isnt what we expect
           else
-            throw std::runtime_error("Malformed netstring request");
+            throw std::runtime_error("BAD_REQUEST: Missing ':' between length and body");
         }
         //next char
         ++i;
         continue;
       }//we are looking for the body
-      else if(body_length - body.size() < length) {
-        if(start[body_length - body.size()] == ',') {
+      else if((remaining = body_length - body.size()) < length) {
+        if(start[remaining] == ',') {
           //make a new one
           requests.emplace_back();
           requests.back().body = std::move(body);
-          requests.back().body.append(start, start + (body_length - body.size()));
-          requests.back().body_length = body_length;
+          requests.back().body_length = 0;
+          requests.back().body.append(start, start + remaining);
           //reset for next
-          start += (body_length - body.size()) + 1;
-          length -= (body_length - body.size()) + 1;
+          start += remaining + 1;
+          length -= remaining + 1;
           i = 0;
-          body_length = 0;
-          body.clear();
+          flush_stream();
           continue;
         }//this isnt what we expect
         else
-          throw std::runtime_error("Malformed netstring request");
+          throw std::runtime_error("BAD_REQUEST: Missing ',' after body");
       }
       //we werent looking for length, and the body didnt fit in what we had
       //so we are done for now and need more data
@@ -106,25 +123,34 @@ namespace prime_server {
 
   netstring_server_t::~netstring_server_t(){}
 
-  void netstring_server_t::enqueue(const void* message, size_t size, const std::string& requester, netstring_entity_t& request) {
-    auto requests = request.from_stream(static_cast<const char*>(message), size);
-    for(const auto& parsed_request : requests) {
-      //send on the request
+  bool netstring_server_t::enqueue(const void* message, size_t size, const std::string& requester, netstring_entity_t& request) {
+    //do some parsing
+    std::list<netstring_entity_t> parsed_requests;
+    try {
+      parsed_requests = request.from_stream(static_cast<const char*>(message), size, max_request_size);
+    }//something went wrong either bad request or too long
+    catch(const std::runtime_error& e) {
+      client.send(requester, ZMQ_SNDMORE | ZMQ_DONTWAIT);
+      client.send(netstring_entity_t::to_string(e.what()), ZMQ_DONTWAIT);
+      if(log) {
+        log_transaction(request_id, e.what());
+        log_transaction(request_id, "REPLIED");
+      }
+      ++request_id;
+      return true;
+    }
+
+    //send on each request
+    for(const auto& parsed_request : parsed_requests) {
       this->proxy.send(requester, ZMQ_DONTWAIT | ZMQ_SNDMORE);
       this->proxy.send(static_cast<const void*>(&request_id), sizeof(request_id), ZMQ_DONTWAIT | ZMQ_SNDMORE);
       this->proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT);
-      if(log) {
-        auto log_line = std::to_string(request_id);
-        log_line.push_back(' ');
-        log_line += logging::timestamp();
-        log_line.push_back(' ');
-        log_line += request.body;
-        log_line.push_back('\n');
-        logging::log(log_line);
-      }
+      if(log)
+        log_transaction(request_id, request.body);
       //remember we are working on it
       this->requests.emplace(request_id++, requester);
     }
+    return true;
   }
 
   void netstring_server_t::dequeue(const uint64_t& request_info, size_t length) {
@@ -133,7 +159,7 @@ namespace prime_server {
     if(removed != 1)
       LOG_WARN("Unknown or timed-out request id: " + std::to_string(request_info));
     else if(log)
-      LOG_INFO(std::to_string(request_info) + " REPLIED");
+      log_transaction(request_info, "REPLIED");
   }
 
 }

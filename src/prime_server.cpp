@@ -201,39 +201,11 @@ namespace prime_server {
     }//actual request data
     else {
       if(session != sessions.end()) {
-        /*
         //proxy any whole bits onward, or if that failed (malformed or large request) close the session
         if(!enqueue(body.data(), body.size(), requester, session->second)) {
           sessions.erase(session);
           client.send(messages.front(), ZMQ_SNDMORE | ZMQ_DONTWAIT);
           client.send(static_cast<const void*>(""), 0, ZMQ_DONTWAIT);
-        }
-        */
-
-
-        //hangup if this is all too much (in the buffer)
-        request_container_t& streaming = session->second;
-        if(body.size() + streaming.size() > max_request_size) {
-          //TODO: 413 for http clients
-          //TODO: find and kill all outstanding requests from this session
-          sessions.erase(session);
-          client.send(messages.front(), ZMQ_SNDMORE | ZMQ_DONTWAIT);
-          client.send(static_cast<const void*>(""), 0, ZMQ_DONTWAIT);
-          LOG_WARN("Closed connection: request was too large");
-          return;
-        }
-
-        //proxy any whole bits onward
-        try {
-          enqueue(body.data(), body.size(), requester, streaming);
-        }//bogus protocol data
-        catch(const std::exception& e) {
-          //TODO: 400 for http clients
-          //TODO: make sure it didnt put any requests into the system
-          sessions.erase(session);
-          client.send(messages.front(), ZMQ_SNDMORE | ZMQ_DONTWAIT);
-          client.send(static_cast<const void*>(""), 0, ZMQ_DONTWAIT);
-          LOG_WARN("Closed connection: malformed request");
         }
       }
       else
