@@ -48,7 +48,7 @@ namespace {
     testable_http_request_t request;
     std::string incoming("GET /irgendwelle/pfad HTTP/1.1\r");
     server.enqueue(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", request);
-    incoming ="\nContent-Length: 7\r\n\r\ngohtlosGET /annrer/pfad?aafrag=gel HTTP/1.0\r\n\r\nsell_siehscht_du_au_noed";
+    incoming ="\nContent-Length: 7\r\n\r\ngohtlosGET /annrer/pfad?aafrag=gel HTTP/1.0\r\n\r\nGET sell_siehscht_du_au_noed";
     server.enqueue(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", request);
 
     if(server.request_id != 2)
@@ -243,13 +243,15 @@ namespace {
     client.batch();
   }
 
+  constexpr size_t MAX_REQUEST_SIZE = 9000;
+
   void test_parallel_clients() {
 
     zmq::context_t context;
 
     //server
     std::thread server(std::bind(&http_server_t::serve,
-     http_server_t(context, "ipc://test_http_server", "ipc://test_http_proxy_upstream", "ipc://test_http_results", false, 9000)));
+     http_server_t(context, "ipc://test_http_server", "ipc://test_http_proxy_upstream", "ipc://test_http_results", false, MAX_REQUEST_SIZE)));
     server.detach();
 
     //load balancer for parsing
@@ -287,6 +289,44 @@ namespace {
     client2.join();
   }
 
+  void test_malformed() {
+    zmq::context_t context;
+    std::string request = "isch_doch_unsinn";
+    http_client_t client(context, "ipc://test_http_server",
+      [&request]() {
+        return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
+      },
+      [](const void* data, size_t size) {
+        auto response = http_response_t::from_string(static_cast<const char*>(data), size);
+        if(response.code != 400)
+          throw std::runtime_error("Expected 400 response code!");
+        return false;
+      }, 1
+    );
+    client.batch();
+
+    //TODO: check that you're disconnected
+  }
+
+  void test_too_large() {
+    zmq::context_t context;
+    std::string request = http_request_t(POST, "/", std::string(MAX_REQUEST_SIZE + 10, '!')).to_string();
+    http_client_t client(context, "ipc://test_http_server",
+      [&request]() {
+        return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
+      },
+      [](const void* data, size_t size) {
+        auto response = http_response_t::from_string(static_cast<const char*>(data), size);
+        if(response.code != 413)
+          throw std::runtime_error("Expected 413 response code!");
+        return false;
+      }, 1
+    );
+    client.batch();
+
+    //TODO: check that you're disconnected
+  }
+
 }
 
 int main() {
@@ -308,5 +348,10 @@ int main() {
   suite.test(TEST_CASE(test_response));
 
   suite.test(TEST_CASE(test_parallel_clients));
+
+  suite.test(TEST_CASE(test_malformed));
+
+  suite.test(TEST_CASE(test_too_large));
+
   return suite.tear_down();
 }
