@@ -58,7 +58,8 @@ bin_PROGRAMS = \
 	prime_serverd \
 	prime_httpd \
 	prime_proxyd \
-	prime_workerd
+	prime_workerd \
+	prime_echod
 prime_serverd_SOURCES = \
         src/prime_serverd.cpp
 prime_serverd_CPPFLAGS = $(DEPS_CFLAGS)
@@ -75,8 +76,10 @@ prime_workerd_SOURCES = \
         src/prime_workerd.cpp
 prime_workerd_CPPFLAGS = $(DEPS_CFLAGS)
 prime_workerd_LDADD = $(DEPS_LIBS) libprime_server.la
-
-
+prime_echod_SOURCES = \
+        src/prime_echod.cpp
+prime_echod_CPPFLAGS = $(DEPS_CFLAGS)
+prime_echod_LDADD = $(DEPS_LIBS) libprime_server.la
 
 # tests
 check_PROGRAMS = test/zmq test/netstring test/http

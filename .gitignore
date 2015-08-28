@@ -39,6 +39,7 @@ prime_serverd
 prime_httpd
 prime_proxyd
 prime_workerd
+prime_echod
 
 # tests
 test-suite.log
