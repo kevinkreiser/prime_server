@@ -19,6 +19,20 @@ namespace zmq {
       return ptr.get();
     }
 
+    message_t::message_t(void* data, size_t size, void (*free_function)(void*,void*)) {
+      //make the c message
+      zmq_msg_t* message = new zmq_msg_t();
+      if(zmq_msg_init_data(message, data, size, free_function, nullptr) != 0)
+        throw std::runtime_error(zmq_strerror(zmq_errno()));
+
+      //wrap it in RAII goodness
+      ptr.reset(message,
+        [](zmq_msg_t* message) {
+          assert(zmq_msg_close(message) == 0);
+          delete message;
+        });
+    }
+
     message_t::message_t(size_t size) {
       //make the c message
       zmq_msg_t* message = new zmq_msg_t();
@@ -48,6 +62,14 @@ namespace zmq {
     }
     size_t message_t::size() const {
       return zmq_msg_size(const_cast<zmq_msg_t*>(ptr.get()));
+    }
+
+    bool message_t::operator==(const message_t& other) const {
+      return std::memcmp(data(), other.data(), size()) == 0;
+    }
+
+    bool message_t::operator!=(const message_t& other) const {
+      return std::memcmp(data(), other.data(), size()) != 0;
     }
 
     socket_t::socket_t(const context_t& context, int socket_type):context(context) {
