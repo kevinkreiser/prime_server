@@ -247,7 +247,7 @@ namespace prime_server {
       return true;
     }
     //we ran out
-    partial_buffer.assign(cursor, length);
+    partial_buffer.append(cursor, length);
     return false;
   }
 
