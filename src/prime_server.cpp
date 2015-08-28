@@ -151,8 +151,6 @@ namespace prime_server {
     }
     if(messages.size() > 3) {
       LOG_WARN("Cannot reply with more than one message, dropping additional");
-      //TODO: to properly allow for chunked/streamed responses we may need to
-      //either allow this or allow a worker to respond multiple times
       messages.resize(3);
     }
     if(messages.back().size() == 0)

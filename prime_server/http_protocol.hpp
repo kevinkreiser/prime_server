@@ -120,7 +120,8 @@ namespace prime_server {
     virtual std::string to_string() const;
     static http_response_t from_string(const char* start, size_t length);
     std::list<http_response_t> from_stream(const char* start, size_t length);
-    static std::string generic(unsigned code, const std::string message, const headers_t& headers = headers_t{}, const std::string& body = "", const std::string& version = "HTTP/1.1");
+    static std::string generic(unsigned code, const std::string message, const headers_t& headers = headers_t{}, const std::string& body = "",
+                               const std::string& version = "HTTP/1.1");
     void flush_stream();
 
    protected:
@@ -129,7 +130,8 @@ namespace prime_server {
 
   class http_server_t : public server_t<http_request_t, http_request_t::info_t> {
    public:
-    http_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log = false, size_t max_request_size = 7168);
+    http_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint,
+                  const std::string& result_endpoint, bool log = false, size_t max_request_size = DEFAULT_MAX_REQUEST_SIZE);
     virtual ~http_server_t();
    protected:
     virtual bool enqueue(const void* message, size_t size, const std::string& requester, http_request_t& request);

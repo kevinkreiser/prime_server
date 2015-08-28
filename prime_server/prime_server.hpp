@@ -4,7 +4,7 @@
 //some version info
 #define PRIME_SERVER_VERSION_MAJOR 0
 #define PRIME_SERVER_VERSION_MINOR 3
-#define PRIME_SERVER_VERSION_PATCH 0
+#define PRIME_SERVER_VERSION_PATCH 1
 
 
 #include <functional>
@@ -51,11 +51,13 @@ namespace prime_server {
   };
 
   //server sits between a clients and a load balanced backend
+  constexpr size_t DEFAULT_MAX_REQUEST_SIZE = 1024*1024*10;
   template <class request_container_t, class request_info_t>
   class server_t {
    public:
     static_assert(std::is_pod<request_info_t>::value, "server requires POD types for request info");
-    server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log = false, size_t max_request_size = 7168);
+    server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint,
+       const std::string& result_endpoint, bool log = false, size_t max_request_size = DEFAULT_MAX_REQUEST_SIZE);
     virtual ~server_t();
     void serve();
    protected:
@@ -107,6 +109,9 @@ namespace prime_server {
   //get work from a load balancer proxy letting it know when you are idle
   class worker_t {
    public:
+    //TODO: refactor this to allow streaming response (transfer-encoding: chunked)
+    //might want to add another bool in here to single that we need to call the work
+    //function again until it somehow signals that its sending the last chunk
     struct result_t {
       bool intermediate;
       std::list<std::string> messages;

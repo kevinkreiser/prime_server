@@ -32,7 +32,8 @@ namespace prime_server {
 
   class netstring_server_t : public server_t<netstring_entity_t, uint64_t> {
    public:
-    netstring_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log = false, size_t max_request_size = 7168);
+    netstring_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint,
+                       const std::string& result_endpoint, bool log = false, size_t max_request_size = DEFAULT_MAX_REQUEST_SIZE);
     virtual ~netstring_server_t();
    protected:
     virtual bool enqueue(const void* message, size_t size, const std::string& requester, netstring_entity_t& buffer);
