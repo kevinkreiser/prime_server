@@ -135,7 +135,7 @@ namespace {
     client.batch();
   }
 
-  constexpr size_t MAX_REQUEST_SIZE = 9000;
+  constexpr size_t MAX_REQUEST_SIZE = 1024*1024;
 
   void test_parallel_clients() {
 
@@ -209,6 +209,34 @@ namespace {
     //TODO: check that you're disconnected
   }
 
+
+  void test_large_request() {
+    zmq::context_t context;
+
+    //make a nice visible ascii string request
+    std::string request(MAX_REQUEST_SIZE - 100, ' ');
+    for(size_t i = 0; i < request.size(); ++i)
+      request[i] = (i % 95) + 32;
+    request = netstring_entity_t::to_string(request);
+
+    //see if we get it back
+    netstring_client_t client(context, "ipc://test_netstring_server",
+      [&request]() {
+        return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
+      },
+      [&request](const void* data, size_t size) {
+        //get the result and tell if there is more or not
+        if(size != request.size())
+          throw std::runtime_error("Unexpected response size!");
+        if(strcmp(static_cast<const char*>(data), request.c_str()) != 0)
+          throw std::runtime_error("Unexpected response data!");
+        return false;
+      }, 1
+    );
+    //request and receive
+    client.batch();
+  }
+
 }
 
 int main() {
@@ -228,6 +256,8 @@ int main() {
   suite.test(TEST_CASE(test_malformed));
 
   suite.test(TEST_CASE(test_too_large));
+
+  suite.test(TEST_CASE(test_large_request));
 
   return suite.tear_down();
 }
