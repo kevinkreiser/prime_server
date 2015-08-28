@@ -131,6 +131,7 @@ namespace prime_server {
       //got a new request
       if(items[1].revents & ZMQ_POLLIN) {
         try {
+          //TODO: put a large wait in here to see if messages larger than buffer size can pile up and get skipped
           auto messages = client.recv_all(ZMQ_DONTWAIT);
           handle_request(messages);
         }
@@ -167,8 +168,9 @@ namespace prime_server {
   template <class request_container_t, class request_info_t>
   void server_t<request_container_t, request_info_t>::handle_request(std::list<zmq::message_t>& messages) {
     //must be identity and request data
-    if(messages.size() != 2) {
-      LOG_WARN("Ignoring request: wrong number of parts");
+    if(messages.size() < 2) {
+      LOG_WARN("Ignoring request: not enough parts");
+      //TODO: disconnect client?
       return;
     }
 
@@ -180,6 +182,8 @@ namespace prime_server {
     //version 4.0 of stream didn't seem to send a blank connection message
     //then they did in 4.1: http://zeromq.org/docs:4-1-upgrade
     //but now they don't again in 4.2 unless you tell them to with NOTIFY
+    //and even more complicated stuff happened which got back ported for
+    //the sake of consistency. in any case watch out for this
     if(session == sessions.end())
       session = sessions.insert({requester, request_container_t{}}).first;
 #endif
