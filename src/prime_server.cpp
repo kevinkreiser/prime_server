@@ -131,7 +131,6 @@ namespace prime_server {
       //got a new request
       if(items[1].revents & ZMQ_POLLIN) {
         try {
-          //TODO: put a large wait in here to see if messages larger than buffer size can pile up and get skipped
           auto messages = client.recv_all(ZMQ_DONTWAIT);
           handle_request(messages);
         }
@@ -152,8 +151,8 @@ namespace prime_server {
     }
     if(messages.size() > 3) {
       LOG_WARN("Cannot reply with more than one message, dropping additional");
-      //TODO: large responses may get broken up. We could smash them back together here and send them on
-      //we can even detect it by checking the zmq::in/out_batch_size and see if the size matches
+      //TODO: to properly allow for chunked/streamed responses we may need to
+      //either allow this or allow a worker to respond multiple times
       messages.resize(3);
     }
     if(messages.back().size() == 0)
@@ -167,8 +166,11 @@ namespace prime_server {
 
   template <class request_container_t, class request_info_t>
   void server_t<request_container_t, request_info_t>::handle_request(std::list<zmq::message_t>& messages) {
-    //must be identity and request data
-    if(messages.size() < 2) {
+    //must be an identity frame and a message frame if a request larger than
+    //zmq::in_batch_size (8192) is sent over a stream socket it will be broken
+    //up into multiple messages, however each piece will come with an identity
+    //frame so we dont need to worry about there being more than 2 message frames
+    if(messages.size() != 2) {
       LOG_WARN("Ignoring request: not enough parts");
       //TODO: disconnect client?
       return;
@@ -189,11 +191,8 @@ namespace prime_server {
 #endif
 #endif
 
-    //TODO: if you send a request bigger than zmq::in_batch_size (8192) then you will
-    //get more than one message here. this means we need to pump those bytes in as well
-    auto& body = *std::next(messages.begin());
-
     //open or close connection
+    const auto& body = *std::next(messages.begin());
     if(body.size() == 0) {
       //new client
       if(session == sessions.end()) {
@@ -308,13 +307,13 @@ namespace prime_server {
       //got some work to do
       if(item.revents & ZMQ_POLLIN) {
         try {
+          //strip off the address and the request info
           auto messages = upstream_proxy.recv_all(0);
           auto address = std::move(messages.front());
           messages.pop_front();
           auto request_info = std::move(messages.front());
           messages.pop_front();
-          //TODO: for each message you send bigger than zmq::in_batch_size (8192) then you will
-          //get more than one message. this means we need to combine them before calling work_function
+          //do the work
           auto result = work_function(messages, request_info.data());
           //should we send this on to the next proxy
           if(result.intermediate) {
