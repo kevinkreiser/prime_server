@@ -169,7 +169,7 @@ namespace prime_server {
     //up into multiple messages, however each piece will come with an identity
     //frame so we dont need to worry about there being more than 2 message frames
     if(messages.size() != 2) {
-      LOG_WARN("Ignoring request: not enough parts");
+      LOG_WARN("Ignoring request: wrong number of parts");
       //TODO: disconnect client?
       return;
     }
