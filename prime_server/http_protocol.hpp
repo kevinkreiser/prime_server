@@ -8,6 +8,7 @@
 #include <list>
 #include <cstdint>
 #include <string>
+#include <limits>
 
 namespace prime_server {
 
@@ -31,7 +32,6 @@ namespace prime_server {
     std::string buffer;
   };
 
-
   using headers_t = std::unordered_map<std::string, std::string>;
   using query_t = std::unordered_map<std::string, std::list<std::string> >;
   enum method_t { OPTIONS, GET, HEAD, POST, PUT, DELETE, TRACE, CONNECT };
@@ -43,6 +43,10 @@ namespace prime_server {
     {method_t::OPTIONS, "OPTIONS"}, {method_t::GET, "GET"}, {method_t::HEAD, "HEAD"}, {method_t::POST, "POST"},
     {method_t::PUT, "PUT"}, {method_t::DELETE, "DELETE"}, {method_t::TRACE, "TRACE"}, {method_t::CONNECT, "CONNECT"}
   };
+  const std::unordered_map<std::string, bool> SUPPORTED_VERSIONS {
+    {"HTTP/1.0", true}, {"HTTP/1.1", true}
+  };
+
   struct http_entity_t {
     std::string version;
     headers_t headers;
@@ -93,7 +97,7 @@ namespace prime_server {
                                  const headers_t& headers = headers_t{}, const std::string& version = "HTTP/1.1");
     static http_request_t from_string(const char* start, size_t length);
     static query_t split_path_query(std::string& path);
-    std::list<http_request_t> from_stream(const char* start, size_t length);
+    std::list<http_request_t> from_stream(const char* start, size_t length, size_t max_size = std::numeric_limits<size_t>::max());
     void flush_stream();
     size_t size() const;
 
@@ -116,7 +120,8 @@ namespace prime_server {
     virtual std::string to_string() const;
     static http_response_t from_string(const char* start, size_t length);
     std::list<http_response_t> from_stream(const char* start, size_t length);
-    static std::string generic(unsigned code, const std::string message, const headers_t& headers = headers_t{}, const std::string& body = "", const std::string& version = "HTTP/1.1");
+    static std::string generic(unsigned code, const std::string message, const headers_t& headers = headers_t{}, const std::string& body = "",
+                               const std::string& version = "HTTP/1.1");
     void flush_stream();
 
    protected:
@@ -125,10 +130,11 @@ namespace prime_server {
 
   class http_server_t : public server_t<http_request_t, http_request_t::info_t> {
    public:
-    http_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log = false, size_t max_request_size = 7168);
+    http_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint,
+                  const std::string& result_endpoint, bool log = false, size_t max_request_size = DEFAULT_MAX_REQUEST_SIZE);
     virtual ~http_server_t();
    protected:
-    virtual void enqueue(const void* message, size_t size, const std::string& requester, http_request_t& request);
+    virtual bool enqueue(const void* message, size_t size, const std::string& requester, http_request_t& request);
     virtual void dequeue(const http_request_t::info_t& request_info, size_t length);
    protected:
     uint64_t request_id;

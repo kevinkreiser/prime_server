@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <list>
 #include <cassert>
-
+#include <cstring>
 
 namespace zmq {
 
@@ -18,12 +18,15 @@ namespace zmq {
   };
 
   struct message_t {
+    explicit message_t(void* data, size_t size, void (*free_function)(void*,void*) = [](void* ptr, void* hint){delete[] static_cast<unsigned char*>(ptr);});
     explicit message_t(size_t size = 0);
     void reset(size_t size = 0);
     operator zmq_msg_t*();
     void* data();
     const void* data() const;
     size_t size() const;
+    bool operator==(const message_t& other) const;
+    bool operator!=(const message_t& other) const;
    protected:
     std::shared_ptr<zmq_msg_t> ptr;
   };

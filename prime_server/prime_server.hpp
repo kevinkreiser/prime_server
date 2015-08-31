@@ -3,8 +3,8 @@
 
 //some version info
 #define PRIME_SERVER_VERSION_MAJOR 0
-#define PRIME_SERVER_VERSION_MINOR 1
-#define PRIME_SERVER_VERSION_PATCH 2
+#define PRIME_SERVER_VERSION_MINOR 3
+#define PRIME_SERVER_VERSION_PATCH 1
 
 
 #include <functional>
@@ -51,11 +51,13 @@ namespace prime_server {
   };
 
   //server sits between a clients and a load balanced backend
+  constexpr size_t DEFAULT_MAX_REQUEST_SIZE = 1024*1024*10;
   template <class request_container_t, class request_info_t>
   class server_t {
    public:
     static_assert(std::is_pod<request_info_t>::value, "server requires POD types for request info");
-    server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log = false, size_t max_request_size = 7168);
+    server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint,
+       const std::string& result_endpoint, bool log = false, size_t max_request_size = DEFAULT_MAX_REQUEST_SIZE);
     virtual ~server_t();
     void serve();
    protected:
@@ -63,15 +65,20 @@ namespace prime_server {
     void handle_request(std::list<zmq::message_t>& messages);
     //implementing class shall:
     //  take the request_container pump more bytes into and get back out >= 0 whole request objects
-    //  for each whole request:
-    //    send the requester as a message to the proxy
-    //    send the request id as a message to the proxy
-    //    send the request as a message to the proxy
-    //    record the request with its id
-    //    log the request if log == true
-    virtual void enqueue(const void* bytes, size_t length, const std::string& requester, request_container_t& streaming_request) = 0;
+    //  while there are bytes to process:
+    //    if the request is malformed or too large
+    //      signal the client socket appropriately
+    //      return false if terminating the session/connection is desired
+    //      log the request if log == true
+    //    otherwise, for each whole request:
+    //      send the requester as a message to the proxy
+    //      send the request id as a message to the proxy
+    //      send the request as a message to the proxy
+    //      record the request with its id
+    //      log the request if log == true
+    virtual bool enqueue(const void* bytes, size_t length, const std::string& requester, request_container_t& streaming_request) = 0;
     //implementing class shall:
-    //  remove the outstanding request as it was either satisfied or timed-out
+    //  remove the outstanding request as it was either satisfied, timed-out
     //  depending on the original request or the result the session may also be terminated
     //  log the response if log == true
     virtual void dequeue(const request_info_t& request_info, size_t length) = 0;
@@ -102,6 +109,9 @@ namespace prime_server {
   //get work from a load balancer proxy letting it know when you are idle
   class worker_t {
    public:
+    //TODO: refactor this to allow streaming response (transfer-encoding: chunked)
+    //might want to add another bool in here to single that we need to call the work
+    //function again until it somehow signals that its sending the last chunk
     struct result_t {
       bool intermediate;
       std::list<std::string> messages;

@@ -140,7 +140,6 @@ namespace prime_server {
       }
 
       //TODO: kill stale sessions
-      //TODO: kill long requests requests
     }
   }
 
@@ -165,9 +164,13 @@ namespace prime_server {
 
   template <class request_container_t, class request_info_t>
   void server_t<request_container_t, request_info_t>::handle_request(std::list<zmq::message_t>& messages) {
-    //must be identity and request data
+    //must be an identity frame and a message frame if a request larger than
+    //zmq::in_batch_size (8192) is sent over a stream socket it will be broken
+    //up into multiple messages, however each piece will come with an identity
+    //frame so we dont need to worry about there being more than 2 message frames
     if(messages.size() != 2) {
       LOG_WARN("Ignoring request: wrong number of parts");
+      //TODO: disconnect client?
       return;
     }
 
@@ -179,16 +182,15 @@ namespace prime_server {
     //version 4.0 of stream didn't seem to send a blank connection message
     //then they did in 4.1: http://zeromq.org/docs:4-1-upgrade
     //but now they don't again in 4.2 unless you tell them to with NOTIFY
+    //and even more complicated stuff happened which got back ported for
+    //the sake of consistency. in any case watch out for this
     if(session == sessions.end())
       session = sessions.insert({requester, request_container_t{}}).first;
 #endif
 #endif
 
-    //TODO: if you send a request bigger than zmq::in_batch_size (8192) then you will
-    //get more than one message here. this means we need to pump those bytes in as well
-    auto& body = *std::next(messages.begin());
-
     //open or close connection
+    const auto& body = *std::next(messages.begin());
     if(body.size() == 0) {
       //new client
       if(session == sessions.end()) {
@@ -200,28 +202,11 @@ namespace prime_server {
     }//actual request data
     else {
       if(session != sessions.end()) {
-        //hangup if this is all too much (in the buffer)
-        request_container_t& streaming = session->second;
-        if(body.size() + streaming.size() > max_request_size) {
-          //TODO: 414 for http clients
-          //TODO: find and kill all outstanding requests from this session
+        //proxy any whole bits onward, or if that failed (malformed or large request) close the session
+        if(!enqueue(body.data(), body.size(), requester, session->second)) {
           sessions.erase(session);
           client.send(messages.front(), ZMQ_SNDMORE | ZMQ_DONTWAIT);
           client.send(static_cast<const void*>(""), 0, ZMQ_DONTWAIT);
-          LOG_WARN("Closed connection: request was too large");
-          return;
-        }
-
-        //proxy any whole bits onward
-        try {
-          enqueue(body.data(), body.size(), requester, streaming);
-        }//bogus protocol data
-        catch(const std::exception& e) {
-          //TODO: make sure it didnt put any requests into the system
-          sessions.erase(session);
-          client.send(messages.front(), ZMQ_SNDMORE | ZMQ_DONTWAIT);
-          client.send(static_cast<const void*>(""), 0, ZMQ_DONTWAIT);
-          LOG_WARN("Closed connection: malformed request");
         }
       }
       else
@@ -320,13 +305,13 @@ namespace prime_server {
       //got some work to do
       if(item.revents & ZMQ_POLLIN) {
         try {
+          //strip off the address and the request info
           auto messages = upstream_proxy.recv_all(0);
           auto address = std::move(messages.front());
           messages.pop_front();
           auto request_info = std::move(messages.front());
           messages.pop_front();
-          //TODO: for each message you send bigger than zmq::in_batch_size (8192) then you will
-          //get more than one message. this means we need to combine them before calling work_function
+          //do the work
           auto result = work_function(messages, request_info.data());
           //should we send this on to the next proxy
           if(result.intermediate) {
@@ -364,7 +349,7 @@ namespace prime_server {
   }
 
   //explicit instantiation for netstring and http
-  template class server_t<std::string, uint64_t>;
+  template class server_t<netstring_entity_t, uint64_t>;
   template class server_t<http_request_t, http_request_t::info_t>;
 
 

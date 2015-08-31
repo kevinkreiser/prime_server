@@ -40,6 +40,50 @@ namespace {
     curl_free(decoded);
     return decoded_str;
   }
+
+  void log_request(uint64_t id, const std::string& request) {
+    auto log_line = std::to_string(id);
+    log_line.push_back(' ');
+    log_line += logging::timestamp();
+    log_line.push_back(' ');
+    log_line += request;
+    log_line.push_back('\n');
+    logging::log(log_line);
+  }
+
+  void log_response(uint64_t id, uint16_t code, size_t length) {
+    auto log_line = std::to_string(id);
+    log_line.push_back(' ');
+    log_line += logging::timestamp();
+    log_line.push_back(' ');
+    log_line += std::to_string(code);
+    log_line.push_back(' ');
+    log_line += std::to_string(length);
+    log_line.push_back('\n');
+    logging::log(log_line);
+  }
+
+  struct request_exception_t : public std::runtime_error {
+    request_exception_t(const prime_server::http_response_t& response): runtime_error(response.to_string()), code(response.code), response(response.to_string()) { }
+    const uint16_t code;
+    const std::string response;
+  };
+
+  const prime_server::headers_t::value_type CORS{"Access-Control-Allow-Origin", "*"};
+  const request_exception_t RESPONSE_400(prime_server::http_response_t(400, "Bad Request", "Malformed HTTP request", {CORS}));
+  const request_exception_t RESPONSE_413(prime_server::http_response_t(413, "Request Entity Too Large", "The HTTP request was too large", {CORS}));
+  const request_exception_t RESPONSE_501(prime_server::http_response_t(501, "Not Implemented", "The HTTP request method is not supported", {CORS}));
+  const request_exception_t RESPONSE_505(prime_server::http_response_t(505, "HTTP Version Not Supported", "The HTTP request version is not supported", {CORS}));
+
+  template <class T>
+  size_t name_max(const std::unordered_map<std::string, T>& methods) {
+    size_t i = 0;
+    for(const auto& kv : methods)
+      i = std::max(i, kv.first.size());
+    return i;
+  };
+  const size_t METHOD_MAX_SIZE = name_max(prime_server::STRING_TO_METHOD) + 1;
+  const size_t VERSION_MAX_SIZE = name_max(prime_server::SUPPORTED_VERSIONS) + 2;
 }
 
 namespace prime_server {
@@ -169,7 +213,16 @@ namespace prime_server {
     char c;
     //go until we consumed enough bytes
     if(body_length) {
-      while(current++ != end && --body_length);
+      //while(current++ != end && --body_length);
+      //we have enough
+      if(end - current > body_length) {
+        current += body_length;
+        body_length = 0;
+      }//we dont
+      else {
+        body_length -= end - current;
+        current = end;
+      }
       c = body_length != 0;
     }//go until delimiter
     else {
@@ -194,7 +247,7 @@ namespace prime_server {
       return true;
     }
     //we ran out
-    partial_buffer.assign(cursor, length);
+    partial_buffer.append(cursor, length);
     return false;
   }
 
@@ -341,21 +394,31 @@ namespace prime_server {
     return query;
   }
 
-  std::list<http_request_t> http_request_t::from_stream(const char* start, size_t length) {
+  std::list<http_request_t> http_request_t::from_stream(const char* start, size_t length, size_t max_size) {
     std::list<http_request_t> requests;
     cursor = start;
     end = start + length;
     while(start != end) {
-      //grab up to the next return
-      if(!consume_until())
+      //bail if we've seen too much
+      if(consumed + partial_buffer.size() + body_length > max_size)
+        throw RESPONSE_413;
+
+      //grab up to the next delimiter
+      if(!consume_until()) {
+        //should we have seen a method by now?
+        if(state == METHOD && partial_buffer.size() >= METHOD_MAX_SIZE)
+          throw RESPONSE_400;
+        if(state == VERSION && partial_buffer.size() >= VERSION_MAX_SIZE)
+          throw RESPONSE_400;
         break;
+      }
 
       //what are we looking to parse
       switch(state) {
         case METHOD: {
           auto itr = STRING_TO_METHOD.find(partial_buffer);
           if(itr == STRING_TO_METHOD.end())
-            throw std::runtime_error("Unknown http method");
+            throw RESPONSE_501;
           log_line = partial_buffer + delimiter;
           method = itr->second;
           state = PATH;
@@ -369,8 +432,9 @@ namespace prime_server {
           break;
         }
         case VERSION: {
-          if(partial_buffer != "HTTP/1.0" && partial_buffer != "HTTP/1.1")
-            throw std::runtime_error("Unknown http version");
+          auto itr = SUPPORTED_VERSIONS.find(partial_buffer);
+          if(itr == SUPPORTED_VERSIONS.end())
+            throw RESPONSE_505;
           log_line += partial_buffer;
           version.swap(partial_buffer);
           query = split_path_query(path);
@@ -382,18 +446,22 @@ namespace prime_server {
           if(partial_buffer.size()) {
             auto pos = partial_buffer.find(": ");
             if(pos == std::string::npos)
-              throw std::runtime_error("Expected http header");
+              throw RESPONSE_400;
             headers.insert({partial_buffer.substr(0, pos), partial_buffer.substr(pos + 2)});
           }//the end or body
           else {
-            auto length_str = headers.find("Content-Length");
-            if(length_str != headers.end()) {
-              body_length = std::stoul(length_str->second);
+            //standard length specified
+            headers_t::const_iterator value;
+            if((value = headers.find("Content-Length")) != headers.end()) {
+              try{ body_length = std::stoul(value->second); }
+              catch(...) { throw RESPONSE_400; }
               state = BODY;
-            }
+            }//streaming chunks
+            else if((value = headers.find("Transfer-Encoding")) != headers.end() && value->second == "chunked") {
+              state = CHUNKS;
+            }//simple GET
             else {
-              //TODO: check for chunked
-              requests.push_back(http_request_t(method, path, body, query, headers, version));
+              requests.emplace_back(method, path, body, query, headers, version);
               flush_stream();
             }
           }
@@ -401,14 +469,13 @@ namespace prime_server {
         }
         case BODY: {
           body.swap(partial_buffer);
-          requests.push_back(http_request_t(method, path, body, query, headers, version));
+          requests.emplace_back(method, path, body, query, headers, version);
           flush_stream();
           break;
         }
         case CHUNKS: {
           //TODO: actually parse out the length and chunk by alternating
-          //TODO: return 501
-          throw std::runtime_error("not implemented");
+          throw RESPONSE_501;
         }
       }
 
@@ -423,6 +490,7 @@ namespace prime_server {
     path.clear();
     query.clear();
   }
+
   size_t http_request_t::size() const {
     return consumed + partial_buffer.size();
   }
@@ -484,7 +552,7 @@ namespace prime_server {
           break;
         }
         case VERSION: {
-          if(partial_buffer != "HTTP/1.0" && partial_buffer != "HTTP/1.1")
+          if(SUPPORTED_VERSIONS.find(partial_buffer) == SUPPORTED_VERSIONS.end())
             throw std::runtime_error("Unknown http version");
           //log_line += partial_buffer;
           version.swap(partial_buffer);
@@ -570,27 +638,37 @@ namespace prime_server {
   }
   http_server_t::~http_server_t(){}
 
-  void http_server_t::enqueue(const void* message, size_t size, const std::string& requester, http_request_t& request) {
-    auto requests = request.from_stream(static_cast<const char*>(message), size);
-    for(const auto& parsed_request : requests) {
+  bool http_server_t::enqueue(const void* message, size_t size, const std::string& requester, http_request_t& request) {
+    //do some parsing
+    std::list<http_request_t> parsed_requests;
+    try {
+      parsed_requests = request.from_stream(static_cast<const char*>(message), size, max_request_size);
+    }//something went wrong, either in parsing or size limitation
+    catch(const request_exception_t& e) {
+      client.send(requester, ZMQ_SNDMORE | ZMQ_DONTWAIT);
+      client.send(e.response, ZMQ_DONTWAIT);
+      if(log) {
+        log_request(request_id, request.log_line);
+        log_response(request_id, e.code, e.response.size());
+      }
+      ++request_id;
+      return false;
+    }
+
+    //send on each request
+    for(const auto& parsed_request : parsed_requests) {
       //figure out if we are expecting to close this request or not
       auto info = parsed_request.to_info(request_id);
       //send on the request
       this->proxy.send(requester, ZMQ_DONTWAIT | ZMQ_SNDMORE);
       this->proxy.send(static_cast<const void*>(&info), sizeof(info), ZMQ_DONTWAIT | ZMQ_SNDMORE);
       this->proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT);
-      if(log) {
-        auto log_line = std::to_string(request_id);
-        log_line.push_back(' ');
-        log_line += logging::timestamp();
-        log_line.push_back(' ');
-        log_line += request.log_line;
-        log_line.push_back('\n');
-        logging::log(log_line);
-      }
+      if(log)
+        log_request(request_id, parsed_request.log_line);
       //remember we are working on it
       this->requests.emplace(request_id++, requester);
     }
+    return true;
   }
   void http_server_t::dequeue(const http_request_t::info_t& request_info, size_t length) {
     auto request = requests.find(request_info.id);
@@ -603,17 +681,8 @@ namespace prime_server {
         sessions.erase(request->second);
       }
       requests.erase(request);
-      if(log) {
-        auto log_line = std::to_string(request_info.id);
-        log_line.push_back(' ');
-        log_line += logging::timestamp();
-        log_line.push_back(' ');
-        log_line += std::to_string(request_info.response_code);
-        log_line.push_back(' ');
-        log_line += std::to_string(length);
-        log_line.push_back('\n');
-        logging::log(log_line);
-      }
+      if(log)
+        log_response(request_info.id, request_info.response_code, length);
     }
     else
       LOG_WARN("Unknown or timed-out request id: " + std::to_string(request_info.id));

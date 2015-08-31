@@ -7,7 +7,14 @@
 
 namespace {
 
-  void server_thread(zmq::context_t& context, const std::string& request) {
+  std::string readable_string(size_t size) {
+    std::string s(200, ' ');
+    for(size_t i = 0; i < s.size(); ++i)
+      s[i] = (i % 95) + 32;
+    return s;
+  }
+
+  void server_thread(zmq::context_t& context, const std::string& request, size_t iterations) {
     zmq::socket_t server(context, ZMQ_STREAM);
 
     int disabled = 0;
@@ -21,23 +28,29 @@ namespace {
     #endif
     server.bind("ipc://test_server");
 
-    server.recv_all(0);
+    auto identity = server.recv_all(0);
+
+    std::string compounded;
+    for(size_t i = 0; i < iterations; ++i)
+      compounded += request;
 
     std::string combined_request;
-    while(combined_request.size() < request.size()) {
+    while(combined_request.size() < compounded.size()) {
       auto messages = server.recv_all(ZMQ_DONTWAIT);
       if(messages.size() == 0)
         continue;
+      if(messages.front() != identity.front())
+        throw std::runtime_error("Identity frame mismatch");
       messages.pop_front();
       for(const auto& message : messages)
         combined_request.append(static_cast<const char*>(message.data()), message.size());
     }
 
-    if(combined_request != request)
+    if(combined_request != compounded)
       throw std::runtime_error("Unexpected request data");
   }
 
-  void client_thread(zmq::context_t& context, const std::string& request) {
+  void client_thread(zmq::context_t& context, const std::string& request, size_t iterations) {
     zmq::socket_t client(context, ZMQ_STREAM);
 
     int disabled = 0;
@@ -56,19 +69,19 @@ namespace {
     size_t identity_size = sizeof(identity);
     client.getsockopt(ZMQ_IDENTITY, identity, &identity_size);
 
-    client.send(static_cast<const void*>(identity), identity_size, ZMQ_SNDMORE);
-    client.send(request, 0);
+    for(size_t i = 0; i < iterations; ++i) {
+      client.send(static_cast<const void*>(identity), identity_size, ZMQ_SNDMORE);
+      client.send(request, 0);
+    }
   }
 
   void test_batch_overflow_asynchronous() {
     zmq::context_t context;
 
-    std::string request(8500, ' ');
-    for(size_t i = 0; i < request.size(); ++i)
-      request[i] = (i % 95) + 32;
+    std::string request = readable_string(200);
 
-    std::thread server(std::bind(&server_thread, context, request));
-    std::thread client(std::bind(&client_thread, context, request));
+    std::thread server(std::bind(&server_thread, context, request, 1000000));
+    std::thread client(std::bind(&client_thread, context, request, 1000000));
 
     server.join();
     client.join();
@@ -96,32 +109,36 @@ namespace {
     server.bind("ipc://test_server");
     client.connect("ipc://test_server");
 
-    //great eachother
-    server.recv_all(0);
+    //greet each other
+    auto identity = server.recv_all(0);
     client.recv_all(0);
-    uint8_t identity[256];
-    size_t identity_size = sizeof(identity);
-    client.getsockopt(ZMQ_IDENTITY, identity, &identity_size);
+    uint8_t client_identity[256];
+    size_t identity_size = sizeof(client_identity);
+    client.getsockopt(ZMQ_IDENTITY, client_identity, &identity_size);
 
     //make some requests
-    std::string request(8500, ' ');
-    for(size_t i = 0; i < request.size(); ++i)
-      request[i] = (i % 95) + 32;
-    client.send(static_cast<const void*>(identity), identity_size, ZMQ_SNDMORE);
-    client.send(request, 0);
+    std::string request = readable_string(10000);
+    std::string compounded;
+    for(size_t i = 0; i  < 100; ++i) {
+      client.send(static_cast<const void*>(client_identity), identity_size, ZMQ_SNDMORE | ZMQ_DONTWAIT);
+      client.send(request, ZMQ_DONTWAIT);
+      compounded += request;
+    }
 
     //get some requests
     std::string combined_request;
-    while(combined_request.size() < request.size()) {
+    while(combined_request.size() < compounded.size()) {
       auto messages = server.recv_all(ZMQ_DONTWAIT);
       if(messages.size() == 0)
         continue;
+      if(messages.front() != identity.front())
+        throw std::runtime_error("Identity frame mismatch");
       messages.pop_front();
       for(const auto& message : messages)
         combined_request.append(static_cast<const char*>(message.data()), message.size());
     }
 
-    if(combined_request != request)
+    if(combined_request != compounded)
       throw std::runtime_error("Unexpected request data");
   }
 
@@ -138,21 +155,55 @@ namespace {
     router.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
     router.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
 
+    zmq::message_t identity(static_cast<void *>(new unsigned char[7]{'a','b','c','d','e','f','g'}), 7);
+    dealer.setsockopt(ZMQ_IDENTITY, identity.data(), identity.size());
+
     dealer.connect("ipc://test_router_dealer");
     router.bind("ipc://test_router_dealer");
 
-    //make some requests
+    //make lots of little requests
     size_t request_count = 100000;
-    std::string r("this is just a little message but if you send a lot it adds up!");
+    std::string r("this is just a little message but if you send a lot, it adds up!");
     for(size_t i = 0; i < request_count; ++i)
       dealer.send(r, ZMQ_DONTWAIT);
 
     //drain the requests
     size_t got = 0;
-    while(got != 2 * request_count)
-      got += router.recv_all(ZMQ_DONTWAIT).size();
-  }
+    while(got != 2 * request_count) {
+      auto m = router.recv_all(ZMQ_DONTWAIT);
+      got += m.size();
+      if(m.size() == 0)
+        continue;
+      if(m.size() != 2)
+        throw std::runtime_error("Should only be an identity frame and a message");
+      if(m.front() != identity)
+        throw std::runtime_error("Identity frame has the wrong data");
+      if(std::string(static_cast<const char*>(m.back().data()), m.back().size()) != r)
+        throw std::runtime_error("Message frame has the wrong data");
+    }
 
+    //make a fair amount of large requests
+    request_count = 10000;
+    r = readable_string(10000);
+    for(size_t i = 0; i < request_count; ++i)
+      dealer.send(r, ZMQ_DONTWAIT);
+
+    //drain the requests
+    got = 0;
+    while(got != 2 * request_count) {
+      auto m = router.recv_all(ZMQ_DONTWAIT);
+      got += m.size();
+      if(m.size() == 0)
+        continue;
+      if(m.size() != 2)
+        throw std::runtime_error("Should only be an identity frame and a message");
+      if(m.front() != identity)
+        throw std::runtime_error("Identity frame has the wrong data");
+      if(std::string(static_cast<const char*>(m.back().data()), m.back().size()) != r)
+        throw std::runtime_error("Message frame has the wrong data");
+    }
+
+  }
 
   void test_batch_overflow() {
     //instantiation
@@ -192,9 +243,7 @@ namespace {
     client.getsockopt(ZMQ_IDENTITY, identity, &identity_size);
 
     //make some requests
-    std::string request(100, ' ');
-    for(size_t i = 0; i < request.size(); ++i)
-      request[i] = (i % 95) + 32;
+    std::string request = readable_string(100);
     for(size_t i = 0; i < 100; ++i) {
       client.send(static_cast<const void*>(identity), identity_size, ZMQ_SNDMORE);
       client.send(request, 0);

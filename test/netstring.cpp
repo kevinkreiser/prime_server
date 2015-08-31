@@ -32,7 +32,7 @@ namespace {
    public:
     using netstring_client_t::netstring_client_t;
     using netstring_client_t::stream_responses;
-    using netstring_client_t::buffer;
+    using netstring_client_t::response;
   };
 
   void test_streaming_server() {
@@ -40,14 +40,14 @@ namespace {
     testable_netstring_server_t server(context, "ipc://test_netstring_server", "ipc://test_netstring_proxy_upstream", "ipc://test_netstring_results");
     server.passify();
 
-    std::string buffer;
+    netstring_entity_t request;
     std::string incoming("1");
-    server.enqueue(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", buffer);
-    incoming = "2:abgeschnitte,3:mer,5:welle,5:luege,5:oeb's,4:guet,4:isch,du_siehscht_mi_noed";
-    server.enqueue(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", buffer);
+    server.enqueue(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", request);
+    incoming = "2:abgeschnitte,3:mer,5:welle,5:luege,5:oeb's,4:guet,4:isch,81:du_siehscht_mi_noed";
+    server.enqueue(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", request);
     if(server.request_id != 7)
       throw std::runtime_error("Wrong number of requests were forwarded");
-    if(buffer != "du_siehscht_mi_noed")
+    if(request.body != "du_siehscht_mi_noed")
       throw std::runtime_error("Unexpected partial request data");
   }
 
@@ -58,7 +58,8 @@ namespace {
     testable_netstring_client_t client(context, "ipc://test_netstring_server",
       [](){ return std::make_pair<void*, size_t>(nullptr, 0); },
       [&all, &responses](const void* data, size_t size){
-        all.append(static_cast<const char*>(data), size);
+        auto response = netstring_entity_t::from_string(static_cast<const char*>(data), size);
+        all.append(response.body);
         ++responses;
         return true;
       });
@@ -68,7 +69,7 @@ namespace {
     auto reported_responses = client.stream_responses(static_cast<const void*>(incoming.data()), incoming.size(), more);
     incoming = "4:abgeschnitteni,11";
     reported_responses += client.stream_responses(static_cast<const void*>(incoming.data()), incoming.size(), more);
-    incoming = ":rueckmeldig,3:mer,5:welle,5:luege,5:oeb's,4:guet,4:isch,du_siehscht_mi_noed";
+    incoming = ":rueckmeldig,3:mer,5:welle,5:luege,5:oeb's,4:guet,4:isch,81:du_siehscht_mi_noed";
     reported_responses += client.stream_responses(static_cast<const void*>(incoming.data()), incoming.size(), more);
 
     if(!more)
@@ -79,22 +80,17 @@ namespace {
       throw std::runtime_error("Wrong number of responses were collected");
     if(reported_responses != responses)
       throw std::runtime_error("Wrong number of responses were reported");
-    if(client.buffer != "du_siehscht_mi_noed")
+    if(client.response.body != "du_siehscht_mi_noed" || client.response.body_length != 81)
       throw std::runtime_error("Unexpected partial response data");
   }
 
-  void test_request() {
-    std::string netstring("e_chliises_schtoeckli");
-    prime_server::netstring_request_t::format(netstring);
+  void test_entity() {
+    std::string body = "e_chliises_schtoeckli";
+    std::string netstring = netstring_entity_t::to_string(body);
     if(netstring != "21:e_chliises_schtoeckli,")
       throw std::runtime_error("Request was not well-formed");
-  }
-
-  void test_response() {
-    std::string netstring("e_chliises_schtoeckli");
-    prime_server::netstring_request_t::format(netstring);
-    if(netstring != "21:e_chliises_schtoeckli,")
-      throw std::runtime_error("Response was not well-formed");
+    if(netstring_entity_t::from_string(netstring.c_str(), netstring.size()).body != body)
+      throw std::runtime_error("Request was not properly parsed");
   }
 
   constexpr char alpha_numeric[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -121,7 +117,7 @@ namespace {
             request = random_string(50);
             inserted = requests.insert(request);
           }
-          netstring_request_t::format(request);
+          request = netstring_entity_t::to_string(request);
         }//blank request means we are done
         else
           request.clear();
@@ -129,8 +125,8 @@ namespace {
       },
       [&requests, &received](const void* data, size_t size) {
         //get the result and tell if there is more or not
-        std::string response(static_cast<const char*>(data), size);
-        if(requests.find(response) == requests.end())
+        auto response = netstring_entity_t::from_string(static_cast<const char*>(data), size);
+        if(requests.find(response.body) == requests.end())
           throw std::runtime_error("Unexpected response!");
         return ++received < total;
       }, 100
@@ -139,13 +135,15 @@ namespace {
     client.batch();
   }
 
+  constexpr size_t MAX_REQUEST_SIZE = 1024*1024;
+
   void test_parallel_clients() {
 
     zmq::context_t context;
 
     //server
     std::thread server(std::bind(&netstring_server_t::serve,
-      netstring_server_t(context, "ipc://test_netstring_server", "ipc://test_netstring_proxy_upstream", "ipc://test_netstring_results", false, 9000)));
+      netstring_server_t(context, "ipc://test_netstring_server", "ipc://test_netstring_proxy_upstream", "ipc://test_netstring_results", false, MAX_REQUEST_SIZE)));
     server.detach();
 
     //load balancer for parsing
@@ -158,8 +156,9 @@ namespace {
       worker_t(context, "ipc://test_netstring_proxy_downstream", "ipc://NONE", "ipc://test_netstring_results",
       [] (const std::list<zmq::message_t>& job, void*) {
         worker_t::result_t result{false};
-        result.messages.emplace_back(static_cast<const char*>(job.front().data()), job.front().size());
-        netstring_response_t::format(result.messages.back());
+        auto request = netstring_entity_t::from_string(static_cast<const char*>(job.front().data()), job.front().size());
+        auto response = netstring_entity_t::to_string(request.body);
+        result.messages.emplace_back(response);
         return result;
       }
     )));
@@ -170,6 +169,72 @@ namespace {
     std::thread client2(std::bind(&netstring_client_work, context));
     client1.join();
     client2.join();
+  }
+
+  void test_malformed() {
+    zmq::context_t context;
+    std::string request = "isch_doch_unsinn";
+    netstring_client_t client(context, "ipc://test_netstring_server",
+      [&request]() {
+        return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
+      },
+      [](const void* data, size_t size) {
+        auto response = netstring_entity_t::from_string(static_cast<const char*>(data), size);
+        if(response.body.substr(0, 11) != "BAD_REQUEST")
+          throw std::runtime_error("Expected BAD_REQUEST response!");
+        return false;
+      }, 1
+    );
+    client.batch();
+
+    //TODO: check that you're disconnected
+  }
+
+  void test_too_large() {
+    zmq::context_t context;
+    std::string request = netstring_entity_t::to_string(std::string(MAX_REQUEST_SIZE + 10, '!'));
+    netstring_client_t client(context, "ipc://test_netstring_server",
+      [&request]() {
+        return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
+      },
+      [](const void* data, size_t size) {
+        auto response = netstring_entity_t::from_string(static_cast<const char*>(data), size);
+        if(response.body.substr(0, 8) != "TOO_LONG")
+          throw std::runtime_error("Expected TOO_LONG response!");
+        return false;
+      }, 1
+    );
+    client.batch();
+
+    //TODO: check that you're disconnected
+  }
+
+
+  void test_large_request() {
+    zmq::context_t context;
+
+    //make a nice visible ascii string request
+    std::string request(MAX_REQUEST_SIZE - 100, ' ');
+    for(size_t i = 0; i < request.size(); ++i)
+      request[i] = (i % 95) + 32;
+    request = netstring_entity_t::to_string(request);
+
+    //see if we get it back
+    netstring_client_t client(context, "ipc://test_netstring_server",
+      [&request]() {
+        return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
+      },
+      [&request](const void* data, size_t size) {
+        //get the result and tell if there is more or not
+        if(size != request.size())
+          throw std::runtime_error("Unexpected response size!");
+        if(strcmp(static_cast<const char*>(data), request.c_str()) != 0)
+          throw std::runtime_error("Unexpected response data!");
+        return false;
+      }, 1
+    );
+    //request and receive
+    client.batch();
   }
 
 }
@@ -184,11 +249,15 @@ int main() {
 
   suite.test(TEST_CASE(test_streaming_server));
 
-  suite.test(TEST_CASE(test_request));
-
-  suite.test(TEST_CASE(test_response));
+  suite.test(TEST_CASE(test_entity));
 
   suite.test(TEST_CASE(test_parallel_clients));
+
+  suite.test(TEST_CASE(test_malformed));
+
+  suite.test(TEST_CASE(test_too_large));
+
+  suite.test(TEST_CASE(test_large_request));
 
   return suite.tear_down();
 }
