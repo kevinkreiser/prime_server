@@ -462,6 +462,7 @@ namespace prime_server {
             }//simple GET
             else {
               requests.emplace_back(method, path, body, query, headers, version);
+              requests.back().log_line.swap(log_line);
               flush_stream();
             }
           }
@@ -470,6 +471,7 @@ namespace prime_server {
         case BODY: {
           body.swap(partial_buffer);
           requests.emplace_back(method, path, body, query, headers, version);
+          requests.back().log_line.swap(log_line);
           flush_stream();
           break;
         }
@@ -575,7 +577,7 @@ namespace prime_server {
             }
             else {
               //TODO: check for chunked
-              responses.push_back(http_response_t(code, message, body, headers, version));
+              responses.emplace_back(code, message, body, headers, version);
               flush_stream();
             }
           }
@@ -583,7 +585,7 @@ namespace prime_server {
         }
         case BODY: {
           body.swap(partial_buffer);
-          responses.push_back(http_response_t(code, message, body, headers, version));
+          responses.emplace_back(code, message, body, headers, version);
           flush_stream();
           break;
         }
