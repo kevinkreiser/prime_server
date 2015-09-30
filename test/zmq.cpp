@@ -28,7 +28,7 @@ namespace {
     #endif
     server.bind("ipc://test_server");
 
-    auto identity = server.recv_all(0);
+    zmq::message_t identity;
 
     std::string compounded;
     for(size_t i = 0; i < iterations; ++i)
@@ -39,8 +39,9 @@ namespace {
       auto messages = server.recv_all(ZMQ_DONTWAIT);
       if(messages.size() == 0)
         continue;
-      if(messages.front() != identity.front())
+      if(identity.size() != 0 && messages.front() != identity)
         throw std::runtime_error("Identity frame mismatch");
+      identity = std::move(messages.front());
       messages.pop_front();
       for(const auto& message : messages)
         combined_request.append(static_cast<const char*>(message.data()), message.size());
@@ -63,8 +64,11 @@ namespace {
     #endif
     #endif
     client.connect("ipc://test_server");
-
+    #if ZMQ_VERSION_MAJOR >= 4
+    #if ZMQ_VERSION_MINOR >= 1
     client.recv_all(0);
+    #endif
+    #endif
     uint8_t identity[256];
     size_t identity_size = sizeof(identity);
     client.getsockopt(ZMQ_IDENTITY, identity, &identity_size);
@@ -110,8 +114,12 @@ namespace {
     client.connect("ipc://test_server");
 
     //greet each other
-    auto identity = server.recv_all(0);
+    zmq::message_t identity;
+    #if ZMQ_VERSION_MAJOR >= 4
+    #if ZMQ_VERSION_MINOR >= 1
     client.recv_all(0);
+    #endif
+    #endif
     uint8_t client_identity[256];
     size_t identity_size = sizeof(client_identity);
     client.getsockopt(ZMQ_IDENTITY, client_identity, &identity_size);
@@ -131,8 +139,9 @@ namespace {
       auto messages = server.recv_all(ZMQ_DONTWAIT);
       if(messages.size() == 0)
         continue;
-      if(messages.front() != identity.front())
+      if(identity.size() != 0 && messages.front() != identity)
         throw std::runtime_error("Identity frame mismatch");
+      identity = std::move(messages.front());
       messages.pop_front();
       for(const auto& message : messages)
         combined_request.append(static_cast<const char*>(message.data()), message.size());
@@ -236,8 +245,12 @@ namespace {
     router.bind("ipc://test_router_dealer");
 
     //great eachother
-    client.recv_all(0);
+    #if ZMQ_VERSION_MAJOR >= 4
+    #if ZMQ_VERSION_MINOR >= 1
     server.recv_all(0);
+    client.recv_all(0);
+    #endif
+    #endif
     uint8_t identity[256];
     size_t identity_size = sizeof(identity);
     client.getsockopt(ZMQ_IDENTITY, identity, &identity_size);
