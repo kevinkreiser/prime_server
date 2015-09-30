@@ -14,6 +14,8 @@ Build Status
 Grab some deps
 --------------
 
+    # grab some standard autotools stuff
+    sudo apt-get install autoconf automake libtool make gcc-4.9 g++-4.9 lcov 
     # grab curl (for url de/encode) and zmq for the awesomeness
     sudo apt-get install libcurl4-openssl-dev libzmq3-dev
 
