@@ -22,7 +22,9 @@ Grab some deps
 Build and Install
 -----------------
 
-    #standard autotools:
+    # dont forget submodules
+    git submodule update --init --recursive
+    # standard autotools:
     ./autogen.sh
     ./configure
     make test -j8
