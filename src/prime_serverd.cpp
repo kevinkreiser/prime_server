@@ -18,7 +18,7 @@ using namespace prime_server;
 int main(int argc, char** argv) {
 
   if(argc < 2) {
-    LOG_ERROR("Usage: " + std::string(argv[0]) + " num_requests|server_listen_endpoint concurrency");
+    logging::ERROR("Usage: " + std::string(argv[0]) + " num_requests|server_listen_endpoint concurrency");
     return 1;
   }
 
@@ -161,7 +161,7 @@ int main(int argc, char** argv) {
           primes.insert(number);
         }
         catch(...) {
-          LOG_ERROR("Responded with: " + response_str);
+          logging::ERROR("Responded with: " + response_str);
         }
         return ++collected_results < requests;
       }

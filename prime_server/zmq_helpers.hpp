@@ -7,6 +7,7 @@
 #include <list>
 #include <cassert>
 #include <cstring>
+#include <utility>
 
 namespace zmq {
 
@@ -53,12 +54,44 @@ namespace zmq {
     //send all the messages over this socket
     template <class container_t>
     size_t send_all(const std::list<container_t>& messages, int flags);
+    //for polling
     operator void*();
    protected:
     //keep a copy of context so that, if the one used to make
     //this socket goes out of scope, we aren't screwed
     context_t context;
     std::shared_ptr<void> ptr;
+  };
+
+  //all of this stuff is implemented in czmq which means
+  //the interface is completely different (actor pattern).
+  //the beacon is made of a zmq 'command' socket which you
+  //send messages to, to control the beacon. it also has
+  //a udp socket to communicate to other beacons. a thread
+  //runs its own zmq poll loop to handle both sockets
+  using service_t = std::pair<std::string, std::string>;
+  using services_t = std::list<service_t>;
+  struct beacon_t {
+    beacon_t(uint16_t discovery_port = 5670);
+    //ip address
+    const std::string& get_ip() const;
+    //start broadcasting
+    void broadcast(uint16_t service_port, int interval = 2000);
+    //stop broadcasting
+    void silence();
+    //start listening for signals
+    void subscribe(const std::string& filter = "");
+    //stop listening for signals
+    void unsubscribe();
+    //update the services
+    void update();
+    //services
+    const services_t& services() const;
+    //for polling
+    operator void*();
+  protected:
+    struct cheshire_cat_t;
+    std::shared_ptr<cheshire_cat_t> pimpl;
   };
 
   //check for events on a bunch of sockets, multiplexing ftw

@@ -57,7 +57,7 @@ namespace prime_server {
           server.send(static_cast<const void*>(request.first), request.second, 0);
         }
         catch(const std::exception& e) {
-          LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " client_t: " + e.what());
+          logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " client_t: " + e.what());
         }
       }
 
@@ -71,7 +71,7 @@ namespace prime_server {
           current_batch += stream_responses(messages.front().data(), messages.front().size(), more);
         }
         catch(const std::exception& e) {
-          LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " client_t: " + e.what());
+          logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " client_t: " + e.what());
         }
       }
     }
@@ -124,7 +124,7 @@ namespace prime_server {
           handle_response(messages);
         }
         catch(const std::exception& e) {
-          LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " server_t: " + e.what());
+          logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " server_t: " + e.what());
         }
       }
 
@@ -135,7 +135,7 @@ namespace prime_server {
           handle_request(messages);
         }
         catch(const std::exception& e) {
-          LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " server_t: " + e.what());
+          logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " server_t: " + e.what());
         }
       }
 
@@ -146,15 +146,15 @@ namespace prime_server {
   template <class request_container_t, class request_info_t>
   void server_t<request_container_t, request_info_t>::handle_response(std::list<zmq::message_t>& messages) {
     if(messages.size() < 3) {
-      LOG_ERROR("Cannot reply without address and request information");
+      logging::ERROR("Cannot reply without address and request information");
       return;
     }
     if(messages.size() > 3) {
-      LOG_WARN("Cannot reply with more than one message, dropping additional");
+      logging::WARN("Cannot reply with more than one message, dropping additional");
       messages.resize(3);
     }
     if(messages.back().size() == 0)
-      LOG_WARN("Sending empty messages will disconnect the client");
+      logging::WARN("Sending empty messages will disconnect the client");
     client.send(messages.front(), ZMQ_SNDMORE | ZMQ_DONTWAIT);
     client.send(messages.back(), ZMQ_DONTWAIT);
 
@@ -169,7 +169,7 @@ namespace prime_server {
     //up into multiple messages, however each piece will come with an identity
     //frame so we dont need to worry about there being more than 2 message frames
     if(messages.size() != 2) {
-      LOG_WARN("Ignoring request: wrong number of parts");
+      logging::WARN("Ignoring request: wrong number of parts");
       //TODO: disconnect client?
       return;
     }
@@ -210,7 +210,7 @@ namespace prime_server {
         }
       }
       else
-        LOG_WARN("Ignoring request: unknown client");
+        logging::WARN("Ignoring request: unknown client");
     }
   }
 
@@ -248,7 +248,7 @@ namespace prime_server {
             fifo.push(*inserted.first);
         }
         catch(const std::exception& e) {
-          LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " proxy_t: " + e.what());
+          logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " proxy_t: " + e.what());
         }
       }
 
@@ -268,7 +268,7 @@ namespace prime_server {
         }
         catch (const std::exception& e) {
           //TODO: recover from a worker dying just before you sent it work
-          LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " proxy_t: " + e.what());
+          logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " proxy_t: " + e.what());
         }
       }
     }
@@ -321,7 +321,7 @@ namespace prime_server {
           }//or are we done
           else {
             if(result.messages.size() > 1)
-              LOG_WARN("Cannot send more than one result message, additional parts are dropped");
+              logging::WARN("Cannot send more than one result message, additional parts are dropped");
             loopback.send(address, ZMQ_SNDMORE);
             loopback.send(request_info, ZMQ_SNDMORE);
             loopback.send_all(result.messages, 0);
@@ -330,7 +330,7 @@ namespace prime_server {
           cleanup_function();
         }
         catch(const std::exception& e) {
-          LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what());
+          logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what());
         }
       }
 
@@ -344,7 +344,7 @@ namespace prime_server {
       upstream_proxy.send(static_cast<const void*>(""), 0, 0);
     }
     catch (const std::exception& e) {
-      LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what());
+      logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what());
     }
   }
 

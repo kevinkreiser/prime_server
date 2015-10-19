@@ -687,6 +687,6 @@ namespace prime_server {
         log_response(request_info.id, request_info.response_code, length);
     }
     else
-      LOG_WARN("Unknown or timed-out request id: " + std::to_string(request_info.id));
+      logging::WARN("Unknown or timed-out request id: " + std::to_string(request_info.id));
   }
 }

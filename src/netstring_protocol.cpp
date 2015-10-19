@@ -157,7 +157,7 @@ namespace prime_server {
     //NOTE: netstring protocol is always keep alive so we leave the session intact
     auto removed = requests.erase(request_info);
     if(removed != 1)
-      LOG_WARN("Unknown or timed-out request id: " + std::to_string(request_info));
+      logging::WARN("Unknown or timed-out request id: " + std::to_string(request_info));
     else if(log)
       log_transaction(request_info, "REPLIED");
   }
