@@ -7,7 +7,8 @@
 #include <list>
 #include <cassert>
 #include <cstring>
-#include <utility>
+#include <string>
+#include <unordered_map>
 
 namespace zmq {
 
@@ -26,6 +27,7 @@ namespace zmq {
     void* data();
     const void* data() const;
     size_t size() const;
+    std::string str() const;
     bool operator==(const message_t& other) const;
     bool operator!=(const message_t& other) const;
    protected:
@@ -69,8 +71,7 @@ namespace zmq {
   //send messages to, to control the beacon. it also has
   //a udp socket to communicate to other beacons. a thread
   //runs its own zmq poll loop to handle both sockets
-  using service_t = std::pair<std::string, std::string>;
-  using services_t = std::list<service_t>;
+  using services_t = std::unordered_map<std::string, std::string>;
   struct beacon_t {
     beacon_t(uint16_t discovery_port = 5670);
     //ip address
@@ -83,9 +84,9 @@ namespace zmq {
     void subscribe(const std::string& filter = "");
     //stop listening for signals
     void unsubscribe();
-    //update the services
-    void update();
-    //services
+    //update the services and return which just joined and which just dropped
+    std::pair<services_t, services_t> update(bool activity);
+    //return current list of services
     const services_t& services() const;
     //for polling
     operator void*();
@@ -98,6 +99,8 @@ namespace zmq {
   using pollitem_t = zmq_pollitem_t;
   int poll(pollitem_t* items, int count, long timeout = -1);
 
+  //get a random port in IANA suggested range
+  uint16_t random_port();
 }
 
 #endif //__ZMQ_HELPERS_HPP__

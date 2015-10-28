@@ -1,11 +1,9 @@
 #include "zmq_helpers.hpp"
 #include <czmq.h>
-#include <string>
-#include <random>
-#include <unordered_map>
 #include <ctime>
+#include <arpa/inet.h>
 #include <chrono>
-#include <iostream>
+#include <random>
 
 namespace {
 
@@ -74,6 +72,12 @@ namespace zmq {
   }
   size_t message_t::size() const {
     return zmq_msg_size(const_cast<zmq_msg_t*>(ptr.get()));
+  }
+
+  std::string message_t::str() const {
+    return std::string(static_cast<const char*>(
+      zmq_msg_data(const_cast<zmq_msg_t*>(ptr.get()))),
+      zmq_msg_size(const_cast<zmq_msg_t*>(ptr.get())));
   }
 
   bool message_t::operator==(const message_t& other) const {
@@ -178,7 +182,8 @@ namespace zmq {
       }
       return uuid;
     }
-    void purge_clique(std::time_t max_age = 60) {
+    services_t purge_clique(std::time_t max_age = 60) {
+      services_t dropped;
       auto now = std::time(nullptr);
       auto end = punch_card.begin();
       for(; end != punch_card.end(); ++end) {
@@ -186,25 +191,30 @@ namespace zmq {
         if(now - end->first < max_age)
           break;
         //hit the pike codger!
+        dropped.emplace(*end->second);
         clique.erase(end->second->first);
         services.erase(end->second);
       }
       //clean up the ones we axed
       punch_card.erase(punch_card.begin(), end);
+      return dropped;
     }
-    void join_clique(const std::string& uuid, const std::string& endpoint) {
+    bool join_clique(const std::string& endpoint, const std::string& uuid) {
+      bool joined = true;
       auto now = std::time(nullptr);
-      auto member = clique.find(uuid);
+      auto member = clique.find(endpoint);
       //erase their last check in
       if(member != clique.cend()) {
+        joined = false;
         services.erase(member->second->second);
         punch_card.erase(member->second);
         clique.erase(member);
       }
       //check them in
-      services.emplace_back(service_t{uuid, endpoint});
-      punch_card.emplace_back(make_pair(now, std::prev(services.end())));
-      clique.emplace(uuid, std::prev(punch_card.end()));
+      auto inserted = services.insert({endpoint, uuid});
+      punch_card.emplace_back(std::make_pair(now, inserted.first));
+      clique.emplace(endpoint, std::prev(punch_card.end()));
+      return joined;
     }
 
     //for uuid generation
@@ -248,6 +258,7 @@ namespace zmq {
   }
   //start broadcasting
   void beacon_t::broadcast(uint16_t service_port, int interval) {
+    service_port = htons(service_port);
     //make a zre protocol message
     char zre[22];
     memcpy(zre, "ZRE\1", 4);
@@ -267,29 +278,32 @@ namespace zmq {
   void beacon_t::unsubscribe() {
     zstr_sendx(pimpl->actor, "UNSUBSCRIBE", nullptr);
   }
-  //update the peers
-  void beacon_t::update() {
-    //we'll let this person check in
-    char* ip = zstr_recv(pimpl->actor);
+  //update the services
+  std::pair<services_t, services_t> beacon_t::update(bool activity) {
+    //these just came or just went
+    services_t joined, dropped;
+    //if we're expecting someone we'll let them check in
+    char* ip = activity ? zstr_recv(pimpl->actor) : nullptr;
     if(ip) {
       zframe_t* frame = zframe_recv(pimpl->actor);
       //right size and header
       if(zframe_size(frame) == 22 && !memcmp(zframe_data(frame), "ZRE\1", 4)) {
         auto* opaque = static_cast<void*>(zframe_data(frame));
         std::string uuid(static_cast<char*>(opaque) + 4, 16);
-        uint16_t* port = static_cast<uint16_t*>(opaque) + 10;
+        uint16_t port = ntohs(*(static_cast<uint16_t*>(opaque) + 10));
         std::string endpoint("tcp://");
         endpoint += ip;
-        endpoint += ":" + std::to_string(*port);
-        pimpl->join_clique(uuid, endpoint);
+        endpoint += ":" + std::to_string(port);
+        if(pimpl->join_clique(endpoint, uuid))
+          joined.emplace(endpoint, uuid);
       }
       zframe_destroy(&frame);
       zstr_free(&ip);
     }
     //check out people who arent checking in much lately
-    pimpl->purge_clique();
+    dropped = pimpl->purge_clique();
+    return std::make_pair(std::move(joined), std::move(dropped));
   }
-  //services
   const services_t& beacon_t::services() const {
     return pimpl->services;
   }
@@ -304,6 +318,13 @@ namespace zmq {
     if((signaled_events = zmq_poll(items, count, timeout)) < 0)
       throw std::runtime_error(zmq_strerror(zmq_errno()));
     return signaled_events;
+  }
+
+  //make a random port in suggested range
+  uint16_t random_port() {
+    std::default_random_engine generator(std::chrono::system_clock::now().time_since_epoch().count());
+    std::uniform_int_distribution<uint16_t> distribution(49152, 65535);
+    return distribution(generator);
   }
 
   //explicit instantiations for templated sending of data
