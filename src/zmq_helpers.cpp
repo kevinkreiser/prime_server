@@ -170,10 +170,26 @@ namespace zmq {
   }
 
   struct beacon_t::cheshire_cat_t {
-    cheshire_cat_t(): distribution(static_cast<size_t>(0), sizeof(uuid_chars) - 1), actor(nullptr), socket(nullptr) {
+    cheshire_cat_t(uint16_t port): distribution(static_cast<size_t>(0), sizeof(uuid_chars) - 1), actor(nullptr), socket(nullptr) {
+      //make the actor with the beacon function
+      actor.reset(zactor_new(zbeacon, nullptr), [](zactor_t* a){zactor_destroy(&a);});
+      if(!actor)
+        throw std::runtime_error("Beacon not supported");
+      //set up the socket
+      zsock_send(actor.get(), "si", "CONFIGURE", static_cast<int>(port));
+      //get the ip
+      char* name = zstr_recv(actor.get());
+      if(name == nullptr)
+        throw std::runtime_error("Beacon not supported");
+      ip.assign(name);
+      free(name);
+      if(!ip.size())
+        throw std::runtime_error("Beacon not supported");
+      //keep the socket for polling
+      socket = zsock_resolve(zactor_sock(actor.get()));
       generator.seed(std::chrono::system_clock::now().time_since_epoch().count());
     }
-    ~cheshire_cat_t(){zactor_destroy(&actor);}
+    ~cheshire_cat_t(){}
     std::string rand_uuid(size_t size){
       std::string uuid;
       for(size_t i = 0; i < size; ++i) {
@@ -222,7 +238,7 @@ namespace zmq {
     std::uniform_int_distribution<size_t> distribution;
 
     //info about myself
-    zactor_t* actor;
+    std::shared_ptr<zactor_t> actor;
     void* socket;
     std::string ip;
 
@@ -234,23 +250,7 @@ namespace zmq {
     clique_t clique;
   };
 
-  beacon_t::beacon_t(uint16_t discovery_port):pimpl(new cheshire_cat_t) {
-    //make the actor with the beacon function
-    pimpl->actor = zactor_new(zbeacon, nullptr);
-    if(!pimpl->actor)
-      throw std::runtime_error("Beacon not supported");
-    //set up the socket
-    zsock_send(pimpl->actor, "si", "CONFIGURE", static_cast<int>(discovery_port));
-    //get the ip
-    char* name = zstr_recv(pimpl->actor);
-    if(name == nullptr)
-      throw std::runtime_error("Beacon not supported");
-    pimpl->ip.assign(name);
-    free(name);
-    if(!pimpl->ip.size())
-      throw std::runtime_error("Beacon not supported");
-    //keep the socket for polling
-    pimpl->socket = zsock_resolve(zactor_sock(pimpl->actor));
+  beacon_t::beacon_t(uint16_t discovery_port):pimpl(new cheshire_cat_t(discovery_port)) {
   }
   //ip address
   const std::string& beacon_t::get_ip() const{
@@ -264,28 +264,28 @@ namespace zmq {
     memcpy(zre, "ZRE\1", 4);
     memcpy(zre + 4, pimpl->rand_uuid(16).c_str(), 16);
     memcpy(zre + 20, &service_port, sizeof(service_port));
-    zsock_send(pimpl->actor, "sbi", "PUBLISH", zre, sizeof(zre), interval);
+    zsock_send(pimpl->actor.get(), "sbi", "PUBLISH", zre, sizeof(zre), interval);
   }
   //stop broadcasting
   void beacon_t::silence() {
-    zstr_sendx(pimpl->actor, "SILENCE", nullptr);
+    zstr_sendx(pimpl->actor.get(), "SILENCE", nullptr);
   }
   //start listening for signals
   void beacon_t::subscribe(const std::string& filter) {
-    zsock_send(pimpl->actor, "sb", "SUBSCRIBE", filter.c_str(), filter.size());
+    zsock_send(pimpl->actor.get(), "sb", "SUBSCRIBE", filter.c_str(), filter.size());
   }
   //stop listening for signals
   void beacon_t::unsubscribe() {
-    zstr_sendx(pimpl->actor, "UNSUBSCRIBE", nullptr);
+    zstr_sendx(pimpl->actor.get(), "UNSUBSCRIBE", nullptr);
   }
   //update the services
   std::pair<services_t, services_t> beacon_t::update(bool activity) {
     //these just came or just went
     services_t joined, dropped;
     //if we're expecting someone we'll let them check in
-    char* ip = activity ? zstr_recv(pimpl->actor) : nullptr;
+    char* ip = activity ? zstr_recv(pimpl->actor.get()) : nullptr;
     if(ip) {
-      zframe_t* frame = zframe_recv(pimpl->actor);
+      zframe_t* frame = zframe_recv(pimpl->actor.get());
       //right size and header
       if(zframe_size(frame) == 22 && !memcmp(zframe_data(frame), "ZRE\1", 4)) {
         auto* opaque = static_cast<void*>(zframe_data(frame));
