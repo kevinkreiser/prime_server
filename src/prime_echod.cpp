@@ -18,14 +18,14 @@ using namespace prime_server;
 int main(int argc, char** argv) {
 
   if(argc < 2) {
-    logging::ERROR("Usage: " + std::string(argv[0]) + "server_listen_endpoint concurrency");
+    logging::ERROR("Usage: " + std::string(argv[0]) + " server_listen_endpoint concurrency");
     return 1;
   }
 
   //server endpoint
   std::string server_endpoint = argv[1];
   if(server_endpoint.find("://") == std::string::npos)
-    logging::ERROR("Usage: " + std::string(argv[0]) + "server_listen_endpoint concurrency");
+    logging::ERROR("Usage: " + std::string(argv[0]) + " server_listen_endpoint concurrency");
 
   //number of workers to use at each stage
   size_t worker_concurrency = 1;
@@ -60,7 +60,6 @@ int main(int argc, char** argv) {
         }
         catch(const std::exception& e) {
           //complain
-          worker_t::result_t result{false};
           http_response_t response(400, "Bad Request", e.what());
           response.from_info(*static_cast<http_request_t::info_t*>(request_info));
           result.messages.emplace_back(response.to_string());
