@@ -56,13 +56,13 @@ int main(int argc, char** argv) {
           //echo
           http_response_t response(200, "OK", std::string(static_cast<const char*>(job.front().data()), job.front().size()));
           response.from_info(*static_cast<http_request_t::info_t*>(request_info));
-          result.messages.emplace_back(response.to_string());
+          result.messages = {response.to_string()};
         }
         catch(const std::exception& e) {
           //complain
           http_response_t response(400, "Bad Request", e.what());
           response.from_info(*static_cast<http_request_t::info_t*>(request_info));
-          result.messages.emplace_back(response.to_string());
+          result.messages = {response.to_string()};
         }
         return result;
       }
