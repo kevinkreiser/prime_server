@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
 
   //number of jobs to do or server endpoint
   size_t requests = 0;
-  std::string server_endpoint = "ipc://server_endpoint";
+  std::string server_endpoint = "ipc:///tmp/server_endpoint";
   if(std::string(argv[1]).find("://") != std::string::npos)
     server_endpoint = argv[1];
   else
@@ -37,9 +37,9 @@ int main(int argc, char** argv) {
 
   //change these to tcp://known.ip.address.with:port if you want to do this across machines
   zmq::context_t context;
-  std::string result_endpoint = "ipc://result_endpoint";
-  std::string parse_proxy_endpoint = "ipc://parse_proxy_endpoint";
-  std::string compute_proxy_endpoint = "ipc://compute_proxy_endpoint";
+  std::string result_endpoint = "ipc:///tmp/result_endpoint";
+  std::string parse_proxy_endpoint = "ipc:///tmp/parse_proxy_endpoint";
+  std::string compute_proxy_endpoint = "ipc:///tmp/compute_proxy_endpoint";
 
   //server
   std::thread server_thread = std::thread(std::bind(&http_server_t::serve,
@@ -106,7 +106,7 @@ int main(int argc, char** argv) {
   std::list<std::thread> compute_worker_threads;
   for(size_t i = 0; i < worker_concurrency; ++i) {
     compute_worker_threads.emplace_back(std::bind(&worker_t::work,
-      worker_t(context, compute_proxy_endpoint + "_downstream", "ipc://NO_ENDPOINT", result_endpoint,
+      worker_t(context, compute_proxy_endpoint + "_downstream", "ipc:///tmp/NO_ENDPOINT", result_endpoint,
       [] (const std::list<zmq::message_t>& job, void* request_info) {
         //check if its prime
         size_t prime = *static_cast<const size_t*>(job.front().data());
