@@ -42,7 +42,7 @@ namespace {
 
   void test_streaming_server() {
     zmq::context_t context;
-    testable_http_server_t server(context, "ipc://test_http_server", "ipc://test_http_proxy_upstream", "ipc://test_http_results");
+    testable_http_server_t server(context, "ipc:///tmp/test_http_server", "ipc:///tmp/test_http_proxy_upstream", "ipc:///tmp/test_http_results");
     server.passify();
 
     testable_http_request_t request;
@@ -61,7 +61,7 @@ namespace {
     std::string all;
     size_t responses = 0;
     zmq::context_t context;
-    testable_http_client_t client(context, "ipc://test_http_server",
+    testable_http_client_t client(context, "ipc:///tmp/test_http_server",
       [](){ return std::make_pair<void*, size_t>(nullptr, 0); },
       [&all, &responses](const void* data, size_t size){
         std::string response(static_cast<const char*>(data), size);
@@ -213,7 +213,7 @@ namespace {
     std::unordered_set<std::string> requests;
     size_t received = 0;
     std::string request;
-    http_client_t client(context, "ipc://test_http_server",
+    http_client_t client(context, "ipc:///tmp/test_http_server",
       [&requests, &request]() {
         //we want more requests
         if(requests.size() < total) {
@@ -251,17 +251,17 @@ namespace {
 
     //server
     std::thread server(std::bind(&http_server_t::serve,
-     http_server_t(context, "ipc://test_http_server", "ipc://test_http_proxy_upstream", "ipc://test_http_results", false, MAX_REQUEST_SIZE)));
+     http_server_t(context, "ipc:///tmp/test_http_server", "ipc:///tmp/test_http_proxy_upstream", "ipc:///tmp/test_http_results", false, MAX_REQUEST_SIZE)));
     server.detach();
 
     //load balancer for parsing
     std::thread proxy(std::bind(&proxy_t::forward,
-      proxy_t(context, "ipc://test_http_proxy_upstream", "ipc://test_http_proxy_downstream")));
+      proxy_t(context, "ipc:///tmp/test_http_proxy_upstream", "ipc:///tmp/test_http_proxy_downstream")));
     proxy.detach();
 
     //echo worker
     std::thread worker(std::bind(&worker_t::work,
-      worker_t(context, "ipc://test_http_proxy_downstream", "ipc://NONE", "ipc://test_http_results",
+      worker_t(context, "ipc:///tmp/test_http_proxy_downstream", "ipc:///tmp/NONE", "ipc:///tmp/test_http_results",
       [] (const std::list<zmq::message_t>& job, void* request_info) {
         //could be a get or a post
         auto request = http_request_t::from_string(static_cast<const char*>(job.front().data()), job.front().size());
@@ -292,7 +292,7 @@ namespace {
   void test_malformed() {
     zmq::context_t context;
     std::string request = "isch_doch_unsinn";
-    http_client_t client(context, "ipc://test_http_server",
+    http_client_t client(context, "ipc:///tmp/test_http_server",
       [&request]() {
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
@@ -311,7 +311,7 @@ namespace {
   void test_too_large() {
     zmq::context_t context;
     std::string request = http_request_t(POST, "/", std::string(MAX_REQUEST_SIZE + 10, '!')).to_string();
-    http_client_t client(context, "ipc://test_http_server",
+    http_client_t client(context, "ipc:///tmp/test_http_server",
       [&request]() {
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
@@ -337,7 +337,7 @@ namespace {
     auto request = http_request_t::to_string(POST, "", request_body);
 
     //see if we get it back
-    http_client_t client(context, "ipc://test_http_server",
+    http_client_t client(context, "ipc:///tmp/test_http_server",
       [&request]() {
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },

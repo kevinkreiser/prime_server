@@ -30,7 +30,7 @@ AC_DEFUN([CHECK_PRIME_SERVER],
         	[AC_LANG_PUSH([C++])
 		AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[@%:@include <prime_server/prime_server.hpp>]],
 			[[zmq::context_t c;
-			 prime_server::proxy_t(c,"ipc://up","ipc://down");]])],
+			 prime_server::proxy_t(c,"ipc:///tmp/up","ipc:///tmp/down");]])],
 			ax_cv_prime_server=yes, ax_cv_prime_server=no)
 		AC_LANG_POP([C++])
 	])
