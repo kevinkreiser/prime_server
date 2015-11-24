@@ -2,6 +2,8 @@
 
 #include <fstream>
 #include <map>
+#include <cctype>
+#include <algorithm>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <dirent.h>
@@ -15,6 +17,8 @@ namespace {
       {"html", HTML_MIME},
       {"js", JS_MIME},
       {"json", JSON_MIME},
+      {"jpg", JPEG_MIME},
+      {"jpeg", JPEG_MIME},
     };
 
     //TODO: you can get some of these from /etc/mime.types
@@ -48,7 +52,9 @@ namespace prime_server {
 
     const header_t& mime_header(const std::string& file_name, const header_t& default_mime_header) {
       static const auto mimes(load_mimes());
-      auto header = mimes.find(file_name.substr(file_name.find_last_of('.') + 1));
+      auto extension = file_name.substr(file_name.find_last_of('.') + 1);
+      std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+      auto header = mimes.find(extension);
       if(header == mimes.cend())
         return default_mime_header;
       return header->second;

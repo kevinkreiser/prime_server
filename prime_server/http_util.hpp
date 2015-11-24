@@ -18,6 +18,7 @@ namespace prime_server {
     const header_t HTML_MIME{"Content-type", "text/html"};
     const header_t JS_MIME{"Content-type", "application/javascript"};
     const header_t JSON_MIME{"Content-type", "application/json"};
+    const header_t JPEG_MIME{"Content-type", "image/jpeg"};
 
 
     //get a mime header for the given file name
