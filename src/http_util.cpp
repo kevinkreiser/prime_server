@@ -26,21 +26,14 @@ namespace {
     return mimes;
   }
 
-  std::string current_working_directory() {
-    char* absolute_path = get_current_dir_name();
-    std::string cwd(absolute_path);
-    free(absolute_path);
-    return cwd;
-  }
-
-  struct stat canonical_path(const std::string& cwd, std::string& path) {
+  struct stat canonical_path(const std::string& root, std::string& path) {
     //yeah we only allow one dot at a time
     for(size_t p = 0, i = path.find('.', 0); i != std::string::npos; p = i, i = path.find('.', i))
       if(p + 1 == i)
         path[p] = path[i] = '/';
     //and this better be a regular file that exists
     struct stat s;
-    if(stat((cwd + path).c_str(), &s))
+    if(stat((root + path).c_str(), &s))
       s.st_mode = 0;
     return s;
   }
@@ -60,15 +53,14 @@ namespace prime_server {
       return header->second;
     }
 
-    worker_t::result_t disk_result(const http_request_t& request, http_request_t::info_t& request_info, size_t size_limit, bool allow_listing) {
+    worker_t::result_t disk_result(const http_request_t& request, http_request_t::info_t& request_info, const std::string& root, bool allow_listing, size_t size_limit) {
       worker_t::result_t result{false};
       //get the canonical path
-      static const auto cwd(current_working_directory());
       auto path = request.path;
       for(size_t p = path.size(), i = path.find('.', 0); i != std::string::npos; p = i, i = path.find('.', i + 1))
         if(p + 1 == i)
           path[p] = path[i] = '/';
-      auto canonical = cwd + path;
+      auto canonical = root + path;
       //stat it
       struct stat s;
       if(stat(canonical.c_str(), &s))

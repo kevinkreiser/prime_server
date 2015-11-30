@@ -14,12 +14,14 @@
 
 using namespace prime_server;
 
+std::string root = "./";
+
 worker_t::result_t disk_work(const std::list<zmq::message_t>& job, void* request_info) {
   worker_t::result_t result{false};
   try {
     //check the disk
     auto request = http_request_t::from_string(static_cast<const char*>(job.front().data()), job.front().size());
-    return http::disk_result(request, *static_cast<http_request_t::info_t*>(request_info));
+    return http::disk_result(request, *static_cast<http_request_t::info_t*>(request_info), root);
   }
   catch(const std::exception& e) {
     http_response_t response(400, "Bad Request", e.what());
@@ -31,7 +33,7 @@ worker_t::result_t disk_work(const std::list<zmq::message_t>& job, void* request
 
 int main(int argc, char** argv) {
   if(argc < 2) {
-    logging::ERROR("Usage: " + std::string(argv[0]) + " server_listen_endpoint");
+    logging::ERROR("Usage: " + std::string(argv[0]) + " server_listen_endpoint [root_dir]");
     return 1;
   }
 
@@ -42,6 +44,10 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  //root dir
+  if(argc > 2)
+    root = argv[2];
+
   //change these to tcp://known.ip.address.with:port if you want to do this across machines
   zmq::context_t context;
   std::string result_endpoint = "ipc://result_endpoint";
@@ -51,16 +57,16 @@ int main(int argc, char** argv) {
   std::thread server = std::thread(std::bind(&http_server_t::serve,
     http_server_t(context, server_endpoint, proxy_endpoint + "_upstream", result_endpoint, true)));
 
-  //load balancer for parsing
-  std::thread front_end_proxy(std::bind(&proxy_t::forward, proxy_t(context, proxy_endpoint + "_upstream", proxy_endpoint + "_downstream")));
-  front_end_proxy.detach();
+  //load balancer for file serving
+  std::thread file_proxy(std::bind(&proxy_t::forward, proxy_t(context, proxy_endpoint + "_upstream", proxy_endpoint + "_downstream")));
+  file_proxy.detach();
 
-  //front end thread
-  std::thread front_end_worker(std::bind(&worker_t::work,
+  //file serving thread
+  std::thread file_worker(std::bind(&worker_t::work,
     worker_t(context, proxy_endpoint + "_downstream", "ipc://NO_ENDPOINT", result_endpoint,
     std::bind(&disk_work, std::placeholders::_1, std::placeholders::_2)
   )));
-  front_end_worker.detach();
+  file_worker.detach();
 
   //listen for SIGINT and terminate if we hear it
   std::signal(SIGINT, [](int s){ std::this_thread::sleep_for(std::chrono::seconds(1)); exit(1); });

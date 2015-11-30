@@ -26,7 +26,7 @@ namespace prime_server {
 
     //get a static file or directory listing
     worker_t::result_t disk_result(const http_request_t& path, http_request_t::info_t& request_info,
-      size_t size_limit = 1024*1024*1024, bool allow_listing = true);
+      const std::string& root = "./", bool allow_listing = true, size_t size_limit = 1024*1024*1024);
 
   }
 }
