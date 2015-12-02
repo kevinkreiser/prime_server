@@ -608,7 +608,7 @@ namespace prime_server {
     message.clear();
   }
 
-  std::string http_response_t::generic(unsigned code, const std::string message, const headers_t& headers, const std::string& body, const std::string& version) {
+  std::string http_response_t::generic(unsigned code, const std::string& message, const headers_t& headers, const std::string& body, const std::string& version) {
     auto response = version;
     response.push_back(' ');
     response += std::to_string(code);
@@ -624,14 +624,13 @@ namespace prime_server {
       response += header.second;
       response += "\r\n";
     }
-    if(body.size()) {
-      response += "Content-Length: ";
-      response += std::to_string(body.size());
-      response += "\r\n\r\n";
-      response += body;
-    }
-    else
-      response += "\r\n";
+    //TODO: content length is optional
+    //with 1.0 the end can be signaled by socket close
+    //with 1.1 you can omit it when using chunked encoding
+    response += "Content-Length: ";
+    response += std::to_string(body.size());
+    response += "\r\n\r\n";
+    response += body;
     return response;
   }
 
