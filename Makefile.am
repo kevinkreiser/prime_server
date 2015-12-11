@@ -85,13 +85,13 @@ prime_echod_LDADD = $(DEPS_LIBS) libprime_server.la -lpthread
 check_PROGRAMS = test/zmq test/netstring test/http
 test_zmq_SOURCES = test/zmq.cpp
 test_zmq_CPPFLAGS = $(DEPS_CFLAGS)
-test_zmq_LDADD = $(DEPS_LIBS) libprime_server.la
+test_zmq_LDADD = $(DEPS_LIBS) libprime_server.la -lpthread
 test_netstring_SOURCES = test/netstring.cpp
 test_netstring_CPPFLAGS = $(DEPS_CFLAGS)
-test_netstring_LDADD = $(DEPS_LIBS) libprime_server.la
+test_netstring_LDADD = $(DEPS_LIBS) libprime_server.la -lpthread
 test_http_SOURCES = test/http.cpp
 test_http_CPPFLAGS = $(DEPS_CFLAGS)
-test_http_LDADD = $(DEPS_LIBS) libprime_server.la
+test_http_LDADD = $(DEPS_LIBS) libprime_server.la -lpthread
 
 
 TESTS = $(check_PROGRAMS)
