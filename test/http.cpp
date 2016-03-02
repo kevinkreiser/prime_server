@@ -102,7 +102,7 @@ namespace {
   }
 
   void test_request_parsing() {
-    std::string request_str("GET /wos_haescht?nen_stei=2&ne_bluem=3&ziit=5%20minuet HTTP/1.0\r\nHost: localhost:8002\r\nUser-Agent: ApacheBench/2.3\r\n\r\n");
+    std::string request_str("GET /wos_haescht?nen_stei=2&ne_bluem=3&ziit=5%20minuet HTTP/1.0\r\nHost: localhost:8002\r\nDNT: gah\r\nUser-Agent: ApacheBench/2.3\r\n\r\n");
     auto request = http_request_t::from_string(request_str.c_str(), request_str.size());
     //TODO: tighten up this test
     if(request.method != method_t::GET)
@@ -117,17 +117,41 @@ namespace {
     */
     if(request.body != "")
       throw std::runtime_error("Request parsing failed");
+    if(request.to_info(0).version != 0)
+      throw std::runtime_error("Request parsing failed");
+    if(request.to_info(0).connection_close != 0)
+      throw std::runtime_error("Request parsing failed");
+    if(request.to_info(0).connection_keep_alive != 0)
+      throw std::runtime_error("Request parsing failed");
+    if(request.to_info(0).do_not_track != 0)
+      throw std::runtime_error("Request parsing failed");
 
-    request_str = "GET /blah HTTP/1.0\r\nHost: *\r\nContent-Length: 5\r\nUser-Agent: fake-agent\r\n\r\nhello";
+    request_str = "GET /blah HTTP/1.0\r\nHost: *\r\nContent-Length: 5\r\nDNT: 0\r\nConnection: Close\r\nUser-Agent: fake-agent\r\n\r\nhello";
     request = http_request_t::from_string(request_str.c_str(), request_str.size());
     if(request.body != "hello")
       throw std::runtime_error("Request parsing failed");
     if(request.headers.find("User-Agent") == request.headers.cend() || request.headers.find("User-Agent")->second != "fake-agent")
       throw std::runtime_error("Request parsing failed");
+    if(request.to_info(0).version != 0)
+      throw std::runtime_error("Request parsing failed");
+    if(request.to_info(0).connection_close != 1)
+      throw std::runtime_error("Request parsing failed");
+    if(request.to_info(0).connection_keep_alive != 0)
+      throw std::runtime_error("Request parsing failed");
+    if(request.to_info(0).do_not_track != 0)
+      throw std::runtime_error("Request parsing failed");
 
-    request_str = "POST /is_prime HTTP/1.1\r\nPragma: no-cache\r\nConnection: keep-alive\r\nContent-Type: text/xml; charset=UTF-8\r\nAccept-Encoding: gzip, deflate\r\nAccept-Language: de,en-US;q=0.7,en;q=0.3\r\nAccept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\nUser-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:35.0) Gecko/20100101 Firefox/35.0\r\nCache-Control: no-cache\r\nContent-Length: 11\r\nHost: localhost:8002\r\n\r\n32416190071";
+    request_str = "POST /is_prime HTTP/1.1\r\nPragma: no-cache\r\nDNT: 1\r\nConnection: Keep-Alive\r\nContent-Type: text/xml; charset=UTF-8\r\nAccept-Encoding: gzip, deflate\r\nAccept-Language: de,en-US;q=0.7,en;q=0.3\r\nAccept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\nUser-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:35.0) Gecko/20100101 Firefox/35.0\r\nCache-Control: no-cache\r\nContent-Length: 11\r\nHost: localhost:8002\r\n\r\n32416190071";
     request = http_request_t::from_string(request_str.c_str(), request_str.size());
     if(request.body != "32416190071")
+      throw std::runtime_error("Request parsing failed");
+    if(request.to_info(0).version != 1)
+      throw std::runtime_error("Request parsing failed");
+    if(request.to_info(0).connection_close != 0)
+      throw std::runtime_error("Request parsing failed");
+    if(request.to_info(0).connection_keep_alive != 1)
+      throw std::runtime_error("Request parsing failed");
+    if(request.to_info(0).do_not_track != 1)
       throw std::runtime_error("Request parsing failed");
   }
 
