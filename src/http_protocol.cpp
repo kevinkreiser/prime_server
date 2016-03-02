@@ -274,12 +274,14 @@ namespace prime_server {
   }
 
  http_request_t::info_t http_request_t::to_info(uint64_t id) const {
-    auto header = headers.find("Connection");
+    auto connection_header = headers.find("Connection");
+    auto do_not_track_header = headers.find("DNT");
     return info_t {
       id,
       static_cast<uint64_t>(version == "HTTP/1.0" ? 0 : 1),
-      static_cast<uint64_t>(header != headers.end() && header->second == "Keep-Alive"),
-      static_cast<uint64_t>(header != headers.end() && header->second == "Close")
+      static_cast<uint64_t>(connection_header != headers.end() && connection_header->second == "Keep-Alive"),
+      static_cast<uint64_t>(connection_header != headers.end() && connection_header->second == "Close"),
+      static_cast<uint64_t>(do_not_track_header != headers.end() && do_not_track_header->second == "1"),
     };
   }
 
