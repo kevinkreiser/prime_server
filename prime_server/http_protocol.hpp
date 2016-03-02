@@ -87,8 +87,9 @@ namespace prime_server {
       uint64_t version                    :3;  //protocol specific space for versioning info
       uint64_t connection_keep_alive      :1;  //header present or not
       uint64_t connection_close           :1;  //header present or not
+      uint64_t do_not_track               :1;  //header present or not
       uint64_t response_code              :10; //what the response code was set to when sent back to the client
-      uint64_t spare                      :17; //unused information
+      uint64_t spare                      :16; //unused information
     };
 
     info_t to_info(uint64_t id) const;
