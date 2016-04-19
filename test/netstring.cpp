@@ -37,7 +37,7 @@ namespace {
 
   void test_streaming_server() {
     zmq::context_t context;
-    testable_netstring_server_t server(context, "ipc://test_netstring_server", "ipc://test_netstring_proxy_upstream", "ipc://test_netstring_results");
+    testable_netstring_server_t server(context, "ipc:///tmp/test_netstring_server", "ipc:///tmp/test_netstring_proxy_upstream", "ipc:///tmp/test_netstring_results");
     server.passify();
 
     netstring_entity_t request;
@@ -55,7 +55,7 @@ namespace {
     std::string all;
     size_t responses = 0;
     zmq::context_t context;
-    testable_netstring_client_t client(context, "ipc://test_netstring_server",
+    testable_netstring_client_t client(context, "ipc:///tmp/test_netstring_server",
       [](){ return std::make_pair<void*, size_t>(nullptr, 0); },
       [&all, &responses](const void* data, size_t size){
         auto response = netstring_entity_t::from_string(static_cast<const char*>(data), size);
@@ -108,7 +108,7 @@ namespace {
     std::unordered_set<std::string> requests;
     size_t received = 0;
     std::string request;
-    netstring_client_t client(context, "ipc://test_netstring_server",
+    netstring_client_t client(context, "ipc:///tmp/test_netstring_server",
       [&requests, &request]() {
         //we want more requests
         if(requests.size() < total) {
@@ -143,17 +143,17 @@ namespace {
 
     //server
     std::thread server(std::bind(&netstring_server_t::serve,
-      netstring_server_t(context, "ipc://test_netstring_server", "ipc://test_netstring_proxy_upstream", "ipc://test_netstring_results", false, MAX_REQUEST_SIZE)));
+      netstring_server_t(context, "ipc:///tmp/test_netstring_server", "ipc:///tmp/test_netstring_proxy_upstream", "ipc:///tmp/test_netstring_results", false, MAX_REQUEST_SIZE)));
     server.detach();
 
     //load balancer for parsing
     std::thread proxy(std::bind(&proxy_t::forward,
-      proxy_t(context, "ipc://test_netstring_proxy_upstream", "ipc://test_netstring_proxy_downstream")));
+      proxy_t(context, "ipc:///tmp/test_netstring_proxy_upstream", "ipc:///tmp/test_netstring_proxy_downstream")));
     proxy.detach();
 
     //echo worker
     std::thread worker(std::bind(&worker_t::work,
-      worker_t(context, "ipc://test_netstring_proxy_downstream", "ipc://NONE", "ipc://test_netstring_results",
+      worker_t(context, "ipc:///tmp/test_netstring_proxy_downstream", "ipc:///tmp/NONE", "ipc:///tmp/test_netstring_results",
       [] (const std::list<zmq::message_t>& job, void*) {
         worker_t::result_t result{false};
         auto request = netstring_entity_t::from_string(static_cast<const char*>(job.front().data()), job.front().size());
@@ -174,7 +174,7 @@ namespace {
   void test_malformed() {
     zmq::context_t context;
     std::string request = "isch_doch_unsinn";
-    netstring_client_t client(context, "ipc://test_netstring_server",
+    netstring_client_t client(context, "ipc:///tmp/test_netstring_server",
       [&request]() {
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
@@ -193,7 +193,7 @@ namespace {
   void test_too_large() {
     zmq::context_t context;
     std::string request = netstring_entity_t::to_string(std::string(MAX_REQUEST_SIZE + 10, '!'));
-    netstring_client_t client(context, "ipc://test_netstring_server",
+    netstring_client_t client(context, "ipc:///tmp/test_netstring_server",
       [&request]() {
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
@@ -220,7 +220,7 @@ namespace {
     request = netstring_entity_t::to_string(request);
 
     //see if we get it back
-    netstring_client_t client(context, "ipc://test_netstring_server",
+    netstring_client_t client(context, "ipc:///tmp/test_netstring_server",
       [&request]() {
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },

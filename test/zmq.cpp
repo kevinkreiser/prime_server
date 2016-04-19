@@ -20,13 +20,7 @@ namespace {
     int disabled = 0;
     server.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
     server.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
-    #if ZMQ_VERSION_MAJOR >= 4
-    #if ZMQ_VERSION_MINOR >= 1
-    int enabled = 1;
-    server.setsockopt(ZMQ_STREAM_NOTIFY, &enabled, sizeof(enabled));
-    #endif
-    #endif
-    server.bind("ipc://test_server");
+    server.bind("ipc:///tmp/test_server");
 
     zmq::message_t identity;
 
@@ -57,13 +51,7 @@ namespace {
     int disabled = 0;
     client.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
     client.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
-    #if ZMQ_VERSION_MAJOR >= 4
-    #if ZMQ_VERSION_MINOR >= 1
-    int enabled = 1;
-    client.setsockopt(ZMQ_STREAM_NOTIFY, &enabled, sizeof(enabled));
-    #endif
-    #endif
-    client.connect("ipc://test_server");
+    client.connect("ipc:///tmp/test_server");
     #if ZMQ_VERSION_MAJOR >= 4
     #if ZMQ_VERSION_MINOR >= 1
     client.recv_all(0);
@@ -103,15 +91,8 @@ namespace {
     server.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
     client.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
     client.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
-    #if ZMQ_VERSION_MAJOR >= 4
-    #if ZMQ_VERSION_MINOR >= 1
-    int enabled = 1;
-    server.setsockopt(ZMQ_STREAM_NOTIFY, &enabled, sizeof(enabled));
-    client.setsockopt(ZMQ_STREAM_NOTIFY, &enabled, sizeof(enabled));
-    #endif
-    #endif
-    server.bind("ipc://test_server");
-    client.connect("ipc://test_server");
+    server.bind("ipc:///tmp/test_server");
+    client.connect("ipc:///tmp/test_server");
 
     //greet each other
     zmq::message_t identity;
@@ -167,8 +148,8 @@ namespace {
     zmq::message_t identity(static_cast<void *>(new unsigned char[7]{'a','b','c','d','e','f','g'}), 7);
     dealer.setsockopt(ZMQ_IDENTITY, identity.data(), identity.size());
 
-    dealer.connect("ipc://test_router_dealer");
-    router.bind("ipc://test_router_dealer");
+    dealer.connect("ipc:///tmp/test_router_dealer");
+    router.bind("ipc:///tmp/test_router_dealer");
 
     //make lots of little requests
     size_t request_count = 100000;
@@ -232,17 +213,10 @@ namespace {
     dealer.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
     router.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
     router.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
-    #if ZMQ_VERSION_MAJOR >= 4
-    #if ZMQ_VERSION_MINOR >= 1
-    int enabled = 1;
-    client.setsockopt(ZMQ_STREAM_NOTIFY, &enabled, sizeof(enabled));
-    server.setsockopt(ZMQ_STREAM_NOTIFY, &enabled, sizeof(enabled));
-    #endif
-    #endif
-    client.connect("ipc://test_server");
-    server.bind("ipc://test_server");
-    dealer.connect("ipc://test_router_dealer");
-    router.bind("ipc://test_router_dealer");
+    client.connect("ipc:///tmp/test_server");
+    server.bind("ipc:///tmp/test_server");
+    dealer.connect("ipc:///tmp/test_router_dealer");
+    router.bind("ipc:///tmp/test_router_dealer");
 
     //great eachother
     #if ZMQ_VERSION_MAJOR >= 4
