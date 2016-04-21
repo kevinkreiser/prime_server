@@ -65,15 +65,19 @@ What we want is a tool that lets you build a system that is pipelined and parall
                            (input)        request_producer
                                           /      |       \
                                          /       |        \
+                                        v        v         v
                         (parallelize)  worker  worker   worker ...
                                          \       |        /
                                           \      |       /
+                                           v     v      v
                          (rebalance)    intermediate_router
                                           /      |       \
                                          /       |        \
+                                        v        v         v
                         (parallelize)  worker  worker   worker ...
                                          \       |        /
                                           \      |       /
+                                           v     v      v
                           (output)       response_collector
 
 This seems like a pretty good pattern for some offline scientific code that just pumps jobs into the system and waits for the results to land at the bottom. However this isn't very useful for online systems that face users for example. For that we need some kind of loopback so that we can get the result back to the requester. Something like:
@@ -86,7 +90,7 @@ This seems like a pretty good pattern for some offline scientific code that just
                    |                     | worker |                   | worker |
                    |                     ==========                   ==========
                    |                         |                            |
-                   |_________________________|____________________________|___________ ....
+                   \_________________________|____________________________|___________ ....
 
 
 A client (a browser or just a separate thread) makes a request to a server. The server listens for new requests and replies when the backend parts send back results. The backend is comprised of load balancing proxies between layers of worker pools. In real life you may run these in different processes or on different machines. We use threads in the example server to conveniently simulate this within a single process, so please note the lack of any mutex/locking patterns (thank you ZMQ!).
