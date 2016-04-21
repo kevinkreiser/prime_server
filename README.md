@@ -182,12 +182,12 @@ For example say you wanted to offer up math as a service (MaS of course). You mi
 * workers to do summations
 * workers to compute integrals
 
-Now of course you could implement this all in a client side library, but for the sake of argument, ignore the impracticality for a second. What you wouldn't want to do is write a worker does all three things. This requires forwarding to a specific worker pool based on the url (in this example). Which brings up another TODO, we probably want to allow the server to forward requests to worker pools based on the URL. Furthermore some of these operations are more complex than others. If you watched your system for a while (and you had high enough traffic) you could find the places where you spent more or less time and reallocate proportionally sized worker pools. You could even dynamically size the worker pools if you were really slick ;o)
+Now of course you could implement this all in a client side library, but for the sake of argument, ignore the impracticality for a second. What you wouldn't want to do is write a worker does all three things. This requires forwarding to a specific worker pool based on the url (in this example). Which brings up another `TODO`, we probably want to allow the server to forward requests to worker pools based on the URL. Furthermore some of these operations are more complex than others. If you watched your system for a while (and you had high enough traffic) you could find the places where you spent more or less time and reallocate proportionally sized worker pools. You could even dynamically size the worker pools if you were really slick ;o)
 
 The Conclusion
 --------------
 
-This has been a fantastic little experiment to have worked on. Even better its been a success. I can claim that because we're using this in a production system. Taking some excellent tools (ZMQ mostly) and building a new tool to help others build yet more tools is a very rewarding experience. If you think you may be interested in building a project/service/tool using this work, let me know if you find something wrong or better yet pull request a fix!
+This has been a fantastic little experiment to have worked on. Even better its been a success. I can claim that because it's used in at least one production system. Taking some excellent tools (ZMQ mostly) and building a new tool to help others build yet more tools is a very rewarding experience. If you think you may be interested in building a project/service/tool using this work, let me know if you find something wrong or better yet pull request a fix!
 
 
 
