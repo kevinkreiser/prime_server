@@ -187,7 +187,7 @@ Now of course you could implement this all in a client side library, but for the
 The Conclusion
 --------------
 
-This has been a fantastic little experiment to have worked on. Even better its been a success. I can claim that because it's used in at least one production system. Taking some excellent tools (ZMQ mostly) and building a new tool to help others build yet more tools is a very rewarding experience. If you think you may be interested in building a project/service/tool using this work, let me know if you find something wrong or better yet pull request a fix!
+This has been a fantastic little experiment to have worked on. Even better its been a success. I can claim that because it's used in at least one production system. Taking some excellent tools (ZMQ mostly) and building a new tool to help others build yet more tools is a very rewarding experience. If you think you may be interested in building a project/service/tool using this work, let us know! If you find something wrong submit an issue or better yet pull request a fix!
 
 
 
