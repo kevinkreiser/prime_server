@@ -137,32 +137,30 @@ The first thing we should do make use of a proper http parser. There are some im
 
 The second thing we want to do is work zbeacon perks into the API. Currently the setup of a pipeline is somewhat cumbersome, each stage must know about the previous and next stages as well as the loopback. Then we also complicate things by making the next stage optional since the pipeline isn't infinite. It's clunky and requires decent understanding to get it right. It's also very manual. With zbeacon, applications can broadcast their endpoints to peers so that they can connect to eachother through discovery rather than via manual configuration. This is pretty great in itself but thats not the really interesting part here. What if our pipeline weren't a pipeline? What if it were a graph?!
 
+    client <---> server ----------
+                 ^ | ^            \
+                 | | |             v
+                 | | |       =============
+                 | | |   --> |   proxy   | <----
+                 | | |  /    |-----------|      \
+                 | | |  \    |  workers  |      |
+                 | | |   --- |    ...    | ---  |
+                 | | |       =============    \ |
+                 | | \            /           | |
+                 | \  ------------            | |
+                 |  --------------            | |
+                 |                \           | |
+                 |                 v          | |
+                 |           =============    / |
+                 |       --> |   proxy   | <--  |
+                 |      /    |-----------|      |
+                 |      \    |  workers  |      /
+                 |       --- |    ...    | -----
+                 |           =============
+                 \                 /
+                  -----------------
 
-
-    client <---> server
-
-
-                         =============
-                     --> |   proxy   | <----
-                    /    |-----------|      \
-                    \    |  workers  |      |
-                     --- |    ...    | ---  |
-                         =============    \ |
-                              /           | |
-                   -----------            | |
-                   -----------            | |
-                              \
-                               v          | |
-                         =============    / |
-                     --> |   proxy   | <--  |
-                    /    |-----------|      |
-           |        \    |  workers  |      /
-           |         --- |    ...    | -----
-           |             =============
-           |                   /
-           --------------------
-
-Ok We may be reaching the limits of ascii 'art' here but bear with me... The implications are huge! We can remove the shackles of a the rigid fixed-order pipeline. Instead we can have application code determine the stages a request is forwarded to on the fly. For example, imagine you have a request that requires a bunch of iterations of a specific stage in the traditional pipeline. Essentially the only option you have is to perform the iterations on a single worker basically locking that worker until all the iterations are done. This would seem unfair, a certain request can ask for n iterations worth of work while the next request may only need one. Allowing the stages to be connected in a cyclical graph structure would give the application the option to load balance portions of a larger request until the entire request has been fulfilled. Indeed any problem that could be broken down into tasks of equal size (or at least more equal size) would have the potential to handle requests in a much more fair fashion. It also has the potential to clean up a lot of code. Certain stages of the pipeline design often needed to know how to do the job that a later portion of the pipeline was more suited to do. The easiest illustration of this is that of error conditions. In the event of an error, each stage needed to be able to format a response for the client. A lot of time this formatting code is very similar. Designed in the right way these workers could share that code but wouldnt it be nice if the stage the generally handled client return formatting could also handle error return formatting. Probably a better example exists.
+Ok we may be reaching the limits of ascii 'art' here but bear with me... The implications are huge! We can remove the shackles of a the rigid fixed-order pipeline. Instead we can have application code determine the stages a request is forwarded to on the fly. For example, imagine you have a request that requires a bunch of iterations of a specific stage in the traditional pipeline. Essentially the only option you have is to perform the iterations on a single worker basically locking that worker until all the iterations are done. This would seem unfair, a certain request can ask for n iterations worth of work while the next request may only need one. Allowing the stages to be connected in a cyclical graph structure would give the application the option to load balance portions of a larger request until the entire request has been fulfilled. Indeed any problem that could be broken down into tasks of equal size (or at least more equal size) would have the potential to handle requests in a much more fair fashion. It also has the potential to clean up a lot of code. Certain stages of the pipeline design often needed to know how to do the job that a later portion of the pipeline was more suited to do. The easiest illustration of this is that of error conditions. In the event of an error, each stage needed to be able to format a response for the client. A lot of time this formatting code is very similar. Designed in the right way these workers could share that code but wouldnt it be nice if the stage the generally handled client return formatting could also handle error return formatting. Probably a better example exists.
 
 
 
