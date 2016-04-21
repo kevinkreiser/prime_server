@@ -90,7 +90,7 @@ This seems like a pretty good pattern for some offline scientific code that just
                    |                     | worker |                   | worker |
                    |                     ==========                   ==========
                    |                         |                            |
-                   \_________________________|____________________________|___________ ....
+                    \ _____________________ /___________________________ /
 
 
 A client (a browser or just a separate thread) makes a request to a server. The server listens for new requests and replies when the backend parts send back results. The backend is comprised of load balancing proxies between layers of worker pools. In real life you may run these in different processes or on different machines. We use threads in the example server to conveniently simulate this within a single process, so please note the lack of any mutex/locking patterns (thank you ZMQ!).
@@ -149,28 +149,28 @@ The second thing we want to do is work zbeacon perks into the API. Currently the
 
 Automatic service discovery is pretty great, but that's not the really interesting part here; what if our pipeline weren't a pipeline? What if it were a graph?!
 
-    client <---> server ----------
+    client <---> server _________
                  ^ | ^            \
                  | | |             v
                  | | |       =============
-                 | | |   --> |   proxy   | <----
-                 | | |  /    |-----------|      \
+                 | | |   .-> |   proxy   | <--.
+                 | | |  /    |-----------|     \
                  | | |  \    |  workers  |      |
-                 | | |   --- |    ...    | ---  |
-                 | | |       =============    \ |
-                 | | \            /           | |
-                 | \  ------------            | |
-                 |  --------------            | |
+                 | | |   \ _ |    ...    | _    |
+                 | | |       =============   \  |
+                 | |  \ _________ /           | |
+                 |  \ ___________             | |
                  |                \           | |
-                 |                 v          | |
-                 |           =============    / |
-                 |       --> |   proxy   | <--  |
-                 |      /    |-----------|      |
-                 |      \    |  workers  |      /
-                 |       --- |    ...    | -----
-                 |           =============
-                 \                 /
-                  -----------------
+                 |                 \          | |
+                 |                  v         | |
+                 |          =============    /  |
+                 |      .-> |   proxy   | <-'   |
+                 |     /    |-----------|       |
+                 |     \    |  workers  |       |
+                 |      \ _ |    ...    | ____ /
+                 |          =============
+                  \ ____________ /
+
 
 We may be reaching the limits of ASCII 'art' here but bear with me...
 
