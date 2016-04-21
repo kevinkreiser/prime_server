@@ -101,7 +101,7 @@ You may be asking yourself, why on earth are all of the worker pools hooked into
 The Impetus
 -----------
 
-The toy example of an HTTP service that computes whether or not a number is prime is a simple illustration of why someone might want a setup as described above. But it's not the actual use-case that drove the creation of this project. Having worked on a few service oriented archtectures my team members and I noticed that we'd gained an appreciation for a certain set features. In buzz-word form those were roughly:
+The toy example of an HTTP service that computes whether or not a number is prime is a simple illustration of why someone might want a setup as described above. But it's not the actual use-case that drove the creation of this project. Having worked on a few service oriented archtectures my team members and I noticed that we'd compiled what amounted to a wishlist of architectural features. In buzz-word form those were roughly:
 
 * Simplicity
 * Flexibility
@@ -109,6 +109,7 @@ The toy example of an HTTP service that computes whether or not a number is prim
 * Separation of Concerns
 * Throughput
 * Load Balancing
+* Fair Queuing
 * Quality of Service
 * Non-blocking
 * Web Scale (just kidding)
@@ -122,14 +123,13 @@ The Path
 
 This was so fun to build for so many reasons. The first thing we did was prove out the ZMQ butterfly pattern as a tiny Github gist. The idea was that we could put an HTTP server in front of the this pattern and hit some of those pesky buzz-words just by having separate stages of the pipeline. Surprisingly, learning this pattern and figuring out how it would work in a concrete scenario was another delight.
 
-It's time for a Public Service Anouncement. Have you read the ZeroMQ [documentation](http://zguide.zeromq.org/page:all)? I am not usually a fan of technical writing, but it is an absolute joy to read. Warning: it may cause you to re-think many many past code design decisions. Don't worry though, that feeling of embarassment over past poor decisions is just an indicator of making better informed ones in the future! Massive kudos to Pieter Hintjens. If you are hungry for more checkout his [blog](http://hintjens.com/) and that of [Martin Sústrik](http://250bpm.com/), both are fantastic reads!
+It's time for a Public Service Anouncement. Have you read the ZeroMQ [documentation](http://zguide.zeromq.org/page:all)? I am not usually a fan of technical writing, but it is an absolute joy to read. Warning: it may cause you to re-think many many past code design decisions. Don't worry though, that feeling of embarassment over past poor decisions is just an indicator of making better informed ones in the future! Massive kudos to Pieter Hintjens who wrote those docks. If you are hungry for more good writing checkout his [blog](http://hintjens.com/) or that of another ZMQ author [Martin Sústrik](http://250bpm.com/), both are fantastic reads!
 
-With so little setup around writing, running and debugging your code you can throw it away more easily if it doesn't work out. And throw out code we did; revision after revision until we got to the point where we were left with a parallelized pipeline whose stages had a loopback to a common entrypoint.
+Back to the gist. With so little setup around writing, running and debugging your code you can throw it away more easily if it doesn't work out. And throw out code we did; revision after revision until we got to the point where we were left with a parallelized pipeline whose stages had a loopback to a common entrypoint.
 
 Then began the search for a suitable HTTP server that could interact with our pipeline. We scoured the internet for servers with ZMQ bindings. As is no surprise, there are lots of good options out there! We spent some time prototyping using a few different ones but then we stumbled upon a very interesting search result. It was a [blog post](http://hintjens.com/blog:42) from Pieter Hintjens about the ZMQ_STREAM socket type. It describes, with examples, how the socket works and ends up making a small web server using it. Hintjens goes on to say that a lot more work would be needed for a full fledged HTTP server and describes some of the missing parts in a bit more detail.
 
 The idea was enticing; could we build a minimal HTTP server with just ZMQ to sit in front of our pipeline? We threw some stuff into a gist once again and started testing. Before long and with very little code, we had something! From there though it was on to writing an HTTP state machine to handle the streaming nature of the socket type. Writing state machines, especially against a couple of protocol versions at the same time is torture in terms code re-use. But we'll get to that in future work section.
-
 
 The API
 -------
@@ -139,11 +139,11 @@ TODO: describe the bits of the API so people have more than example programs to 
 The Future
 ----------
 
-The first thing we should do make use of a proper HTTP parser. There are some impressive ones out there, notibly the one used in one of the webservers we tested (H2O) called PicoHTTPParser. There may be a few issues with the 
+The first thing we should do is make use of a proper HTTP parser. There are some impressive ones out there, notibly PicoHTTPParser which is used in one of the webservers we tested (H2O). There may be a few issues with the streaming nature of the ZMQ_STREAM socket but they are worth working out so as not to have to maintain the mess of code required to properly parse HTTP.
 
 The second thing we want to do is work zbeacon perks into the API. Currently the setup of a pipeline is somewhat cumbersome, each stage must know about the previous and next stages as well as the loopback. Then we also complicate things by making the next stage optional since the pipeline isn't infinite. It's clunky and requires decent understanding to get it right. It's also very manual. With zbeacon, applications can broadcast their endpoints to peers so that they can connect to eachother through discovery rather than via manual configuration.
 
-Automatic service discovery is pretty great, but thats not the really interesting part here; what if our pipeline weren't a pipeline? What if it were a graph?!
+Automatic service discovery is pretty great, but that's not the really interesting part here; what if our pipeline weren't a pipeline? What if it were a graph?!
 
     client <---> server ----------
                  ^ | ^            \
@@ -174,8 +174,20 @@ The implications are huge! We can remove the shackles of a the rigid fixed-order
 
 Allowing the stages to be connected in a graph structure (including cycles) would give the application the option to load balance portions of a larger request until the entire request has been fulfilled. Any problem that could be broken down into tasks of equal size (or at least more equal size) would have the potential to handle requests in a much more fairly balanced fashion.
 
-A graph structure for the various stages also has the potential to better organize the functionalities of worker pools.
+A graph structure for the various stages also has the potential to better organize the functionalities of worker pools. One of the drawbacks of the fixed pipeline, mentioned earlier, was that to handle heterogenious request types, you would either need workers that knew how to do more than one thing or indeed run the different types of requests on different clusters. That limitation would no longer exist in a graph structure. Based on the request type the application can forward it on to the relevant stage.
 
+For example say you wanted to offer up math as a service (MaS of course). You might have:
+
+* workers to compute derivatives
+* workers to do summations
+* workers to compute integrals
+
+Now of course you could implement this all in a client side library, but for the sake of argument, ignore the impracticality for a second. What you wouldn't want to do is write a worker does all three things. This requires forwarding to a specific worker pool based on the url (in this example). Which brings up another TODO, we probably want to allow the server to forward requests to worker pools based on the URL. Furthermore some of these operations are more complex than others. If you watched your system for a while (and you had high enough traffic) you could find the places where you spent more or less time and reallocate proportionally sized worker pools. You could even dynamically size the worker pools if you were really slick ;o)
+
+The Conclusion
+--------------
+
+This has been a fantastic little experiment to have worked on. Even better its been a success. I can claim that because we're using this in a [production system](https://mapzen.com/projects/turn-by-turn). Taking some excellent tools (ZMQ mostly) and building a new tool to help others build yet more tools is a very rewarding experience. If you think you may be interested in building a project/service/tool using this work, we'd love to hear about it, send us a note at [hello@mapzen.com](mailto:hello@mapzen.com).
 
 
 
