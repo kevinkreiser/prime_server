@@ -20,12 +20,6 @@ namespace {
     int disabled = 0;
     server.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
     server.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
-    #if ZMQ_VERSION_MAJOR >= 4
-    #if ZMQ_VERSION_MINOR >= 1
-    int enabled = 1;
-    server.setsockopt(ZMQ_STREAM_NOTIFY, &enabled, sizeof(enabled));
-    #endif
-    #endif
     server.bind("ipc:///tmp/test_server");
 
     zmq::message_t identity;
@@ -57,12 +51,6 @@ namespace {
     int disabled = 0;
     client.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
     client.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
-    #if ZMQ_VERSION_MAJOR >= 4
-    #if ZMQ_VERSION_MINOR >= 1
-    int enabled = 1;
-    client.setsockopt(ZMQ_STREAM_NOTIFY, &enabled, sizeof(enabled));
-    #endif
-    #endif
     client.connect("ipc:///tmp/test_server");
     #if ZMQ_VERSION_MAJOR >= 4
     #if ZMQ_VERSION_MINOR >= 1
@@ -103,13 +91,6 @@ namespace {
     server.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
     client.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
     client.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
-    #if ZMQ_VERSION_MAJOR >= 4
-    #if ZMQ_VERSION_MINOR >= 1
-    int enabled = 1;
-    server.setsockopt(ZMQ_STREAM_NOTIFY, &enabled, sizeof(enabled));
-    client.setsockopt(ZMQ_STREAM_NOTIFY, &enabled, sizeof(enabled));
-    #endif
-    #endif
     server.bind("ipc:///tmp/test_server");
     client.connect("ipc:///tmp/test_server");
 
@@ -232,13 +213,6 @@ namespace {
     dealer.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
     router.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
     router.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
-    #if ZMQ_VERSION_MAJOR >= 4
-    #if ZMQ_VERSION_MINOR >= 1
-    int enabled = 1;
-    client.setsockopt(ZMQ_STREAM_NOTIFY, &enabled, sizeof(enabled));
-    server.setsockopt(ZMQ_STREAM_NOTIFY, &enabled, sizeof(enabled));
-    #endif
-    #endif
     client.connect("ipc:///tmp/test_server");
     server.bind("ipc:///tmp/test_server");
     dealer.connect("ipc:///tmp/test_router_dealer");
