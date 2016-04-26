@@ -241,7 +241,7 @@ namespace {
 
 int main() {
   //make this whole thing bail if it doesnt finish fast
-  alarm(60);
+  alarm(120);
 
   testing::suite suite("netstring");
 
