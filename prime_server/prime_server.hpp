@@ -6,7 +6,6 @@
 #define PRIME_SERVER_VERSION_MINOR 4
 #define PRIME_SERVER_VERSION_PATCH 0
 
-
 #include <functional>
 #include <string>
 #include <list>
