@@ -263,6 +263,8 @@ namespace prime_server {
     body.clear();
   }
 
+  http_request_t::~http_request_t(){};
+
   http_request_t::http_request_t():http_entity_t("", headers_t{}, ""){
     path = "";
     flush_stream();
@@ -498,6 +500,8 @@ namespace prime_server {
   size_t http_request_t::size() const {
     return consumed + partial_buffer.size();
   }
+
+  http_response_t::~http_response_t(){};
 
   http_response_t::http_response_t():http_entity_t("", headers_t{}, ""){
     message = "";
