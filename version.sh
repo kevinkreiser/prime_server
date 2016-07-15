@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 #grabs the version string from the header file for use autotools
 #which then throws it into a pc file so that pkg-config can use it
