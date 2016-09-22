@@ -1,7 +1,7 @@
 ACLOCAL_AMFLAGS = -I m4
 AM_LDFLAGS = @COVERAGE_LDFLAGS@
-AM_CPPFLAGS = -Iprime_server
-AM_CXXFLAGS = -Iprime_server
+AM_CPPFLAGS = -I@abs_srcdir@/prime_server
+AM_CXXFLAGS = -I@abs_srcdir@/prime_server
 LIBTOOL_DEPS = @LIBTOOL_DEPS@
 libtool: $(LIBTOOL_DEPS)
 	$(SHELL) ./config.status libtool
