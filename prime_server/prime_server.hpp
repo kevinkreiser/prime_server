@@ -115,6 +115,7 @@ namespace prime_server {
     struct result_t {
       bool intermediate;
       std::list<std::string> messages;
+      std::string heart_beat;
     };
     using work_function_t = std::function<result_t (const std::list<zmq::message_t>&, void*)>;
     using cleanup_function_t = std::function<void ()>;
@@ -129,7 +130,8 @@ namespace prime_server {
     zmq::socket_t loopback;
     work_function_t work_function;
     cleanup_function_t cleanup_function;
-    long heart_beat;
+    long heart_beat_interval;
+    std::string heart_beat;
   };
 
 }

@@ -265,7 +265,7 @@ namespace prime_server {
   worker_t::worker_t(zmq::context_t& context, const std::string& upstream_proxy_endpoint, const std::string& downstream_proxy_endpoint,
     const std::string& result_endpoint, const work_function_t& work_function, const cleanup_function_t& cleanup_function):
     upstream_proxy(context, ZMQ_DEALER), downstream_proxy(context, ZMQ_DEALER), loopback(context, ZMQ_PUB),
-    work_function(work_function), cleanup_function(cleanup_function), heart_beat(5000) {
+    work_function(work_function), cleanup_function(cleanup_function), heart_beat_interval(5000), heart_beat("") {
 
     int disabled = 0;
 
@@ -288,7 +288,7 @@ namespace prime_server {
     while(true) {
       //check for activity on the in bound socket, timeout after heart_beat interval
       zmq::pollitem_t item = { upstream_proxy, 0, ZMQ_POLLIN, 0 };
-      zmq::poll(&item, 1, heart_beat);
+      zmq::poll(&item, 1, heart_beat_interval);
 
       //got some work to do
       if(item.revents & ZMQ_POLLIN) {
@@ -301,6 +301,8 @@ namespace prime_server {
           messages.pop_front();
           //do the work
           auto result = work_function(messages, request_info.data());
+          //we'll keep advertising the last thing we did
+          heart_beat = std::move(result.heart_beat);
           //should we send this on to the next proxy
           if(result.intermediate) {
             downstream_proxy.send(address, ZMQ_SNDMORE);
@@ -329,7 +331,7 @@ namespace prime_server {
   void worker_t::advertise() {
     try {
       //heart beat, we're alive
-      upstream_proxy.send(static_cast<const void*>(""), 0, 0);
+      upstream_proxy.send(static_cast<const void*>(heart_beat.c_str()), heart_beat.size(), 0);
     }
     catch (const std::exception& e) {
       LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what());
