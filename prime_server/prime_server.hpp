@@ -76,7 +76,7 @@ namespace prime_server {
     //      send the request as a message to the proxy
     //      record the request with its id
     //      log the request if log == true
-    virtual bool enqueue(const void* bytes, size_t length, const std::string& requester, request_container_t& streaming_request) = 0;
+    virtual bool enqueue(const zmq::message_t& requester, const zmq::message_t& message, request_container_t& streaming_request) = 0;
     //implementing class shall:
     //  remove the outstanding request as it was either satisfied, timed-out
     //  depending on the original request or the result the session may also be terminated
@@ -90,15 +90,16 @@ namespace prime_server {
     size_t max_request_size;
     //a record of what open connections we have
     //TODO: keep time of last session activity and clear out stale sessions
-    std::unordered_map<std::string, request_container_t> sessions;
+    std::unordered_map<zmq::message_t, request_container_t> sessions;
     //a record of what requests we have in progress
     //TODO: keep time of request and kill requests that stick around for a long time
-    std::unordered_map<uint64_t, std::string> requests;
+    std::unordered_map<uint64_t, zmq::message_t> requests;
   };
 
   //proxy messages between layers of a backend load balancing in between
   class proxy_t {
    public:
+    //using forward_function_t = std::function<const std::string&
     proxy_t(zmq::context_t& context, const std::string& upstream_endpoint, const std::string& downstream_endpoint);
     void forward();
    protected:
@@ -121,7 +122,8 @@ namespace prime_server {
     using cleanup_function_t = std::function<void ()>;
 
     worker_t(zmq::context_t& context, const std::string& upstream_proxy_endpoint, const std::string& downstream_proxy_endpoint,
-      const std::string& result_endpoint, const work_function_t& work_function, const cleanup_function_t& cleanup_function = [](){});
+      const std::string& result_endpoint, const work_function_t& work_function, const cleanup_function_t& cleanup_function = [](){},
+      const std::string& heart_beat = "");
     void work();
    protected:
     void advertise();

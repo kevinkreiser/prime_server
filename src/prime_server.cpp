@@ -163,7 +163,7 @@ namespace prime_server {
     }
 
     //get some info about the client
-    auto requester = std::string(static_cast<const char*>(messages.front().data()), messages.front().size());
+    auto requester = std::move(messages.front());
     auto session = sessions.find(requester);
 #if ZMQ_VERSION_MAJOR <= 4
 #if ZMQ_VERSION_MINOR < 1
@@ -173,7 +173,7 @@ namespace prime_server {
     //and even more complicated stuff happened which got back ported for
     //the sake of consistency. in any case watch out for this
     if(session == sessions.end())
-      session = sessions.insert({requester, request_container_t{}}).first;
+      session = sessions.insert({std::move(requester), request_container_t{}}).first;
 #endif
 #endif
 
@@ -182,7 +182,7 @@ namespace prime_server {
     if(body.size() == 0) {
       //new client
       if(session == sessions.end()) {
-        sessions.emplace(requester, request_container_t{});
+        sessions.emplace(std::move(requester), request_container_t{});
       }//TODO: check if disconnecting client has a partial request waiting here
       else {
         sessions.erase(session);
@@ -191,10 +191,10 @@ namespace prime_server {
     else {
       if(session != sessions.end()) {
         //proxy any whole bits onward, or if that failed (malformed or large request) close the session
-        if(!enqueue(body.data(), body.size(), requester, session->second)) {
-          sessions.erase(session);
-          client.send(messages.front(), ZMQ_SNDMORE | ZMQ_DONTWAIT);
+        if(!enqueue(session->first, body, session->second)) {
+          client.send(session->first, ZMQ_SNDMORE | ZMQ_DONTWAIT);
           client.send(static_cast<const void*>(""), 0, ZMQ_DONTWAIT);
+          sessions.erase(session);
         }
       }
       else
@@ -216,8 +216,8 @@ namespace prime_server {
     downstream.bind(downstream_endpoint.c_str());
   }
   void proxy_t::forward() {
-    std::unordered_set<std::string> workers;
-    std::queue<std::string> fifo(std::deque<std::string>{});
+    std::unordered_set<zmq::message_t> workers;
+    std::queue<const zmq::message_t*> fifo(std::deque<const zmq::message_t*>{});
 
     //keep forwarding messages
     while(true) {
@@ -231,9 +231,9 @@ namespace prime_server {
       if(items[0].revents & ZMQ_POLLIN) {
         try {
           auto messages = downstream.recv_all(ZMQ_DONTWAIT);
-          auto inserted = workers.insert(std::string(static_cast<const char*>(messages.front().data()), messages.front().size()));
+          auto inserted = workers.insert(std::move(messages.front()));
           if(inserted.second)
-            fifo.push(*inserted.first);
+            fifo.push(&(*inserted.first));
         }
         catch(const std::exception& e) {
           LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " proxy_t: " + e.what());
@@ -247,12 +247,13 @@ namespace prime_server {
           auto messages = upstream.recv_all(ZMQ_DONTWAIT);
           //strip the from address (previous hop)
           messages.pop_front();
-          auto worker_address = fifo.front();
-          workers.erase(worker_address);
+          const auto* worker_address = fifo.front();
           fifo.pop();
           //send it on to the first bored worker
-          downstream.send(worker_address, ZMQ_DONTWAIT | ZMQ_SNDMORE);
+          downstream.send(*worker_address, ZMQ_DONTWAIT | ZMQ_SNDMORE);
           downstream.send_all(messages, ZMQ_DONTWAIT);
+          //they are dead to us until they report back
+          workers.erase(*worker_address);
         }
         catch (const std::exception& e) {
           //TODO: recover from a worker dying just before you sent it work
@@ -263,9 +264,9 @@ namespace prime_server {
   }
 
   worker_t::worker_t(zmq::context_t& context, const std::string& upstream_proxy_endpoint, const std::string& downstream_proxy_endpoint,
-    const std::string& result_endpoint, const work_function_t& work_function, const cleanup_function_t& cleanup_function):
+    const std::string& result_endpoint, const work_function_t& work_function, const cleanup_function_t& cleanup_function, const std::string& heart_beat):
     upstream_proxy(context, ZMQ_DEALER), downstream_proxy(context, ZMQ_DEALER), loopback(context, ZMQ_PUB),
-    work_function(work_function), cleanup_function(cleanup_function), heart_beat_interval(5000), heart_beat("") {
+    work_function(work_function), cleanup_function(cleanup_function), heart_beat_interval(5000), heart_beat(heart_beat) {
 
     int disabled = 0;
 

@@ -26,6 +26,12 @@ namespace {
       int disabled = 0;
       proxy.setsockopt(ZMQ_LINGER, &disabled, sizeof(disabled));
     }
+    //easier to test with straight up strings
+    bool enqueue(const std::string& requester, const std::string& message, netstring_entity_t& buffer) {
+      zmq::message_t r(&const_cast<char&>(requester.front()), requester.size(), [](void*, void*){});
+      zmq::message_t m(&const_cast<char&>(message.front()), message.size(), [](void*, void*){});
+      return netstring_server_t::enqueue(r, m, buffer);
+    }
   };
 
   class testable_netstring_client_t : public netstring_client_t {
@@ -42,9 +48,9 @@ namespace {
 
     netstring_entity_t request;
     std::string incoming("1");
-    server.enqueue(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", request);
+    server.enqueue("irgendjemand", incoming, request);
     incoming = "2:abgeschnitte,3:mer,5:welle,5:luege,5:oeb's,4:guet,4:isch,81:du_siehscht_mi_noed";
-    server.enqueue(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", request);
+    server.enqueue("irgendjemand", incoming, request);
     if(server.request_id != 7)
       throw std::runtime_error("Wrong number of requests were forwarded");
     if(request.body != "du_siehscht_mi_noed")

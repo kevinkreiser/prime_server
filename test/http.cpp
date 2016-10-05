@@ -26,6 +26,12 @@ namespace {
       int disabled = 0;
       proxy.setsockopt(ZMQ_LINGER, &disabled, sizeof(disabled));
     }
+    //easier to test with straight up strings
+    bool enqueue(const std::string& requester, const std::string& message, http_request_t& request) {
+      zmq::message_t r(&const_cast<char&>(requester.front()), requester.size(), [](void*, void*){});
+      zmq::message_t m(&const_cast<char&>(message.front()), message.size(), [](void*, void*){});
+      return http_server_t::enqueue(r, m, request);
+    }
   };
 
   struct testable_http_request_t : public http_request_t {
@@ -47,9 +53,9 @@ namespace {
 
     testable_http_request_t request;
     std::string incoming("GET /irgendwelle/pfad HTTP/1.1\r");
-    server.enqueue(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", request);
+    server.enqueue("irgendjemand", incoming, request);
     incoming ="\nContent-Length: 7\r\n\r\ngohtlosGET /annrer/pfad?aafrag=gel HTTP/1.0\r\n\r\nGET sell_siehscht_du_au_noed";
-    server.enqueue(static_cast<const void*>(incoming.data()), incoming.size(), "irgendjemand", request);
+    server.enqueue("irgendjemand", incoming, request);
 
     if(server.request_id != 2)
       throw std::runtime_error("Wrong number of requests were forwarded");

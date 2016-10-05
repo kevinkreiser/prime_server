@@ -646,11 +646,11 @@ namespace prime_server {
   }
   http_server_t::~http_server_t(){}
 
-  bool http_server_t::enqueue(const void* message, size_t size, const std::string& requester, http_request_t& request) {
+  bool http_server_t::enqueue(const zmq::message_t& requester, const zmq::message_t& message, http_request_t& request) {
     //do some parsing
     std::list<http_request_t> parsed_requests;
     try {
-      parsed_requests = request.from_stream(static_cast<const char*>(message), size, max_request_size);
+      parsed_requests = request.from_stream(static_cast<const char*>(message.data()), message.size(), max_request_size);
     }//something went wrong, either in parsing or size limitation
     catch(const request_exception_t& e) {
       client.send(requester, ZMQ_SNDMORE | ZMQ_DONTWAIT);

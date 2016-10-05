@@ -123,11 +123,11 @@ namespace prime_server {
 
   netstring_server_t::~netstring_server_t(){}
 
-  bool netstring_server_t::enqueue(const void* message, size_t size, const std::string& requester, netstring_entity_t& request) {
+  bool netstring_server_t::enqueue(const zmq::message_t& requester, const zmq::message_t& message, netstring_entity_t& request) {
     //do some parsing
     std::list<netstring_entity_t> parsed_requests;
     try {
-      parsed_requests = request.from_stream(static_cast<const char*>(message), size, max_request_size);
+      parsed_requests = request.from_stream(static_cast<const char*>(message.data()), message.size(), max_request_size);
     }//something went wrong either bad request or too long
     catch(const std::runtime_error& e) {
       client.send(requester, ZMQ_SNDMORE | ZMQ_DONTWAIT);

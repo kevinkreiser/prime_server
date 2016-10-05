@@ -32,7 +32,6 @@ namespace zmq {
           delete message;
         });
     }
-
     message_t::message_t(size_t size) {
       //make the c message
       zmq_msg_t* message = new zmq_msg_t();
