@@ -99,12 +99,17 @@ namespace prime_server {
   //proxy messages between layers of a backend load balancing in between
   class proxy_t {
    public:
-    //using forward_function_t = std::function<const std::string&
-    proxy_t(zmq::context_t& context, const std::string& upstream_endpoint, const std::string& downstream_endpoint);
+    //maps worker address to worker heartbeat
+    using worker_pool_t = std::unordered_map<zmq::message_t, zmq::message_t>;
+    //allows you to favor a certain worker for a given job
+    using choose_function_t = std::function<worker_pool_t::const_iterator (const worker_pool_t&, const std::list<zmq::message_t>&)>;
+    proxy_t(zmq::context_t& context, const std::string& upstream_endpoint, const std::string& downstream_endpoint,
+      const choose_function_t& choose_function = [](const worker_pool_t& pool, const std::list<zmq::message_t>&){return pool.cend();});
     void forward();
    protected:
     zmq::socket_t upstream;
     zmq::socket_t downstream;
+    choose_function_t choose_function;
   };
 
   //get work from a load balancer proxy letting it know when you are idle

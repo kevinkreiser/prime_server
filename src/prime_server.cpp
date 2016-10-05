@@ -202,8 +202,8 @@ namespace prime_server {
     }
   }
 
-  proxy_t::proxy_t(zmq::context_t& context, const std::string& upstream_endpoint, const std::string& downstream_endpoint):
-    upstream(context, ZMQ_ROUTER), downstream(context, ZMQ_ROUTER) {
+  proxy_t::proxy_t(zmq::context_t& context, const std::string& upstream_endpoint, const std::string& downstream_endpoint, const choose_function_t& choose_function):
+    upstream(context, ZMQ_ROUTER), downstream(context, ZMQ_ROUTER), choose_function(choose_function) {
 
     int disabled = 0;
 
@@ -216,7 +216,7 @@ namespace prime_server {
     downstream.bind(downstream_endpoint.c_str());
   }
   void proxy_t::forward() {
-    std::unordered_set<zmq::message_t> workers;
+    std::unordered_map<zmq::message_t, zmq::message_t> workers;
     std::queue<const zmq::message_t*> fifo(std::deque<const zmq::message_t*>{});
 
     //keep forwarding messages
@@ -231,9 +231,11 @@ namespace prime_server {
       if(items[0].revents & ZMQ_POLLIN) {
         try {
           auto messages = downstream.recv_all(ZMQ_DONTWAIT);
-          auto inserted = workers.insert(std::move(messages.front()));
-          if(inserted.second)
-            fifo.push(&(*inserted.first));
+          auto worker = workers.find(messages.front());
+          if(worker == workers.cend()) {
+            auto inserted = workers.emplace_hint(worker, std::move(messages.front()), std::move(*std::next(messages.begin())));
+            fifo.push(&inserted->first);
+          }
         }
         catch(const std::exception& e) {
           LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " proxy_t: " + e.what());
