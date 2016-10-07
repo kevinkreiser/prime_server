@@ -64,11 +64,11 @@ namespace zmq {
     }
 
     bool message_t::operator==(const message_t& other) const {
-      return std::memcmp(data(), other.data(), size()) == 0;
+      return size() == other.size() && std::memcmp(data(), other.data(), size()) == 0;
     }
 
     bool message_t::operator!=(const message_t& other) const {
-      return std::memcmp(data(), other.data(), size()) != 0;
+      return size() != other.size() || std::memcmp(data(), other.data(), size()) != 0;
     }
 
     socket_t::socket_t(const context_t& context, int socket_type):context(context) {

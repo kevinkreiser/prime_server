@@ -3,8 +3,8 @@
 
 //some version info
 #define PRIME_SERVER_VERSION_MAJOR 0
-#define PRIME_SERVER_VERSION_MINOR 3
-#define PRIME_SERVER_VERSION_PATCH 5
+#define PRIME_SERVER_VERSION_MINOR 4
+#define PRIME_SERVER_VERSION_PATCH 0
 
 
 #include <functional>
@@ -78,10 +78,11 @@ namespace prime_server {
     //      log the request if log == true
     virtual bool enqueue(const zmq::message_t& requester, const zmq::message_t& message, request_container_t& streaming_request) = 0;
     //implementing class shall:
-    //  remove the outstanding request as it was either satisfied, timed-out
-    //  depending on the original request or the result the session may also be terminated
+    //  reply to the requester
+    //  remove the outstanding request as it was either satisfied or timed-out
+    //  may also remove the session depending on the original request or the result
     //  log the response if log == true
-    virtual void dequeue(const request_info_t& request_info, size_t length) = 0;
+    virtual void dequeue(const std::list<zmq::message_t>& messages) = 0;
 
     zmq::socket_t client;
     zmq::socket_t proxy;
@@ -99,12 +100,10 @@ namespace prime_server {
   //proxy messages between layers of a backend load balancing in between
   class proxy_t {
    public:
-    //maps worker address to worker heartbeat
-    using worker_pool_t = std::unordered_map<zmq::message_t, zmq::message_t>;
     //allows you to favor a certain worker for a given job
-    using choose_function_t = std::function<worker_pool_t::const_iterator (const worker_pool_t&, const std::list<zmq::message_t>&)>;
+    using choose_function_t = std::function<const zmq::message_t* (const std::list<zmq::message_t>&, const std::list<zmq::message_t>&)>;
     proxy_t(zmq::context_t& context, const std::string& upstream_endpoint, const std::string& downstream_endpoint,
-      const choose_function_t& choose_function = [](const worker_pool_t& pool, const std::list<zmq::message_t>&){return pool.cend();});
+      const choose_function_t& choose_function = [](const std::list<zmq::message_t>&, const std::list<zmq::message_t>&){return nullptr;});
     void forward();
    protected:
     zmq::socket_t upstream;

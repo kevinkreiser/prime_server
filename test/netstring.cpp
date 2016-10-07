@@ -159,7 +159,7 @@ namespace {
 
     //echo worker
     std::thread worker(std::bind(&worker_t::work,
-      worker_t(context, "ipc:///tmp/test_netstring_proxy_downstream", "ipc:///tmp/NONE", "ipc:///tmp/test_netstring_results",
+      worker_t(context, "ipc:///tmp/test_netstring_proxy_downstream", "ipc:///dev/null", "ipc:///tmp/test_netstring_results",
       [] (const std::list<zmq::message_t>& job, void*) {
         worker_t::result_t result{false};
         auto request = netstring_entity_t::from_string(static_cast<const char*>(job.front().data()), job.front().size());
@@ -171,8 +171,8 @@ namespace {
     worker.detach();
 
     //make a bunch of clients
-    std::thread client1(std::bind(&netstring_client_work, context));
-    std::thread client2(std::bind(&netstring_client_work, context));
+    std::thread client1(std::bind(&netstring_client_work, std::ref(context)));
+    std::thread client2(std::bind(&netstring_client_work, std::ref(context)));
     client1.join();
     client2.join();
   }

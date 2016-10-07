@@ -37,7 +37,7 @@ namespace prime_server {
     virtual ~netstring_server_t();
    protected:
     virtual bool enqueue(const zmq::message_t& requester, const zmq::message_t& message, netstring_entity_t& buffer);
-    virtual void dequeue(const uint64_t& request_info, size_t length);
+    virtual void dequeue(const std::list<zmq::message_t>& messages);
     uint64_t request_id;
   };
 

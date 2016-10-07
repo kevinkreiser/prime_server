@@ -138,7 +138,7 @@ namespace prime_server {
     virtual ~http_server_t();
    protected:
     virtual bool enqueue(const zmq::message_t& requester, const zmq::message_t& message, http_request_t& request);
-    virtual void dequeue(const http_request_t::info_t& request_info, size_t length);
+    virtual void dequeue(const std::list<zmq::message_t>& messages);
    protected:
     uint64_t request_id;
   };

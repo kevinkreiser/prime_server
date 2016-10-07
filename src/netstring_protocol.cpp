@@ -142,7 +142,6 @@ namespace prime_server {
 
     //send on each request
     for(const auto& parsed_request : parsed_requests) {
-      this->proxy.send(requester, ZMQ_DONTWAIT | ZMQ_SNDMORE);
       this->proxy.send(static_cast<const void*>(&request_id), sizeof(request_id), ZMQ_DONTWAIT | ZMQ_SNDMORE);
       this->proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT);
       if(log)
@@ -153,13 +152,21 @@ namespace prime_server {
     return true;
   }
 
-  void netstring_server_t::dequeue(const uint64_t& request_info, size_t length) {
-    //NOTE: netstring protocol is always keep alive so we leave the session intact
-    auto removed = requests.erase(request_info);
-    if(removed != 1)
+  void netstring_server_t::dequeue(const std::list<zmq::message_t>& messages) {
+    //find the request
+    const auto& request_info = *static_cast<const uint64_t*>(messages.front().data());
+    auto request = requests.find(request_info);
+    if(request == requests.end()) {
       LOG_WARN("Unknown or timed-out request id: " + std::to_string(request_info));
-    else if(log)
+      return;
+    }
+    //reply to the client
+    client.send(request->second, ZMQ_SNDMORE | ZMQ_DONTWAIT);
+    client.send(messages.back(), ZMQ_DONTWAIT);
+    if(log)
       log_transaction(request_info, "REPLIED");
+    //cleanup, but leave the session as netstring is always keep alive
+    requests.erase(request);
   }
 
 }
