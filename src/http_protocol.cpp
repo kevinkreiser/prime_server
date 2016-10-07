@@ -64,14 +64,16 @@ namespace {
   }
 
   struct request_exception_t : public std::runtime_error {
-    request_exception_t(const prime_server::http_response_t& response): runtime_error(response.to_string()), code(response.code), response(response.to_string()) { }
+    request_exception_t(const prime_server::http_response_t& response):
+      runtime_error(response.to_string()), code(response.code), response(what()) { }
     const uint16_t code;
-    const std::string response;
+    std::string response;
   };
 
   const prime_server::headers_t::value_type CORS{"Access-Control-Allow-Origin", "*"};
   const request_exception_t RESPONSE_400(prime_server::http_response_t(400, "Bad Request", "Malformed HTTP request", {CORS}));
   const request_exception_t RESPONSE_413(prime_server::http_response_t(413, "Request Entity Too Large", "The HTTP request was too large", {CORS}));
+  const request_exception_t RESPONSE_500(prime_server::http_response_t(500, "Internal Server Error", "The HTTP request method is not supported", {CORS}));
   const request_exception_t RESPONSE_501(prime_server::http_response_t(501, "Not Implemented", "The HTTP request method is not supported", {CORS}));
   const request_exception_t RESPONSE_505(prime_server::http_response_t(505, "HTTP Version Not Supported", "The HTTP request version is not supported", {CORS}));
 
@@ -685,9 +687,12 @@ namespace prime_server {
       LOG_WARN("Unknown or timed-out request id: " + std::to_string(request_info.id));
       return;
     }
-    //reply to the client
+    //reply to the client with the response or an error
     client.send(request->second, ZMQ_SNDMORE | ZMQ_DONTWAIT);
-    client.send(messages.back(), ZMQ_DONTWAIT);
+    if(messages.size() == 2)
+      client.send(messages.back(), ZMQ_DONTWAIT);
+    else
+      client.send(RESPONSE_500.response, ZMQ_DONTWAIT);
     if(log)
       log_response(request_info.id, request_info.response_code, messages.back().size());
     //cleanup, session may or may not be keep alive

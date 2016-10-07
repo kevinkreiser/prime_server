@@ -109,7 +109,8 @@ namespace prime_server {
       if(items[0].revents & ZMQ_POLLIN) {
         try {
           auto messages = loopback.recv_all(ZMQ_DONTWAIT);
-          handle_response(messages);
+          //reply to client and cleanup request or session
+          dequeue(messages);
         }
         catch(const std::exception& e) {
           LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " server_t: " + e.what());
@@ -129,23 +130,6 @@ namespace prime_server {
 
       //TODO: kill stale sessions
     }
-  }
-
-  template <class request_container_t, class request_info_t>
-  void server_t<request_container_t, request_info_t>::handle_response(std::list<zmq::message_t>& messages) {
-    if(messages.size() < 2) {
-      LOG_ERROR("Cannot reply without request information");
-      return;
-    }
-    if(messages.size() > 2) {
-      LOG_WARN("Cannot reply with more than one message, dropping additional");
-      messages.resize(2);
-    }
-    if(messages.back().size() == 0)
-      LOG_WARN("Sending empty messages will disconnect the client");
-
-    //reply to client and cleanup request or session
-    dequeue(messages);
   }
 
   template <class request_container_t, class request_info_t>
@@ -333,17 +317,23 @@ namespace prime_server {
             downstream_proxy.send_all(result.messages, 0);
           }//or are we done
           else {
-            if(result.messages.size() > 1)
-              LOG_WARN("Cannot send more than one result message, additional parts are dropped");
             loopback.send(request_info, ZMQ_SNDMORE);
+            if(result.messages.size() == 0)
+              LOG_ERROR("At least one result message is required for the loopback");
+            if(result.messages.size() > 1) {
+              LOG_WARN("Sending more than one result message over the loopback will result in additional parts being dropped");
+              result.messages.resize(1);
+            }
+            if(result.messages.back().size() == 0)
+              LOG_WARN("Sending empty messages will disconnect the client");
             loopback.send_all(result.messages, 0);
           }
-          //cleanup
-          cleanup_function();
         }
-        catch(const std::exception& e) {
-          LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what());
-        }
+        catch(const std::exception& e) { LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what()); }
+
+        //do some cleanup
+        try { cleanup_function(); }
+        catch(const std::exception& e) { LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what()); }
       }
 
       //we want something more to do

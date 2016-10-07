@@ -61,7 +61,6 @@ namespace prime_server {
     virtual ~server_t();
     void serve();
    protected:
-    void handle_response(std::list<zmq::message_t>& messages);
     void handle_request(std::list<zmq::message_t>& messages);
     //implementing class shall:
     //  take the request_container pump more bytes into and get back out >= 0 whole request objects

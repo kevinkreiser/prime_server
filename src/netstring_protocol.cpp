@@ -16,6 +16,8 @@ namespace {
     logging::log(log_line);
   }
 
+  const std::string INTERNAL_ERROR(prime_server::netstring_entity_t::to_string("INTERNAL_ERROR: empty response"));
+
 }
 
 namespace prime_server {
@@ -160,9 +162,12 @@ namespace prime_server {
       LOG_WARN("Unknown or timed-out request id: " + std::to_string(request_info));
       return;
     }
-    //reply to the client
+    //reply to the client with the response or an error
     client.send(request->second, ZMQ_SNDMORE | ZMQ_DONTWAIT);
-    client.send(messages.back(), ZMQ_DONTWAIT);
+    if(messages.size() == 2)
+      client.send(messages.back(), ZMQ_DONTWAIT);
+    else
+      client.send(INTERNAL_ERROR, ZMQ_DONTWAIT);
     if(log)
       log_transaction(request_info, "REPLIED");
     //cleanup, but leave the session as netstring is always keep alive
