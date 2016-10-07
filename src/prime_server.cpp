@@ -223,7 +223,9 @@ namespace prime_server {
 
     //keep forwarding messages
     while(true) {
-      //TODO: expire any workers who don't advertise for a while
+      //TODO: expire any workers who don't advertise for a while, simply store a pair
+      //in the fifo above where the second item is the time it was added to the fifo.
+      //then we just get the time and iterate from the beginning popping off stale ones
 
       //check for activity on either of the sockets, but if we have no workers just let requests sit on the upstream socket
       zmq::pollitem_t items[] = { { downstream, 0, ZMQ_POLLIN, 0 }, { upstream, 0, ZMQ_POLLIN, 0 } };
@@ -232,6 +234,7 @@ namespace prime_server {
       //this worker is bored
       if(items[0].revents & ZMQ_POLLIN) {
         try {
+          //its a new worker
           auto messages = downstream.recv_all(ZMQ_DONTWAIT);
           auto worker = workers.find(messages.front());
           if(worker == workers.cend()) {
@@ -241,7 +244,9 @@ namespace prime_server {
             worker = workers.emplace_hint(worker, std::move(messages.front()), std::prev(fifo.end()));
             //remember which worker owns this heartbeat
             heart_beats.emplace(&fifo.back(), worker->first);
-          }//TODO: worry about heartbeats updating?
+          }//not new but update heartbeat just in case
+          else
+            *worker->second = std::move(*std::next(messages.begin()));
         }
         catch(const std::exception& e) {
           LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " proxy_t: " + e.what());
