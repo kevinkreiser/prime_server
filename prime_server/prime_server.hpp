@@ -113,10 +113,11 @@ namespace prime_server {
 
     //we want a fifo queue in the case that the proxy doesnt care what worker to send jobs to
     //having this constraint does also require that we store a bidirectional mapping between
-    //worker addresses and their heartbeats
+    //worker addresses and their heartbeats. since heartbeats are application defined we only
+    //store them once (they could be larger) and opt for storing the worker addresses duplicated
     std::list<zmq::message_t> fifo;
     std::unordered_map<zmq::message_t, std::list<zmq::message_t>::iterator> workers;
-    std::unordered_map<const zmq::message_t*, const zmq::message_t*> heart_beats;
+    std::unordered_map<const zmq::message_t*, zmq::message_t> heart_beats;
   };
 
   //get work from a load balancer proxy letting it know when you are idle

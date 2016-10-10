@@ -222,7 +222,7 @@ namespace prime_server {
             //remember this workers address
             worker = workers.emplace_hint(worker, std::move(messages.front()), std::prev(fifo.end()));
             //remember which worker owns this heartbeat
-            heart_beats.emplace(&fifo.back(), &worker->first);
+            heart_beats.emplace(&fifo.back(), worker->first);
           }//not new but update heartbeat just in case
           else
             *worker->second = std::move(*std::next(messages.begin()));
@@ -251,10 +251,10 @@ namespace prime_server {
             hb_itr = heart_beats.find(heart_beat);
           }
           //send it on to the first bored worker
-          downstream.send(*hb_itr->second, ZMQ_DONTWAIT | ZMQ_SNDMORE);
+          downstream.send(hb_itr->second, ZMQ_DONTWAIT | ZMQ_SNDMORE);
           downstream.send_all(messages, ZMQ_DONTWAIT);
           //they are dead to us until they report back
-          auto worker_itr = workers.find(*hb_itr->second);
+          auto worker_itr = workers.find(hb_itr->second);
           fifo.erase(worker_itr->second);
           workers.erase(worker_itr);
           heart_beats.erase(hb_itr);
