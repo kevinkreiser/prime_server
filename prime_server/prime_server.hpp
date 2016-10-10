@@ -99,15 +99,24 @@ namespace prime_server {
   //proxy messages between layers of a backend load balancing in between
   class proxy_t {
    public:
-    //allows you to favor a certain worker for a given job
+    //allows you to favor a certain heartbeat/worker for a given job
     using choose_function_t = std::function<const zmq::message_t* (const std::list<zmq::message_t>&, const std::list<zmq::message_t>&)>;
     proxy_t(zmq::context_t& context, const std::string& upstream_endpoint, const std::string& downstream_endpoint,
       const choose_function_t& choose_function = [](const std::list<zmq::message_t>&, const std::list<zmq::message_t>&){return nullptr;});
+    virtual ~proxy_t();
     void forward();
    protected:
+    virtual int expire();
     zmq::socket_t upstream;
     zmq::socket_t downstream;
     choose_function_t choose_function;
+
+    //we want a fifo queue in the case that the proxy doesnt care what worker to send jobs to
+    //having this constraint does also require that we store a bidirectional mapping between
+    //worker addresses and their heartbeats
+    std::list<zmq::message_t> fifo;
+    std::unordered_map<zmq::message_t, std::list<zmq::message_t>::iterator> workers;
+    std::unordered_map<const zmq::message_t*, const zmq::message_t*> heart_beats;
   };
 
   //get work from a load balancer proxy letting it know when you are idle

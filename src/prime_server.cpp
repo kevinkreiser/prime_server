@@ -196,24 +196,19 @@ namespace prime_server {
     downstream.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
     downstream.bind(downstream_endpoint.c_str());
   }
+  proxy_t::~proxy_t(){}
+  int proxy_t::expire() {
+    //TODO: expire any workers who don't advertise for a while, simply store a pair
+    //in the heartbeat fifo where the second item is the time it was added. then we
+    //just get the time and iterate from the beginning popping off stale ones
+    return static_cast<bool>(fifo.size()) + 1;
+  }
   void proxy_t::forward() {
-    //we want a fifo queue in the case that the proxy doesnt care what worker to send jobs to
-    //having this constraint does also require that we store a bidirectional mapping between
-    //worker addresses and their heartbeats. since heartbeats are application defined we only
-    //store them once (they could be larger) and opt for storing the worker addresses duplicated
-    std::list<zmq::message_t> fifo;
-    std::unordered_map<zmq::message_t, std::list<zmq::message_t>::iterator> workers;
-    std::unordered_map<const zmq::message_t*, zmq::message_t> heart_beats;
-
     //keep forwarding messages
     while(true) {
-      //TODO: expire any workers who don't advertise for a while, simply store a pair
-      //in the fifo above where the second item is the time it was added to the fifo.
-      //then we just get the time and iterate from the beginning popping off stale ones
-
       //check for activity on either of the sockets, but if we have no workers just let requests sit on the upstream socket
       zmq::pollitem_t items[] = { { downstream, 0, ZMQ_POLLIN, 0 }, { upstream, 0, ZMQ_POLLIN, 0 } };
-      zmq::poll(items,  fifo.size() ? 2 : 1, -1);
+      zmq::poll(items, expire(), -1);
 
       //this worker is bored
       if(items[0].revents & ZMQ_POLLIN) {
@@ -227,7 +222,7 @@ namespace prime_server {
             //remember this workers address
             worker = workers.emplace_hint(worker, std::move(messages.front()), std::prev(fifo.end()));
             //remember which worker owns this heartbeat
-            heart_beats.emplace(&fifo.back(), worker->first);
+            heart_beats.emplace(&fifo.back(), &worker->first);
           }//not new but update heartbeat just in case
           else
             *worker->second = std::move(*std::next(messages.begin()));
@@ -256,10 +251,10 @@ namespace prime_server {
             hb_itr = heart_beats.find(heart_beat);
           }
           //send it on to the first bored worker
-          downstream.send(hb_itr->second, ZMQ_DONTWAIT | ZMQ_SNDMORE);
+          downstream.send(*hb_itr->second, ZMQ_DONTWAIT | ZMQ_SNDMORE);
           downstream.send_all(messages, ZMQ_DONTWAIT);
           //they are dead to us until they report back
-          auto worker_itr = workers.find(hb_itr->second);
+          auto worker_itr = workers.find(*hb_itr->second);
           fifo.erase(worker_itr->second);
           workers.erase(worker_itr);
           heart_beats.erase(hb_itr);

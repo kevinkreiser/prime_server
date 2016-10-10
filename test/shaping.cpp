@@ -15,6 +15,15 @@ using namespace prime_server;
 
 namespace {
 
+  class testable_proxy_t : public prime_server::proxy_t {
+   protected:
+    //since we only have 2 workers below we want to only allow requests when both are available
+    //we dont want to test the case when only one of two is available because its not deterministic
+    int expire() override {
+      return fifo.size() ? fifo.size() : 1;
+    }
+  };
+
   void netstring_client_work(zmq::context_t& context, const std::string& request, std::list<std::string>& responses, const std::string& endpoint, const size_t total, const size_t batch_size) {
     //client makes requests and gets back responses in a batch fashion
     auto request_str = netstring_entity_t::to_string(request);
@@ -73,7 +82,7 @@ namespace {
       bs += response == "B";
     }
     if(as != bs)
-      throw std::logic_error("traffic should have evenly distributed");
+      throw std::logic_error("Traffic should have been evenly distributed but A had " + std::to_string(as) + " and B had " + std::to_string(bs));
   }
 
   void test_shaped() {
@@ -128,7 +137,7 @@ namespace {
       bs += response == "B";
     }
     if(as != 10000 || bs != 0)
-      throw std::logic_error("Only the A worker should have answered requests");
+      throw std::logic_error("Only the A worker should have answered requests but A had " + std::to_string(as) + " and B had " + std::to_string(bs));
   }
 
 }
