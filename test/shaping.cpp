@@ -16,11 +16,14 @@ using namespace prime_server;
 namespace {
 
   class testable_proxy_t : public prime_server::proxy_t {
+   public:
+    using proxy_t::proxy_t;
    protected:
-    //since we only have 2 workers below we want to only allow requests when both are available
-    //we dont want to test the case when only one of two is available because its not deterministic
+    //since we only ever have 2 workers below (A and B) and we want the test to be deterministic we only
+    //listen for requests when both are available. this allows the proxy to always pick the right one and
+    //not be forced to just go with whichever is available
     int expire() override {
-      return fifo.size() ? fifo.size() : 1;
+      return fifo.size() == 2 ? 2 : 1;
     }
   };
 
@@ -56,7 +59,7 @@ namespace {
 
     //load balancer for parsing
     std::thread proxy(std::bind(&proxy_t::forward,
-      proxy_t(context, "ipc:///tmp/test_unshaped_proxy_upstream", "ipc:///tmp/test_unshaped_proxy_downstream")));
+      testable_proxy_t(context, "ipc:///tmp/test_unshaped_proxy_upstream", "ipc:///tmp/test_unshaped_proxy_downstream")));
     proxy.detach();
 
     //a or b workers
@@ -96,7 +99,7 @@ namespace {
     //load balancer for parsing that favors heartbeats (ie workers) based on whats in the job to be forwarded
     //returning a nullptr means you dont have a preference
     std::thread proxy(std::bind(&proxy_t::forward,
-      proxy_t(context, "ipc:///tmp/test_shaped_proxy_upstream", "ipc:///tmp/test_shaped_proxy_downstream",
+      testable_proxy_t(context, "ipc:///tmp/test_shaped_proxy_upstream", "ipc:///tmp/test_shaped_proxy_downstream",
         [](const std::list<zmq::message_t>& heart_beats, const std::list<zmq::message_t>& job) -> const zmq::message_t* {
           //have a look at each heartbeat
           for(const auto& heart_beat : heart_beats) {
