@@ -82,7 +82,7 @@ prime_echod_CPPFLAGS = $(DEPS_CFLAGS)
 prime_echod_LDADD = $(DEPS_LIBS) libprime_server.la
 
 # tests
-check_PROGRAMS = test/zmq test/netstring test/http
+check_PROGRAMS = test/zmq test/netstring test/http test/shaping
 test_zmq_SOURCES = test/zmq.cpp
 test_zmq_CPPFLAGS = $(DEPS_CFLAGS)
 test_zmq_LDADD = $(DEPS_LIBS) libprime_server.la
@@ -92,7 +92,9 @@ test_netstring_LDADD = $(DEPS_LIBS) libprime_server.la
 test_http_SOURCES = test/http.cpp
 test_http_CPPFLAGS = $(DEPS_CFLAGS)
 test_http_LDADD = $(DEPS_LIBS) libprime_server.la
-
+test_shaping_SOURCES = test/shaping.cpp
+test_shaping_CPPFLAGS = $(DEPS_CFLAGS)
+test_shaping_LDADD = $(DEPS_LIBS) libprime_server.la
 
 TESTS = $(check_PROGRAMS)
 TEST_EXTENSIONS = .sh
