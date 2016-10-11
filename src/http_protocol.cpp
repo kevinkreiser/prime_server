@@ -73,7 +73,7 @@ namespace {
   const prime_server::headers_t::value_type CORS{"Access-Control-Allow-Origin", "*"};
   const request_exception_t RESPONSE_400(prime_server::http_response_t(400, "Bad Request", "Malformed HTTP request", {CORS}));
   const request_exception_t RESPONSE_413(prime_server::http_response_t(413, "Request Entity Too Large", "The HTTP request was too large", {CORS}));
-  const request_exception_t RESPONSE_500(prime_server::http_response_t(500, "Internal Server Error", "The HTTP request method is not supported", {CORS}));
+  const request_exception_t RESPONSE_500(prime_server::http_response_t(500, "Internal Server Error", "The server encountered an unexpected condition which prevented it from fulfilling the request", {CORS}));
   const request_exception_t RESPONSE_501(prime_server::http_response_t(501, "Not Implemented", "The HTTP request method is not supported", {CORS}));
   const request_exception_t RESPONSE_505(prime_server::http_response_t(505, "HTTP Version Not Supported", "The HTTP request version is not supported", {CORS}));
 
