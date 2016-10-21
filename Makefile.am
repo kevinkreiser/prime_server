@@ -1,7 +1,7 @@
 ACLOCAL_AMFLAGS = -I m4
 AM_LDFLAGS = @COVERAGE_LDFLAGS@
-AM_CPPFLAGS = -Iprime_server
-AM_CXXFLAGS = -Iprime_server
+AM_CPPFLAGS = -I@abs_srcdir@/prime_server
+AM_CXXFLAGS = -I@abs_srcdir@/prime_server
 LIBTOOL_DEPS = @LIBTOOL_DEPS@
 libtool: $(LIBTOOL_DEPS)
 	$(SHELL) ./config.status libtool
@@ -89,7 +89,7 @@ prime_filed_CPPFLAGS = $(DEPS_CFLAGS)
 prime_filed_LDADD = $(DEPS_LIBS) libprime_server.la
 
 # tests
-check_PROGRAMS = test/zmq test/netstring test/http
+check_PROGRAMS = test/zmq test/netstring test/http test/shaping
 test_zmq_SOURCES = test/zmq.cpp
 test_zmq_CPPFLAGS = $(DEPS_CFLAGS)
 test_zmq_LDADD = $(DEPS_LIBS) libprime_server.la
@@ -99,7 +99,9 @@ test_netstring_LDADD = $(DEPS_LIBS) libprime_server.la
 test_http_SOURCES = test/http.cpp
 test_http_CPPFLAGS = $(DEPS_CFLAGS)
 test_http_LDADD = $(DEPS_LIBS) libprime_server.la
-
+test_shaping_SOURCES = test/shaping.cpp
+test_shaping_CPPFLAGS = $(DEPS_CFLAGS)
+test_shaping_LDADD = $(DEPS_LIBS) libprime_server.la
 
 TESTS = $(check_PROGRAMS)
 TEST_EXTENSIONS = .sh

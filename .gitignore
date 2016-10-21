@@ -48,6 +48,7 @@ test-driver
 test/zmq
 test/netstring
 test/http
+test/shaping
 test/*.log
 test/*.trs
 

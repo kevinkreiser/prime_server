@@ -60,7 +60,6 @@ namespace prime_server {
     virtual ~server_t();
     void serve();
    protected:
-    void handle_response(std::list<zmq::message_t>& messages);
     void handle_request(std::list<zmq::message_t>& messages);
     //implementing class shall:
     //  take the request_container pump more bytes into and get back out >= 0 whole request objects
@@ -75,12 +74,13 @@ namespace prime_server {
     //      send the request as a message to the proxy
     //      record the request with its id
     //      log the request if log == true
-    virtual bool enqueue(const void* bytes, size_t length, const std::string& requester, request_container_t& streaming_request) = 0;
+    virtual bool enqueue(const zmq::message_t& requester, const zmq::message_t& message, request_container_t& streaming_request) = 0;
     //implementing class shall:
-    //  remove the outstanding request as it was either satisfied, timed-out
-    //  depending on the original request or the result the session may also be terminated
+    //  reply to the requester
+    //  remove the outstanding request as it was either satisfied or timed-out
+    //  may also remove the session depending on the original request or the result
     //  log the response if log == true
-    virtual void dequeue(const request_info_t& request_info, size_t length) = 0;
+    virtual void dequeue(const std::list<zmq::message_t>& messages) = 0;
 
     zmq::socket_t client;
     zmq::socket_t proxy;
@@ -89,20 +89,34 @@ namespace prime_server {
     size_t max_request_size;
     //a record of what open connections we have
     //TODO: keep time of last session activity and clear out stale sessions
-    std::unordered_map<std::string, request_container_t> sessions;
+    std::unordered_map<zmq::message_t, request_container_t> sessions;
     //a record of what requests we have in progress
     //TODO: keep time of request and kill requests that stick around for a long time
-    std::unordered_map<uint64_t, std::string> requests;
+    std::unordered_map<uint64_t, zmq::message_t> requests;
   };
 
   //proxy messages between layers of a backend load balancing in between
   class proxy_t {
    public:
-    proxy_t(zmq::context_t& context, const std::string& upstream_endpoint, const std::string& downstream_endpoint);
+    //allows you to favor a certain heartbeat/worker for a given job
+    using choose_function_t = std::function<const zmq::message_t* (const std::list<zmq::message_t>&, const std::list<zmq::message_t>&)>;
+    proxy_t(zmq::context_t& context, const std::string& upstream_endpoint, const std::string& downstream_endpoint,
+      const choose_function_t& choose_function = [](const std::list<zmq::message_t>&, const std::list<zmq::message_t>&){return nullptr;});
+    virtual ~proxy_t();
     void forward();
    protected:
+    virtual int expire();
     zmq::socket_t upstream;
     zmq::socket_t downstream;
+    choose_function_t choose_function;
+
+    //we want a fifo queue in the case that the proxy doesnt care what worker to send jobs to
+    //having this constraint does also require that we store a bidirectional mapping between
+    //worker addresses and their heartbeats. since heartbeats are application defined we only
+    //store them once (they could be larger) and opt for storing the worker addresses duplicated
+    std::list<zmq::message_t> fifo;
+    std::unordered_map<zmq::message_t, std::list<zmq::message_t>::iterator> workers;
+    std::unordered_map<const zmq::message_t*, zmq::message_t> heart_beats;
   };
 
   //get work from a load balancer proxy letting it know when you are idle
@@ -114,12 +128,14 @@ namespace prime_server {
     struct result_t {
       bool intermediate;
       std::list<std::string> messages;
+      std::string heart_beat;
     };
     using work_function_t = std::function<result_t (const std::list<zmq::message_t>&, void*)>;
     using cleanup_function_t = std::function<void ()>;
 
     worker_t(zmq::context_t& context, const std::string& upstream_proxy_endpoint, const std::string& downstream_proxy_endpoint,
-      const std::string& result_endpoint, const work_function_t& work_function, const cleanup_function_t& cleanup_function = [](){});
+      const std::string& result_endpoint, const work_function_t& work_function, const cleanup_function_t& cleanup_function = [](){},
+      const std::string& heart_beat = "");
     void work();
    protected:
     void advertise();
@@ -128,7 +144,8 @@ namespace prime_server {
     zmq::socket_t loopback;
     work_function_t work_function;
     cleanup_function_t cleanup_function;
-    long heart_beat;
+    long heart_beat_interval;
+    std::string heart_beat;
   };
 
 }

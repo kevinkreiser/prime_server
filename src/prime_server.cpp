@@ -48,7 +48,7 @@ namespace prime_server {
             break;
           //send the stuff on
           server.send(static_cast<const void*>(identity), identity_size, ZMQ_SNDMORE);
-          server.send(static_cast<const void*>(request.first), request.second, 0);
+          server.send(request.first, request.second, 0);
         }
         catch(const std::exception& e) {
           logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " client_t: " + e.what());
@@ -109,7 +109,8 @@ namespace prime_server {
       if(items[0].revents & ZMQ_POLLIN) {
         try {
           auto messages = loopback.recv_all(ZMQ_DONTWAIT);
-          handle_response(messages);
+          //reply to client and cleanup request or session
+          dequeue(messages);
         }
         catch(const std::exception& e) {
           logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " server_t: " + e.what());
@@ -132,25 +133,6 @@ namespace prime_server {
   }
 
   template <class request_container_t, class request_info_t>
-  void server_t<request_container_t, request_info_t>::handle_response(std::list<zmq::message_t>& messages) {
-    if(messages.size() < 3) {
-      logging::ERROR("Cannot reply without address and request information");
-      return;
-    }
-    if(messages.size() > 3) {
-      logging::WARN("Cannot reply with more than one message, dropping additional");
-      messages.resize(3);
-    }
-    if(messages.back().size() == 0)
-      logging::WARN("Sending empty messages will disconnect the client");
-    client.send(messages.front(), ZMQ_SNDMORE | ZMQ_DONTWAIT);
-    client.send(messages.back(), ZMQ_DONTWAIT);
-
-    //cleanup request or session
-    dequeue(*static_cast<request_info_t*>(std::next(messages.begin())->data()), messages.back().size());
-  }
-
-  template <class request_container_t, class request_info_t>
   void server_t<request_container_t, request_info_t>::handle_request(std::list<zmq::message_t>& messages) {
     //must be an identity frame and a message frame if a request larger than
     //zmq::in_batch_size (8192) is sent over a stream socket it will be broken
@@ -163,7 +145,7 @@ namespace prime_server {
     }
 
     //get some info about the client
-    auto requester = std::string(static_cast<const char*>(messages.front().data()), messages.front().size());
+    auto requester = std::move(messages.front());
     auto session = sessions.find(requester);
 #if ZMQ_VERSION_MAJOR <= 4
 #if ZMQ_VERSION_MINOR < 1
@@ -173,7 +155,7 @@ namespace prime_server {
     //and even more complicated stuff happened which got back ported for
     //the sake of consistency. in any case watch out for this
     if(session == sessions.end())
-      session = sessions.insert({requester, request_container_t{}}).first;
+      session = sessions.insert({std::move(requester), request_container_t{}}).first;
 #endif
 #endif
 
@@ -181,20 +163,19 @@ namespace prime_server {
     const auto& body = *std::next(messages.begin());
     if(body.size() == 0) {
       //new client
-      if(session == sessions.end()) {
-        sessions.emplace(requester, request_container_t{});
-      }//TODO: check if disconnecting client has a partial request waiting here
-      else {
+      if(session == sessions.end())
+        sessions.emplace(std::move(requester), request_container_t{});
+      //TODO: check if disconnecting client has a partial request waiting here
+      else
         sessions.erase(session);
-      }
     }//actual request data
     else {
       if(session != sessions.end()) {
         //proxy any whole bits onward, or if that failed (malformed or large request) close the session
-        if(!enqueue(body.data(), body.size(), requester, session->second)) {
-          sessions.erase(session);
-          client.send(messages.front(), ZMQ_SNDMORE | ZMQ_DONTWAIT);
+        if(!enqueue(session->first, body, session->second)) {
+          client.send(session->first, ZMQ_SNDMORE | ZMQ_DONTWAIT);
           client.send(static_cast<const void*>(""), 0, ZMQ_DONTWAIT);
+          sessions.erase(session);
         }
       }
       else
@@ -202,8 +183,8 @@ namespace prime_server {
     }
   }
 
-  proxy_t::proxy_t(zmq::context_t& context, const std::string& upstream_endpoint, const std::string& downstream_endpoint):
-    upstream(context, ZMQ_ROUTER), downstream(context, ZMQ_ROUTER) {
+  proxy_t::proxy_t(zmq::context_t& context, const std::string& upstream_endpoint, const std::string& downstream_endpoint, const choose_function_t& choose_function):
+    upstream(context, ZMQ_ROUTER), downstream(context, ZMQ_ROUTER), choose_function(choose_function) {
 
     int disabled = 0;
 
@@ -215,25 +196,36 @@ namespace prime_server {
     downstream.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
     downstream.bind(downstream_endpoint.c_str());
   }
+  proxy_t::~proxy_t(){}
+  int proxy_t::expire() {
+    //TODO: expire any workers who don't advertise for a while, simply store a pair
+    //in the heartbeat fifo where the second item is the time it was added. then we
+    //just get the time and iterate from the beginning popping off stale ones
+    return static_cast<bool>(fifo.size()) + 1;
+  }
   void proxy_t::forward() {
-    std::unordered_set<std::string> workers;
-    std::queue<std::string> fifo(std::deque<std::string>{});
-
     //keep forwarding messages
     while(true) {
-      //TODO: expire any workers who don't advertise for a while
-
       //check for activity on either of the sockets, but if we have no workers just let requests sit on the upstream socket
       zmq::pollitem_t items[] = { { downstream, 0, ZMQ_POLLIN, 0 }, { upstream, 0, ZMQ_POLLIN, 0 } };
-      zmq::poll(items,  workers.size() ? 2 : 1, -1);
+      zmq::poll(items, expire(), -1);
 
       //this worker is bored
       if(items[0].revents & ZMQ_POLLIN) {
         try {
+          //its a new worker
           auto messages = downstream.recv_all(ZMQ_DONTWAIT);
-          auto inserted = workers.insert(std::string(static_cast<const char*>(messages.front().data()), messages.front().size()));
-          if(inserted.second)
-            fifo.push(*inserted.first);
+          auto worker = workers.find(messages.front());
+          if(worker == workers.cend()) {
+            //take ownership of heartbeat
+            fifo.emplace_back(std::move(*std::next(messages.begin())));
+            //remember this workers address
+            worker = workers.emplace_hint(worker, std::move(messages.front()), std::prev(fifo.end()));
+            //remember which worker owns this heartbeat
+            heart_beats.emplace(&fifo.back(), worker->first);
+          }//not new but update heartbeat just in case
+          else
+            *worker->second = std::move(*std::next(messages.begin()));
         }
         catch(const std::exception& e) {
           logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " proxy_t: " + e.what());
@@ -247,12 +239,25 @@ namespace prime_server {
           auto messages = upstream.recv_all(ZMQ_DONTWAIT);
           //strip the from address (previous hop)
           messages.pop_front();
-          auto worker_address = fifo.front();
-          workers.erase(worker_address);
-          fifo.pop();
+          //figure out what worker you want, ignore the request info
+          auto info = std::move(messages.front());
+          messages.pop_front();
+          const auto* heart_beat = choose_function(fifo, messages);
+          messages.emplace_front(std::move(info));
+          //either you didnt want to choose or you sent back garbage
+          auto hb_itr = heart_beats.find(heart_beat);
+          if(heart_beat == nullptr || hb_itr == heart_beats.cend()) {
+            heart_beat = &fifo.front();
+            hb_itr = heart_beats.find(heart_beat);
+          }
           //send it on to the first bored worker
-          downstream.send(worker_address, ZMQ_DONTWAIT | ZMQ_SNDMORE);
+          downstream.send(hb_itr->second, ZMQ_DONTWAIT | ZMQ_SNDMORE);
           downstream.send_all(messages, ZMQ_DONTWAIT);
+          //they are dead to us until they report back
+          auto worker_itr = workers.find(hb_itr->second);
+          fifo.erase(worker_itr->second);
+          workers.erase(worker_itr);
+          heart_beats.erase(hb_itr);
         }
         catch (const std::exception& e) {
           //TODO: recover from a worker dying just before you sent it work
@@ -263,9 +268,9 @@ namespace prime_server {
   }
 
   worker_t::worker_t(zmq::context_t& context, const std::string& upstream_proxy_endpoint, const std::string& downstream_proxy_endpoint,
-    const std::string& result_endpoint, const work_function_t& work_function, const cleanup_function_t& cleanup_function):
+    const std::string& result_endpoint, const work_function_t& work_function, const cleanup_function_t& cleanup_function, const std::string& heart_beat):
     upstream_proxy(context, ZMQ_DEALER), downstream_proxy(context, ZMQ_DEALER), loopback(context, ZMQ_PUB),
-    work_function(work_function), cleanup_function(cleanup_function), heart_beat(5000) {
+    work_function(work_function), cleanup_function(cleanup_function), heart_beat_interval(5000), heart_beat(heart_beat) {
 
     int disabled = 0;
 
@@ -288,38 +293,42 @@ namespace prime_server {
     while(true) {
       //check for activity on the in bound socket, timeout after heart_beat interval
       zmq::pollitem_t item = { upstream_proxy, 0, ZMQ_POLLIN, 0 };
-      zmq::poll(&item, 1, heart_beat);
+      zmq::poll(&item, 1, heart_beat_interval);
 
       //got some work to do
       if(item.revents & ZMQ_POLLIN) {
         try {
-          //strip off the address and the request info
+          //strip off the request info
           auto messages = upstream_proxy.recv_all(0);
-          auto address = std::move(messages.front());
-          messages.pop_front();
           auto request_info = std::move(messages.front());
           messages.pop_front();
           //do the work
           auto result = work_function(messages, request_info.data());
+          //we'll keep advertising with this heartbeat
+          heart_beat = std::move(result.heart_beat);
           //should we send this on to the next proxy
           if(result.intermediate) {
-            downstream_proxy.send(address, ZMQ_SNDMORE);
             downstream_proxy.send(request_info, ZMQ_SNDMORE);
             downstream_proxy.send_all(result.messages, 0);
           }//or are we done
           else {
-            if(result.messages.size() > 1)
-              logging::WARN("Cannot send more than one result message, additional parts are dropped");
-            loopback.send(address, ZMQ_SNDMORE);
             loopback.send(request_info, ZMQ_SNDMORE);
+            if(result.messages.size() == 0)
+              logging::ERROR("At least one result message is required for the loopback");
+            if(result.messages.size() > 1) {
+              logging::WARN("Sending more than one result message over the loopback will result in additional parts being dropped");
+              result.messages.resize(1);
+            }
+            if(result.messages.back().size() == 0)
+              logging::WARN("Sending empty messages will disconnect the client");
             loopback.send_all(result.messages, 0);
           }
-          //cleanup
-          cleanup_function();
         }
-        catch(const std::exception& e) {
-          logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what());
-        }
+        catch(const std::exception& e) { logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what()); }
+
+        //do some cleanup
+        try { cleanup_function(); }
+        catch(const std::exception& e) { logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what()); }
       }
 
       //we want something more to do
@@ -329,7 +338,7 @@ namespace prime_server {
   void worker_t::advertise() {
     try {
       //heart beat, we're alive
-      upstream_proxy.send(static_cast<const void*>(""), 0, 0);
+      upstream_proxy.send(static_cast<const void*>(heart_beat.c_str()), heart_beat.size(), 0);
     }
     catch (const std::exception& e) {
       logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what());

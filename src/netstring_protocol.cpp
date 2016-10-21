@@ -16,6 +16,8 @@ namespace {
     logging::log(log_line);
   }
 
+  const std::string INTERNAL_ERROR(prime_server::netstring_entity_t::to_string("INTERNAL_ERROR: empty response"));
+
 }
 
 namespace prime_server {
@@ -123,11 +125,11 @@ namespace prime_server {
 
   netstring_server_t::~netstring_server_t(){}
 
-  bool netstring_server_t::enqueue(const void* message, size_t size, const std::string& requester, netstring_entity_t& request) {
+  bool netstring_server_t::enqueue(const zmq::message_t& requester, const zmq::message_t& message, netstring_entity_t& request) {
     //do some parsing
     std::list<netstring_entity_t> parsed_requests;
     try {
-      parsed_requests = request.from_stream(static_cast<const char*>(message), size, max_request_size);
+      parsed_requests = request.from_stream(static_cast<const char*>(message.data()), message.size(), max_request_size);
     }//something went wrong either bad request or too long
     catch(const std::runtime_error& e) {
       client.send(requester, ZMQ_SNDMORE | ZMQ_DONTWAIT);
@@ -142,7 +144,6 @@ namespace prime_server {
 
     //send on each request
     for(const auto& parsed_request : parsed_requests) {
-      this->proxy.send(requester, ZMQ_DONTWAIT | ZMQ_SNDMORE);
       this->proxy.send(static_cast<const void*>(&request_id), sizeof(request_id), ZMQ_DONTWAIT | ZMQ_SNDMORE);
       this->proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT);
       if(log)
@@ -153,13 +154,24 @@ namespace prime_server {
     return true;
   }
 
-  void netstring_server_t::dequeue(const uint64_t& request_info, size_t length) {
-    //NOTE: netstring protocol is always keep alive so we leave the session intact
-    auto removed = requests.erase(request_info);
-    if(removed != 1)
+  void netstring_server_t::dequeue(const std::list<zmq::message_t>& messages) {
+    //find the request
+    const auto& request_info = *static_cast<const uint64_t*>(messages.front().data());
+    auto request = requests.find(request_info);
+    if(request == requests.end()) {
       logging::WARN("Unknown or timed-out request id: " + std::to_string(request_info));
-    else if(log)
+      return;
+    }
+    //reply to the client with the response or an error
+    client.send(request->second, ZMQ_SNDMORE | ZMQ_DONTWAIT);
+    if(messages.size() == 2)
+      client.send(messages.back(), ZMQ_DONTWAIT);
+    else
+      client.send(INTERNAL_ERROR, ZMQ_DONTWAIT);
+    if(log)
       log_transaction(request_info, "REPLIED");
+    //cleanup, but leave the session as netstring is always keep alive
+    requests.erase(request);
   }
 
 }
