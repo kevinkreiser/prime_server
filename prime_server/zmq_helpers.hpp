@@ -3,6 +3,7 @@
 
 #include <zmq.h>
 #include <memory>
+#include <functional>
 #include <stdexcept>
 #include <list>
 #include <cassert>
@@ -104,13 +105,8 @@ namespace zmq {
 }
 
 namespace std {
-  //make messages hashable in the same way that strings are
-  template<>
-  struct hash<zmq::message_t> : public __hash_base<size_t, zmq::message_t> {
-    size_t operator()(const zmq::message_t& __m) const noexcept
-    {
-      return std::_Hash_impl::hash(__m.data(), __m.size());
-    }
+  template<> struct hash<zmq::message_t> {
+    size_t operator()(const zmq::message_t& m) const noexcept;
   };
 }
 
