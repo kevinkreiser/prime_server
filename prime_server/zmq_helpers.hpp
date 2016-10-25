@@ -3,11 +3,11 @@
 
 #include <zmq.h>
 #include <memory>
+#include <functional>
 #include <stdexcept>
 #include <list>
 #include <cassert>
 #include <cstring>
-#include <cstdlib>
 
 namespace zmq {
 
