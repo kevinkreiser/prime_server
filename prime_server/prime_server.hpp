@@ -70,7 +70,6 @@ namespace prime_server {
     //      log the request if log == true
     //    otherwise, for each whole request:
     //      send the requester as a message to the proxy
-    //      send the request id as a message to the proxy
     //      send the request as a message to the proxy
     //      record the request with its id
     //      log the request if log == true
