@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
   std::list<std::thread> echo_worker_threads;
   for(size_t i = 0; i < worker_concurrency; ++i) {
     echo_worker_threads.emplace_back(std::bind(&worker_t::work,
-      worker_t(context, proxy_endpoint + "_downstream", "ipc:///tmp/NO_ENDPOINT", result_endpoint,
+      worker_t(context, proxy_endpoint + "_downstream", "ipc:///dev/null", result_endpoint,
       [] (const std::list<zmq::message_t>& job, void* request_info) {
         worker_t::result_t result{false};
         try {

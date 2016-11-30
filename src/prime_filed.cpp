@@ -63,7 +63,7 @@ int main(int argc, char** argv) {
 
   //file serving thread
   std::thread file_worker(std::bind(&worker_t::work,
-    worker_t(context, proxy_endpoint + "_downstream", "ipc://NO_ENDPOINT", result_endpoint,
+    worker_t(context, proxy_endpoint + "_downstream", "ipc:///dev/null", result_endpoint,
     std::bind(&disk_work, std::placeholders::_1, std::placeholders::_2)
   )));
   file_worker.detach();
