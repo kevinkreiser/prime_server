@@ -13,11 +13,15 @@ Build Status
 
 Grab some deps
 --------------
-
+    # trusty didn't have czmq in the repositories so its repackaged here
+    if [[ $(grep -cF trusty /etc/lsb-release) > 0 ]]; then
+      add-apt-repository -y ppa:kevinkreiser/czmq
+      apt-get update -o Dir::Etc::sourcelist="sources.list.d/kevinkreiser-czqm-$(lsb_release -c -s).list" -o APT::Get::List-Cleanup="0"
+    fi
     # grab some standard autotools stuff
     sudo apt-get install autoconf automake libtool make gcc-4.9 g++-4.9 lcov 
     # grab curl (for url de/encode) and zmq for the awesomeness
-    sudo apt-get install libcurl4-openssl-dev libzmq3-dev
+    sudo apt-get install libcurl4-openssl-dev libzmq3-dev libczmq-dev
 
 Build and Install
 -----------------
