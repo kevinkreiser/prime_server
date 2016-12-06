@@ -15,8 +15,8 @@ Grab some deps
 --------------
     # trusty didn't have czmq in the repositories so its repackaged here
     if [[ $(grep -cF trusty /etc/lsb-release) > 0 ]]; then
-      add-apt-repository -y ppa:kevinkreiser/czmq
-      apt-get update -o Dir::Etc::sourcelist="sources.list.d/kevinkreiser-czqm-$(lsb_release -c -s).list" -o APT::Get::List-Cleanup="0"
+      sudo add-apt-repository -y ppa:kevinkreiser/czmq
+      sudo apt-get update
     fi
     # grab some standard autotools stuff
     sudo apt-get install autoconf automake libtool make gcc-4.9 g++-4.9 lcov 
