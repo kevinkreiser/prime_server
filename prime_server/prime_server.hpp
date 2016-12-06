@@ -3,9 +3,8 @@
 
 //some version info
 #define PRIME_SERVER_VERSION_MAJOR 0
-#define PRIME_SERVER_VERSION_MINOR 4
+#define PRIME_SERVER_VERSION_MINOR 5
 #define PRIME_SERVER_VERSION_PATCH 0
-
 
 #include <functional>
 #include <string>
@@ -71,7 +70,6 @@ namespace prime_server {
     //      log the request if log == true
     //    otherwise, for each whole request:
     //      send the requester as a message to the proxy
-    //      send the request id as a message to the proxy
     //      send the request as a message to the proxy
     //      record the request with its id
     //      log the request if log == true

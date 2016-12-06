@@ -159,7 +159,7 @@ namespace prime_server {
     const auto& request_info = *static_cast<const uint64_t*>(messages.front().data());
     auto request = requests.find(request_info);
     if(request == requests.end()) {
-      LOG_WARN("Unknown or timed-out request id: " + std::to_string(request_info));
+      logging::WARN("Unknown or timed-out request id: " + std::to_string(request_info));
       return;
     }
     //reply to the client with the response or an error

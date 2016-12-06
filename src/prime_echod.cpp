@@ -18,14 +18,14 @@ using namespace prime_server;
 int main(int argc, char** argv) {
 
   if(argc < 2) {
-    LOG_ERROR("Usage: " + std::string(argv[0]) + "server_listen_endpoint concurrency");
+    logging::ERROR("Usage: " + std::string(argv[0]) + " server_listen_endpoint concurrency");
     return 1;
   }
 
   //server endpoint
   std::string server_endpoint = argv[1];
   if(server_endpoint.find("://") == std::string::npos)
-    LOG_ERROR("Usage: " + std::string(argv[0]) + "server_listen_endpoint concurrency");
+    logging::ERROR("Usage: " + std::string(argv[0]) + " server_listen_endpoint concurrency");
 
   //number of workers to use at each stage
   size_t worker_concurrency = 1;
@@ -49,21 +49,20 @@ int main(int argc, char** argv) {
   std::list<std::thread> echo_worker_threads;
   for(size_t i = 0; i < worker_concurrency; ++i) {
     echo_worker_threads.emplace_back(std::bind(&worker_t::work,
-      worker_t(context, proxy_endpoint + "_downstream", "ipc:///tmp/NO_ENDPOINT", result_endpoint,
+      worker_t(context, proxy_endpoint + "_downstream", "ipc:///dev/null", result_endpoint,
       [] (const std::list<zmq::message_t>& job, void* request_info) {
         worker_t::result_t result{false};
         try {
           //echo
           http_response_t response(200, "OK", std::string(static_cast<const char*>(job.front().data()), job.front().size()));
           response.from_info(*static_cast<http_request_t::info_t*>(request_info));
-          result.messages.emplace_back(response.to_string());
+          result.messages = {response.to_string()};
         }
         catch(const std::exception& e) {
           //complain
-          worker_t::result_t result{false};
           http_response_t response(400, "Bad Request", e.what());
           response.from_info(*static_cast<http_request_t::info_t*>(request_info));
-          result.messages.emplace_back(response.to_string());
+          result.messages = {response.to_string()};
         }
         return result;
       }

@@ -44,11 +44,13 @@ nobase_include_HEADERS = \
 	prime_server/zmq_helpers.hpp \
 	prime_server/netstring_protocol.hpp \
 	prime_server/http_protocol.hpp \
+	prime_server/http_util.hpp \
 	prime_server/logging.hpp 
 libprime_server_la_SOURCES = \
 	src/prime_server.cpp \
 	src/zmq_helpers.cpp \
 	src/netstring_protocol.cpp \
+	src/http_util.cpp \
 	src/http_protocol.cpp
 libprime_server_la_CPPFLAGS = $(DEPS_CFLAGS)
 libprime_server_la_LIBADD = $(DEPS_LIBS)
@@ -59,7 +61,8 @@ bin_PROGRAMS = \
 	prime_httpd \
 	prime_proxyd \
 	prime_workerd \
-	prime_echod
+	prime_echod \
+	prime_filed
 prime_serverd_SOURCES = \
         src/prime_serverd.cpp
 prime_serverd_CPPFLAGS = $(DEPS_CFLAGS)
@@ -80,6 +83,10 @@ prime_echod_SOURCES = \
         src/prime_echod.cpp
 prime_echod_CPPFLAGS = $(DEPS_CFLAGS)
 prime_echod_LDADD = $(DEPS_LIBS) libprime_server.la
+prime_filed_SOURCES = \
+	src/prime_filed.cpp
+prime_filed_CPPFLAGS = $(DEPS_CFLAGS)
+prime_filed_LDADD = $(DEPS_LIBS) libprime_server.la
 
 # tests
 check_PROGRAMS = test/zmq test/netstring test/http test/shaping

@@ -10,7 +10,7 @@ using namespace prime_server;
 int main(int argc, char** argv) {
 
   if(argc < 4) {
-    LOG_ERROR("Usage: " + std::string(argv[0]) +
+    logging::ERROR("Usage: " + std::string(argv[0]) +
       " [tcp|ipc]://upstream_proxy_endpoint[:tcp_port] [tcp|ipc]://downstream_proxy_endpoint[:tcp_port] [tcp|ipc]://server_result_loopback[:tcp_port]");
     return EXIT_FAILURE;
   }
@@ -20,11 +20,11 @@ int main(int argc, char** argv) {
   std::string downstream_proxy_endpoint(argv[2]);
   std::string server_result_loopback(argv[3]);
   if(upstream_proxy_endpoint.find("://") != 3)
-    LOG_ERROR("bad upstream proxy endpoint");
+    logging::ERROR("bad upstream proxy endpoint");
   if(downstream_proxy_endpoint.find("://") != 3)
-    LOG_ERROR("bad downstream proxy endpoint");
+    logging::ERROR("bad downstream proxy endpoint");
   if(server_result_loopback.find("://") != 3)
-    LOG_ERROR("bad server result loopback");
+    logging::ERROR("bad server result loopback");
 
   //start it up
   zmq::context_t context;

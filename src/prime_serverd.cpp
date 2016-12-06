@@ -18,7 +18,7 @@ using namespace prime_server;
 int main(int argc, char** argv) {
 
   if(argc < 2) {
-    LOG_ERROR("Usage: " + std::string(argv[0]) + " num_requests|server_listen_endpoint concurrency");
+    logging::ERROR("Usage: " + std::string(argv[0]) + " num_requests|server_listen_endpoint concurrency");
     return 1;
   }
 
@@ -106,7 +106,7 @@ int main(int argc, char** argv) {
   std::list<std::thread> compute_worker_threads;
   for(size_t i = 0; i < worker_concurrency; ++i) {
     compute_worker_threads.emplace_back(std::bind(&worker_t::work,
-      worker_t(context, compute_proxy_endpoint + "_downstream", "ipc:///tmp/NO_ENDPOINT", result_endpoint,
+      worker_t(context, compute_proxy_endpoint + "_downstream", "ipc:///dev/null", result_endpoint,
       [] (const std::list<zmq::message_t>& job, void* request_info) {
         //check if its prime
         size_t prime = *static_cast<const size_t*>(job.front().data());
@@ -161,7 +161,7 @@ int main(int argc, char** argv) {
           primes.insert(number);
         }
         catch(...) {
-          LOG_ERROR("Responded with: " + response_str);
+          logging::ERROR("Responded with: " + response_str);
         }
         return ++collected_results < requests;
       }

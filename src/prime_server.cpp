@@ -51,7 +51,7 @@ namespace prime_server {
           server.send(request.first, request.second, 0);
         }
         catch(const std::exception& e) {
-          LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " client_t: " + e.what());
+          logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " client_t: " + e.what());
         }
       }
 
@@ -65,7 +65,7 @@ namespace prime_server {
           current_batch += stream_responses(messages.front().data(), messages.front().size(), more);
         }
         catch(const std::exception& e) {
-          LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " client_t: " + e.what());
+          logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " client_t: " + e.what());
         }
       }
     }
@@ -113,7 +113,7 @@ namespace prime_server {
           dequeue(messages);
         }
         catch(const std::exception& e) {
-          LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " server_t: " + e.what());
+          logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " server_t: " + e.what());
         }
       }
 
@@ -124,7 +124,7 @@ namespace prime_server {
           handle_request(messages);
         }
         catch(const std::exception& e) {
-          LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " server_t: " + e.what());
+          logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " server_t: " + e.what());
         }
       }
 
@@ -139,7 +139,7 @@ namespace prime_server {
     //up into multiple messages, however each piece will come with an identity
     //frame so we dont need to worry about there being more than 2 message frames
     if(messages.size() != 2) {
-      LOG_WARN("Ignoring request: wrong number of parts");
+      logging::WARN("Ignoring request: wrong number of parts");
       //TODO: disconnect client?
       return;
     }
@@ -179,7 +179,7 @@ namespace prime_server {
         }
       }
       else
-        LOG_WARN("Ignoring request: unknown client");
+        logging::WARN("Ignoring request: unknown client");
     }
   }
 
@@ -228,7 +228,7 @@ namespace prime_server {
             *worker->second = std::move(*std::next(messages.begin()));
         }
         catch(const std::exception& e) {
-          LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " proxy_t: " + e.what());
+          logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " proxy_t: " + e.what());
         }
       }
 
@@ -261,7 +261,7 @@ namespace prime_server {
         }
         catch (const std::exception& e) {
           //TODO: recover from a worker dying just before you sent it work
-          LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " proxy_t: " + e.what());
+          logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " proxy_t: " + e.what());
         }
       }
     }
@@ -314,21 +314,21 @@ namespace prime_server {
           else {
             loopback.send(request_info, ZMQ_SNDMORE);
             if(result.messages.size() == 0)
-              LOG_ERROR("At least one result message is required for the loopback");
+              logging::ERROR("At least one result message is required for the loopback");
             if(result.messages.size() > 1) {
-              LOG_WARN("Sending more than one result message over the loopback will result in additional parts being dropped");
+              logging::WARN("Sending more than one result message over the loopback will result in additional parts being dropped");
               result.messages.resize(1);
             }
             if(result.messages.back().size() == 0)
-              LOG_WARN("Sending empty messages will disconnect the client");
+              logging::WARN("Sending empty messages will disconnect the client");
             loopback.send_all(result.messages, 0);
           }
         }
-        catch(const std::exception& e) { LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what()); }
+        catch(const std::exception& e) { logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what()); }
 
         //do some cleanup
         try { cleanup_function(); }
-        catch(const std::exception& e) { LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what()); }
+        catch(const std::exception& e) { logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what()); }
       }
 
       //we want something more to do
@@ -341,7 +341,7 @@ namespace prime_server {
       upstream_proxy.send(static_cast<const void*>(heart_beat.c_str()), heart_beat.size(), 0);
     }
     catch (const std::exception& e) {
-      LOG_ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what());
+      logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what());
     }
   }
 

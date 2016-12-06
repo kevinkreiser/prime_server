@@ -6,7 +6,7 @@ using namespace prime_server;
 int main(int argc, char** argv) {
 
   if(argc < 3) {
-    LOG_ERROR("Usage: " + std::string(argv[0]) + " [tcp|ipc]://upstream_endpoint[:tcp_port] [tcp|ipc]://downstream_endpoint[:tcp_port]");
+    logging::ERROR("Usage: " + std::string(argv[0]) + " [tcp|ipc]://upstream_endpoint[:tcp_port] [tcp|ipc]://downstream_endpoint[:tcp_port]");
     return EXIT_FAILURE;
   }
 
@@ -14,9 +14,9 @@ int main(int argc, char** argv) {
   std::string upstream_endpoint(argv[1]);
   std::string downstream_endpoint(argv[2]);
   if(upstream_endpoint.find("://") != 3)
-    LOG_ERROR("bad upstream endpoint");
+    logging::ERROR("bad upstream endpoint");
   if(downstream_endpoint.find("://") != 3)
-    LOG_ERROR("bad downstream endpoint");
+    logging::ERROR("bad downstream endpoint");
 
   //start it up
   zmq::context_t context;

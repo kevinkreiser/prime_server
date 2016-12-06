@@ -616,7 +616,7 @@ namespace prime_server {
     message.clear();
   }
 
-  std::string http_response_t::generic(unsigned code, const std::string message, const headers_t& headers, const std::string& body, const std::string& version) {
+  std::string http_response_t::generic(unsigned code, const std::string& message, const headers_t& headers, const std::string& body, const std::string& version) {
     auto response = version;
     response.push_back(' ');
     response += std::to_string(code);
@@ -632,14 +632,13 @@ namespace prime_server {
       response += header.second;
       response += "\r\n";
     }
-    if(body.size()) {
-      response += "Content-Length: ";
-      response += std::to_string(body.size());
-      response += "\r\n\r\n";
-      response += body;
-    }
-    else
-      response += "\r\n";
+    //TODO: content length is optional
+    //with 1.0 the end can be signaled by socket close
+    //with 1.1 you can omit it when using chunked encoding
+    response += "Content-Length: ";
+    response += std::to_string(body.size());
+    response += "\r\n\r\n";
+    response += body;
     return response;
   }
 
@@ -684,7 +683,7 @@ namespace prime_server {
     const auto& request_info = *static_cast<const http_request_t::info_t*>(messages.front().data());
     auto request = requests.find(request_info.id);
     if(request == requests.end()) {
-      LOG_WARN("Unknown or timed-out request id: " + std::to_string(request_info.id));
+      logging::WARN("Unknown or timed-out request id: " + std::to_string(request_info.id));
       return;
     }
     //reply to the client with the response or an error
