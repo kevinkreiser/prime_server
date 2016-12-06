@@ -30,15 +30,21 @@ namespace prime_server {
     netstring_entity_t response;
   };
 
-  class netstring_server_t : public server_t<netstring_entity_t, uint64_t> {
+  struct netstring_request_info_t {
+    uint32_t id;
+    uint32_t time_stamp;
+  };
+
+  class netstring_server_t : public server_t<netstring_entity_t, netstring_request_info_t> {
    public:
     netstring_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint,
-                       const std::string& result_endpoint, bool log = false, size_t max_request_size = DEFAULT_MAX_REQUEST_SIZE);
+                       const std::string& result_endpoint, const std::string& interrupt_endpoint,
+                       bool log = false, size_t max_request_size = DEFAULT_MAX_REQUEST_SIZE);
     virtual ~netstring_server_t();
    protected:
-    virtual bool enqueue(const zmq::message_t& requester, const zmq::message_t& message, netstring_entity_t& buffer);
-    virtual void dequeue(const std::list<zmq::message_t>& messages);
-    uint64_t request_id;
+    virtual bool enqueue(const zmq::message_t& requester, const zmq::message_t& message, netstring_entity_t& buffer) override;
+    virtual void dequeue(const std::list<zmq::message_t>& messages) override;
+    uint32_t request_id;
   };
 
 }

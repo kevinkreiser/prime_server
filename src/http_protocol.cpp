@@ -277,15 +277,14 @@ namespace prime_server {
                  http_entity_t(version, headers, body), method(method), path(path), query(query) {
   }
 
- http_request_t::info_t http_request_t::to_info(uint64_t id) const {
+ http_request_info_t http_request_t::to_info(uint32_t id) const {
     auto connection_header = headers.find("Connection");
-    auto do_not_track_header = headers.find("DNT");
-    return info_t {
+    return http_request_info_t {
       id,
-      static_cast<uint64_t>(version == "HTTP/1.0" ? 0 : 1),
-      static_cast<uint64_t>(connection_header != headers.end() && connection_header->second == "Keep-Alive"),
-      static_cast<uint64_t>(connection_header != headers.end() && connection_header->second == "Close"),
-      static_cast<uint64_t>(do_not_track_header != headers.end() && do_not_track_header->second == "1"),
+      0,
+      static_cast<uint16_t>(version == "HTTP/1.0" ? 0 : 1),
+      static_cast<uint16_t>(connection_header != headers.end() && connection_header->second == "Keep-Alive"),
+      static_cast<uint16_t>(connection_header != headers.end() && connection_header->second == "Close")
     };
   }
 
@@ -515,7 +514,7 @@ namespace prime_server {
                   http_entity_t(version, headers, body), code(code), message(message) {
   }
 
-  void http_response_t::from_info(http_request_t::info_t& info) {
+  void http_response_t::from_info(http_request_info_t& info) {
     version = info.version ? "HTTP/1.1" : "HTTP/1.0";
     if(info.connection_keep_alive)
       headers.emplace("Connection", "Keep-Alive");
@@ -642,11 +641,12 @@ namespace prime_server {
     return response;
   }
 
-  http_server_t::http_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log, size_t max_request_size):
-    server_t<http_request_t, http_request_t::info_t>::server_t(context, client_endpoint, proxy_endpoint, result_endpoint, log, max_request_size), request_id(0) {
+  http_server_t::http_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint,
+                               const std::string& result_endpoint, const std::string& interrupt_endpoint, bool log, size_t max_request_size):
+                               server_t<http_request_t, http_request_info_t>::server_t(context, client_endpoint, proxy_endpoint,
+                               result_endpoint, interrupt_endpoint, log, max_request_size), request_id(0) {
   }
   http_server_t::~http_server_t(){}
-
   bool http_server_t::enqueue(const zmq::message_t& requester, const zmq::message_t& message, http_request_t& request) {
     //do some parsing
     std::list<http_request_t> parsed_requests;
@@ -680,7 +680,7 @@ namespace prime_server {
   }
   void http_server_t::dequeue(const std::list<zmq::message_t>& messages) {
     //find the request
-    const auto& request_info = *static_cast<const http_request_t::info_t*>(messages.front().data());
+    const auto& request_info = *static_cast<const http_request_info_t*>(messages.front().data());
     auto request = requests.find(request_info.id);
     if(request == requests.end()) {
       logging::WARN("Unknown or timed-out request id: " + std::to_string(request_info.id));

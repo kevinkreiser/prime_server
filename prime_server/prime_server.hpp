@@ -13,6 +13,7 @@
 #include <utility>
 #include <type_traits>
 #include <cstdint>
+#include <ctime>
 
 #include <prime_server/zmq_helpers.hpp>
 
@@ -54,9 +55,8 @@ namespace prime_server {
   template <class request_container_t, class request_info_t>
   class server_t {
    public:
-    static_assert(std::is_pod<request_info_t>::value, "server requires POD types for request info");
-    server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint,
-       const std::string& result_endpoint, bool log = false, size_t max_request_size = DEFAULT_MAX_REQUEST_SIZE);
+    server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint,
+      const std::string& interrupt_endpoint, bool log = false, size_t max_request_size = DEFAULT_MAX_REQUEST_SIZE);
     virtual ~server_t();
     void serve();
    protected:
@@ -81,9 +81,22 @@ namespace prime_server {
     //  log the response if log == true
     virtual void dequeue(const std::list<zmq::message_t>& messages) = 0;
 
+    //contractual obligations for supplying your own request_info_t, the last 2 are strict for the purposes
+    //of possibly allowing the proxy to easily peak at the request id without knowing the server protocol
+    static_assert(std::is_trivial<request_info_t>::value, "request_info_t must be trivial");
+    static_assert(std::is_same<decltype(request_info_t().id), uint32_t>::value, "request_info_t::id must be uint32_t");
+    static_assert(std::is_same<decltype(request_info_t().time_stamp), uint32_t>::value, "request_info_t::time_stamp must be uint32_t");
+    static constexpr request_info_t sfinae_test_info{};
+    static_assert(static_cast<const void*>(&sfinae_test_info) == static_cast<const void*>(&sfinae_test_info.id),
+      "request_info_t::id must be the first member");
+    static_assert(static_cast<const void*>(&sfinae_test_info.id + 1) == static_cast<const void*>(&sfinae_test_info.time_stamp),
+      "request_info_t::time_stamp must be the second member");
+
     zmq::socket_t client;
     zmq::socket_t proxy;
     zmq::socket_t loopback;
+    zmq::socket_t interrupt;
+
     bool log;
     size_t max_request_size;
     //a record of what open connections we have
@@ -105,6 +118,7 @@ namespace prime_server {
     void forward();
    protected:
     virtual int expire();
+
     zmq::socket_t upstream;
     zmq::socket_t downstream;
     choose_function_t choose_function;
@@ -122,7 +136,7 @@ namespace prime_server {
   class worker_t {
    public:
     //TODO: refactor this to allow streaming response (transfer-encoding: chunked)
-    //might want to add another bool in here to single that we need to call the work
+    //might want to add another bool in here to signal that we need to call the work
     //function again until it somehow signals that its sending the last chunk
     struct result_t {
       bool intermediate;
@@ -133,18 +147,31 @@ namespace prime_server {
     using cleanup_function_t = std::function<void ()>;
 
     worker_t(zmq::context_t& context, const std::string& upstream_proxy_endpoint, const std::string& downstream_proxy_endpoint,
-      const std::string& result_endpoint, const work_function_t& work_function, const cleanup_function_t& cleanup_function = [](){},
-      const std::string& heart_beat = "");
+      const std::string& result_endpoint, const std::string& interrupt_endpoint, const work_function_t& work_function,
+      const cleanup_function_t& cleanup_function = [](){}, const std::string& heart_beat = "");
+    virtual ~worker_t();
     void work();
    protected:
     void advertise();
+    virtual void cancel(bool check_previous);
+
     zmq::socket_t upstream_proxy;
     zmq::socket_t downstream_proxy;
     zmq::socket_t loopback;
+    zmq::socket_t interrupt;
+
     work_function_t work_function;
     cleanup_function_t cleanup_function;
     long heart_beat_interval;
     std::string heart_beat;
+    uint64_t job;
+
+    //keep a circular queue of the last x interrupts
+    //when you get a new job search from newest backwards to see if its there
+    //if so abort right away. if not subsequent calls to cancel will
+    //either abort the job or push onto the circular queue
+    //to check for interrupt just call recv with NO_WAIT
+
   };
 
 }

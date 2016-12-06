@@ -2,7 +2,6 @@
 #include <czmq.h>
 #include <ctime>
 #include <arpa/inet.h>
-#include <chrono>
 #include <random>
 
 namespace {
@@ -186,7 +185,7 @@ namespace zmq {
         throw std::runtime_error("Beacon not supported");
       //keep the socket for polling
       socket = zsock_resolve(zactor_sock(actor.get()));
-      generator.seed(std::chrono::system_clock::now().time_since_epoch().count());
+      generator.seed(std::time(nullptr));
     }
     ~cheshire_cat_t(){}
     std::string rand_uuid(size_t size){
@@ -321,7 +320,7 @@ namespace zmq {
 
   //make a random port in suggested range
   uint16_t random_port() {
-    std::default_random_engine generator(std::chrono::system_clock::now().time_since_epoch().count());
+    std::default_random_engine generator(std::time(nullptr));
     std::uniform_int_distribution<uint16_t> distribution(49152, 65535);
     return distribution(generator);
   }

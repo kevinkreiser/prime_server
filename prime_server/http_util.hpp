@@ -25,7 +25,7 @@ namespace prime_server {
     const header_t& mime_header(const std::string& file_name, const header_t& default_mime_header = DEFAULT_MIME);
 
     //get a static file or directory listing
-    worker_t::result_t disk_result(const http_request_t& path, http_request_t::info_t& request_info,
+    worker_t::result_t disk_result(const http_request_t& path, http_request_info_t& request_info,
       const std::string& root = "./", bool allow_listing = true, size_t size_limit = 1024*1024*1024);
 
   }

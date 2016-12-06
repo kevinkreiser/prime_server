@@ -119,8 +119,10 @@ namespace prime_server {
     return responses.size();
   }
 
-  netstring_server_t::netstring_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log, size_t max_request_size):
-    server_t<netstring_entity_t, uint64_t>::server_t(context, client_endpoint, proxy_endpoint, result_endpoint, log, max_request_size), request_id(0) {
+  netstring_server_t::netstring_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint,
+                                         const std::string& result_endpoint, const std::string& interrupt_endpoint, bool log, size_t max_request_size):
+                                         server_t<netstring_entity_t, netstring_request_info_t>::server_t(context, client_endpoint, proxy_endpoint,
+                                         result_endpoint, interrupt_endpoint, log, max_request_size), request_id(0) {
   }
 
   netstring_server_t::~netstring_server_t(){}
@@ -144,7 +146,8 @@ namespace prime_server {
 
     //send on each request
     for(const auto& parsed_request : parsed_requests) {
-      this->proxy.send(static_cast<const void*>(&request_id), sizeof(request_id), ZMQ_DONTWAIT | ZMQ_SNDMORE);
+      netstring_request_info_t info{request_id};
+      this->proxy.send(static_cast<const void*>(&info), sizeof(netstring_request_info_t), ZMQ_DONTWAIT | ZMQ_SNDMORE);
       this->proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT);
       if(log)
         log_transaction(request_id, request.body);

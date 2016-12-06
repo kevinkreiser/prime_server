@@ -38,12 +38,13 @@ int main(int argc, char** argv) {
   //change these to tcp://known.ip.address.with:port if you want to do this across machines
   zmq::context_t context;
   std::string result_endpoint = "ipc:///tmp/result_endpoint";
+  std::string request_interrupt = "ipc:///tmp/request_interrupt";
   std::string parse_proxy_endpoint = "ipc:///tmp/parse_proxy_endpoint";
   std::string compute_proxy_endpoint = "ipc:///tmp/compute_proxy_endpoint";
 
   //server
   std::thread server_thread = std::thread(std::bind(&http_server_t::serve,
-    http_server_t(context, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint, requests == 0)));
+    http_server_t(context, server_endpoint, parse_proxy_endpoint + "_upstream", result_endpoint, request_interrupt, requests == 0)));
 
   //load balancer for parsing
   std::thread parse_proxy(std::bind(&proxy_t::forward, proxy_t(context, parse_proxy_endpoint + "_upstream", parse_proxy_endpoint + "_downstream")));
@@ -53,7 +54,7 @@ int main(int argc, char** argv) {
   std::list<std::thread> parse_worker_threads;
   for(size_t i = 0; i < worker_concurrency; ++i) {
     parse_worker_threads.emplace_back(std::bind(&worker_t::work,
-      worker_t(context, parse_proxy_endpoint + "_downstream", compute_proxy_endpoint + "_upstream", result_endpoint,
+      worker_t(context, parse_proxy_endpoint + "_downstream", compute_proxy_endpoint + "_upstream", result_endpoint, request_interrupt,
       [] (const std::list<zmq::message_t>& job, void* request_info) {
         //request should look like
         ///is_prime?possible_prime=SOME_NUMBER
@@ -89,7 +90,7 @@ int main(int argc, char** argv) {
         catch(const std::exception& e) {
           worker_t::result_t result{false};
           http_response_t response(400, "Bad Request", e.what());
-          response.from_info(*static_cast<http_request_t::info_t*>(request_info));
+          response.from_info(*static_cast<http_request_info_t*>(request_info));
           result.messages.emplace_back(response.to_string());
           return result;
         }
@@ -106,7 +107,7 @@ int main(int argc, char** argv) {
   std::list<std::thread> compute_worker_threads;
   for(size_t i = 0; i < worker_concurrency; ++i) {
     compute_worker_threads.emplace_back(std::bind(&worker_t::work,
-      worker_t(context, compute_proxy_endpoint + "_downstream", "ipc:///dev/null", result_endpoint,
+      worker_t(context, compute_proxy_endpoint + "_downstream", "ipc:///dev/null", result_endpoint, request_interrupt,
       [] (const std::list<zmq::message_t>& job, void* request_info) {
         //check if its prime
         size_t prime = *static_cast<const size_t*>(job.front().data());
@@ -123,7 +124,7 @@ int main(int argc, char** argv) {
         if(divisor < high)
           prime = 2;
         http_response_t response(200, "OK", std::to_string(prime));
-        response.from_info(*static_cast<http_request_t::info_t*>(request_info));
+        response.from_info(*static_cast<http_request_info_t*>(request_info));
         worker_t::result_t result{false};
         result.messages.emplace_back(response.to_string());
         return result;

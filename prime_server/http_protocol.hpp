@@ -70,6 +70,17 @@ namespace prime_server {
     bool consume_until();
   };
 
+  struct http_request_info_t {
+    uint32_t id;                             //the request id
+    uint32_t time_stamp;                     //the request time stamp
+
+    uint16_t version                    : 3; //protocol specific space for versioning info
+    uint16_t connection_keep_alive      : 1; //header present or not
+    uint16_t connection_close           : 1; //header present or not
+    uint16_t response_code              :10; //what the response code was set to when sent back to the client
+    uint16_t spare                      : 1;
+  };
+
   class http_server_t;
   struct http_request_t : public http_entity_t {
     friend http_server_t;
@@ -83,17 +94,7 @@ namespace prime_server {
     http_request_t(const method_t& method, const std::string& path, const std::string& body = "", const query_t& query = query_t{},
                    const headers_t& headers = headers_t{}, const std::string& version = "HTTP/1.1");
 
-    struct info_t {
-      uint64_t id                         :32; //the request id
-      uint64_t version                    :3;  //protocol specific space for versioning info
-      uint64_t connection_keep_alive      :1;  //header present or not
-      uint64_t connection_close           :1;  //header present or not
-      uint64_t do_not_track               :1;  //header present or not
-      uint64_t response_code              :10; //what the response code was set to when sent back to the client
-      uint64_t spare                      :16; //unused information
-    };
-
-    info_t to_info(uint64_t id) const;
+    http_request_info_t to_info(uint32_t id) const;
     virtual std::string to_string() const;
     static std::string to_string(const method_t& method, const std::string& path, const std::string& body = "", const query_t& query = query_t{},
                                  const headers_t& headers = headers_t{}, const std::string& version = "HTTP/1.1");
@@ -119,7 +120,7 @@ namespace prime_server {
     http_response_t();
     http_response_t(unsigned code, const std::string& message, const std::string& body = "", const headers_t& headers = headers_t{},
                     const std::string& version = "HTTP/1.1");
-    void from_info(http_request_t::info_t& info);
+    void from_info(http_request_info_t& info);
     virtual std::string to_string() const;
     static http_response_t from_string(const char* start, size_t length);
     std::list<http_response_t> from_stream(const char* start, size_t length);
@@ -131,16 +132,17 @@ namespace prime_server {
     std::string log_line;
   };
 
-  class http_server_t : public server_t<http_request_t, http_request_t::info_t> {
+  class http_server_t : public server_t<http_request_t, http_request_info_t> {
    public:
     http_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint,
-                  const std::string& result_endpoint, bool log = false, size_t max_request_size = DEFAULT_MAX_REQUEST_SIZE);
+                  const std::string& result_endpoint, const std::string& interrupt_endpoint,
+                  bool log = false, size_t max_request_size = DEFAULT_MAX_REQUEST_SIZE);
     virtual ~http_server_t();
    protected:
-    virtual bool enqueue(const zmq::message_t& requester, const zmq::message_t& message, http_request_t& request);
-    virtual void dequeue(const std::list<zmq::message_t>& messages);
+    virtual bool enqueue(const zmq::message_t& requester, const zmq::message_t& message, http_request_t& request) override;
+    virtual void dequeue(const std::list<zmq::message_t>& messages) override;
    protected:
-    uint64_t request_id;
+    uint32_t request_id;
   };
 
 }
