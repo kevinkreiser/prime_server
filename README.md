@@ -19,7 +19,7 @@ Grab some deps
       sudo apt-get update
     fi
     # grab some standard autotools stuff
-    sudo apt-get install autoconf automake libtool make gcc-4.9 g++-4.9 lcov 
+    sudo apt-get install autoconf automake libtool make gcc g++ lcov 
     # grab curl (for url de/encode) and zmq for the awesomeness
     sudo apt-get install libcurl4-openssl-dev libzmq3-dev libczmq-dev
 
