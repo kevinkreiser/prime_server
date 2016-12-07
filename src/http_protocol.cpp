@@ -2,6 +2,7 @@
 #include "logging.hpp"
 
 #include <curl/curl.h>
+#include <ctime>
 
 //TODO: someone please replace the http protocol, its a giant mess. kthxbye
 
@@ -281,7 +282,7 @@ namespace prime_server {
     auto connection_header = headers.find("Connection");
     return http_request_info_t {
       id,
-      0,
+      static_cast<uint32_t>(difftime(time(nullptr), static_cast<time_t>(0)) + .5),
       static_cast<uint16_t>(version == "HTTP/1.0" ? 0 : 1),
       static_cast<uint16_t>(connection_header != headers.end() && connection_header->second == "Keep-Alive"),
       static_cast<uint16_t>(connection_header != headers.end() && connection_header->second == "Close")

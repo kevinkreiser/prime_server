@@ -40,7 +40,7 @@ namespace prime_server {
     size_t identity_size = sizeof(identity);
     server.getsockopt(ZMQ_IDENTITY, identity, &identity_size);
 
-    bool more = false;
+    bool more = true;
     do {
       //request some
       size_t current_batch = 0;
@@ -61,7 +61,7 @@ namespace prime_server {
 
       //receive some
       current_batch = 0;
-      while(current_batch < batch_size) {
+      while(more && current_batch < batch_size) {
         try {
           //see if we are still waiting for stuff
           auto messages = server.recv_all(0);

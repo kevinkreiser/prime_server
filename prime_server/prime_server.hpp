@@ -13,7 +13,6 @@
 #include <utility>
 #include <type_traits>
 #include <cstdint>
-#include <ctime>
 
 #include <prime_server/zmq_helpers.hpp>
 

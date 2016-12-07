@@ -3,6 +3,7 @@
 
 #include <cctype>
 #include <cstdlib>
+#include <ctime>
 
 namespace {
 
@@ -146,7 +147,7 @@ namespace prime_server {
 
     //send on each request
     for(const auto& parsed_request : parsed_requests) {
-      netstring_request_info_t info{request_id};
+      netstring_request_info_t info{request_id, static_cast<uint32_t>(difftime(time(nullptr), static_cast<time_t>(0)) + .5)};
       this->proxy.send(static_cast<const void*>(&info), sizeof(netstring_request_info_t), ZMQ_DONTWAIT | ZMQ_SNDMORE);
       this->proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT);
       if(log)
