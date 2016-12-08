@@ -27,13 +27,10 @@ namespace prime_server {
   }
   client_t::~client_t(){}
   void client_t::batch() {
-#if ZMQ_VERSION_MAJOR >= 4
-#if ZMQ_VERSION_MINOR >= 1
     //swallow the first response as its just for connecting
-    //TODO: make sure it looks right
-    server.recv_all(0);
-#endif
-#endif
+    auto connection = server.recv_all(0);
+    if(connection.size() != 2 || connection.front().size() == 0 || connection.back().size() != 0)
+      throw std::logic_error("Connection should have garnered an identity frame followed by a blank message");
 
     //need the identity to identify our connection when we send stuff
     uint8_t identity[256];
@@ -152,28 +149,25 @@ namespace prime_server {
       return;
     }
 
+    //in versions 4.1 and up ZMQ_STREAM_NOTIFY is defaulted to on which means
+    //you will receive connect and disconnect messages on stream sockets
+    //for a time this was broken. 4.0 did not send them, then 4.1 did, then 4.2
+    //didn't but it was agreed that it would be better if we just kept it on
+    //and added an option, ZMQ_STREAM_NOTIFY, to turn it off. this was back ported
+    //to 4.1 so that from 4.1 on you'll get these connect and disconnect messages
+    //unless you turn it off.
+
     //get some info about the client
     auto requester = std::move(messages.front());
     auto session = sessions.find(requester);
-#if ZMQ_VERSION_MAJOR <= 4
-#if ZMQ_VERSION_MINOR < 1
-    //version 4.0 of stream didn't seem to send a blank connection message
-    //then they did in 4.1: http://zeromq.org/docs:4-1-upgrade
-    //but now they don't again in 4.2 unless you tell them to with NOTIFY
-    //and even more complicated stuff happened which got back ported for
-    //the sake of consistency. in any case watch out for this
-    if(session == sessions.end())
-      session = sessions.insert({std::move(requester), request_container_t{}}).first;
-#endif
-#endif
 
     //open or close connection
     const auto& body = *std::next(messages.begin());
     if(body.size() == 0) {
-      //new client
+      //connect
       if(session == sessions.end())
         sessions.emplace(std::move(requester), request_container_t{});
-      //TODO: check if disconnecting client has a partial request waiting here
+      //disconnect
       else
         sessions.erase(session);
     }//actual request data

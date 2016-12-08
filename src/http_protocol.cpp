@@ -668,23 +668,23 @@ namespace prime_server {
     //send on each request
     for(const auto& parsed_request : parsed_requests) {
       //figure out if we are expecting to close this request or not
-      auto info = parsed_request.to_info(request_id);
+      auto info = parsed_request.to_info(request_id++);
       //send on the request
       this->proxy.send(static_cast<const void*>(&info), sizeof(info), ZMQ_DONTWAIT | ZMQ_SNDMORE);
       this->proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT);
       if(log)
-        log_request(request_id, parsed_request.log_line);
+        log_request(info.id, parsed_request.log_line);
       //remember we are working on it
-      this->requests.emplace(request_id++, requester);
+      this->requests.emplace(info.id, requester);
     }
     return true;
   }
   void http_server_t::dequeue(const std::list<zmq::message_t>& messages) {
     //find the request
-    const auto& request_info = *static_cast<const http_request_info_t*>(messages.front().data());
-    auto request = requests.find(request_info.id);
+    const auto& info = *static_cast<const http_request_info_t*>(messages.front().data());
+    auto request = requests.find(info.id);
     if(request == requests.end()) {
-      logging::WARN("Unknown or timed-out request id: " + std::to_string(request_info.id));
+      logging::WARN("Unknown or timed-out request id: " + std::to_string(info.id));
       return;
     }
     //reply to the client with the response or an error
@@ -694,10 +694,10 @@ namespace prime_server {
     else
       client.send(RESPONSE_500.response, ZMQ_DONTWAIT);
     if(log)
-      log_response(request_info.id, request_info.response_code, messages.back().size());
+      log_response(info.id, info.response_code, messages.back().size());
     //cleanup, session may or may not be keep alive
-    if((request_info.version == 0 && !request_info.connection_keep_alive) ||
-       (request_info.version == 1 && request_info.connection_close)){
+    if((info.version == 0 && !info.connection_keep_alive) ||
+       (info.version == 1 && info.connection_close)){
       this->client.send(request->second, ZMQ_DONTWAIT | ZMQ_SNDMORE);
       this->client.send(static_cast<const void*>(""), 0, ZMQ_DONTWAIT);
       sessions.erase(request->second);
