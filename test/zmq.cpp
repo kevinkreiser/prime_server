@@ -283,11 +283,47 @@ std::string readable_string(size_t size) {
       throw std::logic_error("The client identity frame didn't match");
   }
 
+  void test_pub_sub() {
+    zmq::context_t context;
+
+    //publish forever
+    std::thread publisher([](zmq::context_t& context){
+      zmq::socket_t pub(context, ZMQ_PUB);
+      int disabled = 0;
+      pub.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
+      pub.bind("ipc:///tmp/test_pub_sub");
+      while(true)
+        pub.send("listen to this", strlen("listen to this"), ZMQ_DONTWAIT);
+    }, std::ref(context));
+    publisher.detach();
+
+    //wait to hear something
+    std::thread subscriber([](zmq::context_t& context) {
+      zmq::socket_t sub(context, ZMQ_SUB);
+      int disabled = 0;
+      sub.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
+      sub.setsockopt(ZMQ_SUBSCRIBE, "", 0);
+      sub.connect("ipc:///tmp/test_pub_sub");
+
+      zmq::pollitem_t item{ sub, 0, ZMQ_POLLIN, 0 };
+      zmq::poll(&item, 1, -1);
+
+      if(item.revents & ZMQ_POLLIN == false)
+        throw std::logic_error("Poller triggered but not for the right socket");
+      auto messages = sub.recv_all(0);
+      if(messages.size() != 1)
+        throw std::logic_error("Wrong number of published messages");
+      if(messages.front().str() != "listen to this")
+        throw std::logic_error("Wrong message contents");
+    }, std::ref(context));
+    subscriber.join();
+  }
+
 }
 
 int main() {
   //make this whole thing bail if it doesnt finish fast
-  //alarm(120);
+  alarm(60);
 
   testing::suite suite("zmq");
 
@@ -300,6 +336,8 @@ int main() {
   suite.test(TEST_CASE(test_batch_overflow));
 
   suite.test(TEST_CASE(test_stream_notify));
+
+  suite.test(TEST_CASE(test_pub_sub));
 
   return suite.tear_down();
 }

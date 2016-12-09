@@ -104,6 +104,9 @@ namespace prime_server {
     virtual void flush_stream();
     size_t size() const;
 
+    //TODO: does this really belong here!?
+    std::list<uint64_t> enqueued;
+
    protected:
     std::string log_line;
   };
@@ -141,8 +144,6 @@ namespace prime_server {
    protected:
     virtual bool enqueue(const zmq::message_t& requester, const zmq::message_t& message, http_request_t& request) override;
     virtual void dequeue(const std::list<zmq::message_t>& messages) override;
-   protected:
-    uint32_t request_id;
   };
 
 }

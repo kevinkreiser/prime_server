@@ -64,11 +64,11 @@ namespace {
     logging::log(log_line);
   }
 
-  struct request_exception_t : public std::runtime_error {
+  struct request_exception_t {
     request_exception_t(const prime_server::http_response_t& response):
-      runtime_error(response.to_string()), code(response.code), response(what()) { }
-    const uint16_t code;
+      response(response.to_string()), code(response.code) {}
     std::string response;
+    const uint16_t code;
   };
 
   const prime_server::headers_t::value_type CORS{"Access-Control-Allow-Origin", "*"};
@@ -645,7 +645,7 @@ namespace prime_server {
   http_server_t::http_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint,
                                const std::string& result_endpoint, const std::string& interrupt_endpoint, bool log, size_t max_request_size):
                                server_t<http_request_t, http_request_info_t>::server_t(context, client_endpoint, proxy_endpoint,
-                               result_endpoint, interrupt_endpoint, log, max_request_size), request_id(0) {
+                               result_endpoint, interrupt_endpoint, log, max_request_size) {
   }
   http_server_t::~http_server_t(){}
   bool http_server_t::enqueue(const zmq::message_t& requester, const zmq::message_t& message, http_request_t& request) {
@@ -675,6 +675,7 @@ namespace prime_server {
       if(log)
         log_request(info.id, parsed_request.log_line);
       //remember we are working on it
+      request.enqueued.emplace_back(*static_cast<uint64_t*>(static_cast<void*>(&info)));
       this->requests.emplace(info.id, requester);
     }
     return true;
@@ -700,7 +701,10 @@ namespace prime_server {
        (info.version == 1 && info.connection_close)){
       this->client.send(request->second, ZMQ_DONTWAIT | ZMQ_SNDMORE);
       this->client.send(static_cast<const void*>(""), 0, ZMQ_DONTWAIT);
-      sessions.erase(request->second);
+      auto session = sessions.find(request->second);
+      for(auto id_time_stamp : session->second.enqueued)
+        interrupt.send(static_cast<void*>(&id_time_stamp), sizeof(id_time_stamp), ZMQ_DONTWAIT);
+      sessions.erase(session);
     }
     requests.erase(request);
   }

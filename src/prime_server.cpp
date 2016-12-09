@@ -37,7 +37,7 @@ namespace prime_server {
     size_t identity_size = sizeof(identity);
     server.getsockopt(ZMQ_IDENTITY, identity, &identity_size);
 
-    bool more = true;
+    bool more;
     do {
       //request some
       size_t current_batch = 0;
@@ -57,8 +57,9 @@ namespace prime_server {
       }
 
       //receive some
+      more = false;
       current_batch = 0;
-      while(more && current_batch < batch_size) {
+      while(current_batch < batch_size) {
         try {
           //see if we are still waiting for stuff
           auto messages = server.recv_all(0);
@@ -68,6 +69,8 @@ namespace prime_server {
         catch(const std::exception& e) {
           logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " client_t: " + e.what());
         }
+        if(!more)
+          break;
       }
     //keep going while we expect more results
     }while(more);
@@ -76,7 +79,8 @@ namespace prime_server {
   template <class request_container_t, class request_info_t>
   server_t<request_container_t, request_info_t>::server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint,
     const std::string& result_endpoint, const std::string& interrupt_endpoint, bool log, size_t max_request_size):
-    client(context, ZMQ_STREAM), proxy(context, ZMQ_DEALER), loopback(context, ZMQ_SUB), interrupt(context, ZMQ_PUB), log(log), max_request_size(max_request_size) {
+    client(context, ZMQ_STREAM), proxy(context, ZMQ_DEALER), loopback(context, ZMQ_SUB), interrupt(context, ZMQ_PUB),
+    log(log), max_request_size(max_request_size), request_id(0) {
 
     int disabled = 0;
     client.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
@@ -93,7 +97,7 @@ namespace prime_server {
     loopback.bind(result_endpoint.c_str());
 
     interrupt.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
-    interrupt.connect(interrupt_endpoint.c_str());
+    interrupt.bind(interrupt_endpoint.c_str());
 
     sessions.reserve(1024);
     requests.reserve(1024);
@@ -164,12 +168,15 @@ namespace prime_server {
     //open or close connection
     const auto& body = *std::next(messages.begin());
     if(body.size() == 0) {
-      //connect
-      if(session == sessions.end())
+      //connect by making space for a streaming request
+      if(session == sessions.end()) {
         sessions.emplace(std::move(requester), request_container_t{});
-      //disconnect
-      else
+      }//disconnect by interrupting of all the requests
+      else {
+        for(auto id_time_stamp : session->second.enqueued)
+          interrupt.send(static_cast<void*>(&id_time_stamp), sizeof(id_time_stamp), ZMQ_DONTWAIT);
         sessions.erase(session);
+      }
     }//actual request data
     else {
       if(session != sessions.end()) {
@@ -177,6 +184,8 @@ namespace prime_server {
         if(!enqueue(session->first, body, session->second)) {
           client.send(session->first, ZMQ_SNDMORE | ZMQ_DONTWAIT);
           client.send(static_cast<const void*>(""), 0, ZMQ_DONTWAIT);
+          for(auto id_time_stamp : session->second.enqueued)
+            interrupt.send(static_cast<void*>(&id_time_stamp), sizeof(id_time_stamp), ZMQ_DONTWAIT);
           sessions.erase(session);
         }
       }
@@ -289,12 +298,15 @@ namespace prime_server {
     loopback.connect(result_endpoint.c_str());
 
     interrupt.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
+    interrupt.setsockopt(ZMQ_SUBSCRIBE, "", 0);
     interrupt.connect(interrupt_endpoint.c_str());
   }
   worker_t::~worker_t() {}
   void worker_t::work() {
     //give us something to do
     advertise();
+    //give client code a way to abort
+    interrupt_function_t bail = std::bind(&worker_t::handle_interrupt, this, false);
 
     //keep forwarding messages
     while(true) {
@@ -311,9 +323,9 @@ namespace prime_server {
           messages.pop_front();
           //check if this request_info is one we should abort
           job = *static_cast<const uint64_t*>(request_info.data());
-          cancel(true);
+          handle_interrupt(true);
           //do the work
-          auto result = work_function(messages, request_info.data());
+          auto result = work_function(messages, request_info.data(), bail);
           //we'll keep advertising with this heartbeat
           heart_beat = std::move(result.heart_beat);
           //should we send this on to the next proxy
@@ -337,12 +349,18 @@ namespace prime_server {
         catch(const interrupt_t& i) { logging::WARN(i.what()); }
         catch(const std::exception& e) { logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what()); }
 
+        //reset the job
+        job = std::numeric_limits<decltype(job)>::max();
+
         //do some cleanup
         try { cleanup_function(); }
         catch(const std::exception& e) { logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what()); }
-      }//got an interrupt
-      else if(items[1].revents & ZMQ_POLLIN) {
-        //TODO: keep the interrupt
+      }
+
+      //got interrupt(s)
+      if(items[1].revents & ZMQ_POLLIN) {
+        handle_interrupt(false);
+        //TODO: trim the fat while we are waiting for work
       }
 
       //we want something more to do
@@ -358,16 +376,15 @@ namespace prime_server {
       logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what());
     }
   }
-  void worker_t::cancel(bool check_previous) {
-    //check previous interrupts we've gotten
-    if(check_previous) {
+  void worker_t::handle_interrupt(bool force_check) {
+    //is there anything there right now
+    auto messages = interrupt.recv_all(ZMQ_DONTWAIT);
+    for(const auto& message : messages)
+      interrupts.insert(*static_cast<const decltype(job)*>(message.data()));
 
-    }
-    //check if its being interrupted right now
-    zmq::message_t message;
-    if(interrupt.recv(message, ZMQ_DONTWAIT)) {
-
-    }
+    //either we just got more or we need to check the backlog
+    if((force_check || messages.size()) && interrupts.find(job) != interrupts.cend())
+      throw interrupt_t(job << 32);
   }
 
   //explicit instantiation for netstring and http

@@ -160,7 +160,7 @@ namespace {
     //echo worker
     std::thread worker(std::bind(&worker_t::work,
       worker_t(context, "ipc:///tmp/test_netstring_proxy_downstream", "ipc:///dev/null", "ipc:///tmp/test_netstring_results", "ipc:///tmp/test_netstring_interrupt",
-      [] (const std::list<zmq::message_t>& job, void*) {
+      [] (const std::list<zmq::message_t>& job, void*, worker_t::interrupt_function_t&) {
         worker_t::result_t result{false};
         auto request = netstring_entity_t::from_string(static_cast<const char*>(job.front().data()), job.front().size());
         auto response = netstring_entity_t::to_string(request.body);

@@ -20,6 +20,9 @@ namespace prime_server {
 
     std::string body;
     size_t body_length;
+
+    //TODO: does this really belong here!?
+    std::list<uint64_t> enqueued;
   };
 
   class netstring_client_t : public client_t {
@@ -44,7 +47,6 @@ namespace prime_server {
    protected:
     virtual bool enqueue(const zmq::message_t& requester, const zmq::message_t& message, netstring_entity_t& buffer) override;
     virtual void dequeue(const std::list<zmq::message_t>& messages) override;
-    uint32_t request_id;
   };
 
 }

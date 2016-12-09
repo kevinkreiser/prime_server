@@ -123,7 +123,7 @@ namespace prime_server {
   netstring_server_t::netstring_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint,
                                          const std::string& result_endpoint, const std::string& interrupt_endpoint, bool log, size_t max_request_size):
                                          server_t<netstring_entity_t, netstring_request_info_t>::server_t(context, client_endpoint, proxy_endpoint,
-                                         result_endpoint, interrupt_endpoint, log, max_request_size), request_id(0) {
+                                         result_endpoint, interrupt_endpoint, log, max_request_size) {
   }
 
   netstring_server_t::~netstring_server_t(){}
@@ -142,7 +142,7 @@ namespace prime_server {
         log_transaction(request_id, "REPLIED");
       }
       ++request_id;
-      return true;
+      return false;
     }
 
     //send on each request
@@ -153,6 +153,7 @@ namespace prime_server {
       if(log)
         log_transaction(request_id, request.body);
       //remember we are working on it
+      request.enqueued.emplace_back(*static_cast<uint64_t*>(static_cast<void*>(&info)));
       this->requests.emplace(info.id, requester);
     }
     return true;

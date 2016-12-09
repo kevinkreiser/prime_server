@@ -10,6 +10,7 @@
 #include <string>
 #include <list>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <type_traits>
 #include <cstdint>
@@ -80,6 +81,12 @@ namespace prime_server {
     //  log the response if log == true
     virtual void dequeue(const std::list<zmq::message_t>& messages) = 0;
 
+    //TODO: refactor enqueue/dequeue. into something like a session_t object that could
+    //do the protocol specific enqueueing and dequeueing. the interfaces are very close
+    //already and the things they do for both protocols are pretty similar. it would be
+    //nice to make a single object handle these bits rather than subclassing the server
+    //maybe we can just add functionality to the *_entity_t objects in the protcols?
+
     //contractual obligations for supplying your own request_info_t, the last 2 are strict for the purposes
     //of possibly allowing the proxy to easily peak at the request id without knowing the server protocol
     static_assert(std::is_trivial<request_info_t>::value, "request_info_t must be trivial");
@@ -103,7 +110,8 @@ namespace prime_server {
     std::unordered_map<zmq::message_t, request_container_t> sessions;
     //a record of what requests we have in progress
     //TODO: keep time of request and kill requests that stick around for a long time
-    std::unordered_map<uint64_t, zmq::message_t> requests;
+    std::unordered_map<uint32_t, zmq::message_t> requests;
+    uint32_t request_id;
   };
 
   //proxy messages between layers of a backend load balancing in between
@@ -142,7 +150,8 @@ namespace prime_server {
       std::list<std::string> messages;
       std::string heart_beat;
     };
-    using work_function_t = std::function<result_t (const std::list<zmq::message_t>&, void*)>;
+    using interrupt_function_t = std::function<void ()>;
+    using work_function_t = std::function<result_t (const std::list<zmq::message_t>&, void*, interrupt_function_t&)>;
     using cleanup_function_t = std::function<void ()>;
 
     worker_t(zmq::context_t& context, const std::string& upstream_proxy_endpoint, const std::string& downstream_proxy_endpoint,
@@ -152,7 +161,7 @@ namespace prime_server {
     void work();
    protected:
     void advertise();
-    virtual void cancel(bool check_previous);
+    virtual void handle_interrupt(bool force_check);
 
     zmq::socket_t upstream_proxy;
     zmq::socket_t downstream_proxy;
@@ -164,13 +173,7 @@ namespace prime_server {
     long heart_beat_interval;
     std::string heart_beat;
     uint64_t job;
-
-    //keep a circular queue of the last x interrupts
-    //when you get a new job search from newest backwards to see if its there
-    //if so abort right away. if not subsequent calls to cancel will
-    //either abort the job or push onto the circular queue
-    //to check for interrupt just call recv with NO_WAIT
-
+    std::unordered_set<uint64_t> interrupts;
   };
 
 }

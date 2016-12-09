@@ -16,7 +16,7 @@ using namespace prime_server;
 
 std::string root = "./";
 
-worker_t::result_t disk_work(const std::list<zmq::message_t>& job, void* request_info) {
+worker_t::result_t disk_work(const std::list<zmq::message_t>& job, void* request_info, worker_t::interrupt_function_t&) {
   worker_t::result_t result{false};
   try {
     //check the disk
@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
   //file serving thread
   std::thread file_worker(std::bind(&worker_t::work,
     worker_t(context, proxy_endpoint + "_downstream", "ipc:///dev/null", result_endpoint, request_interrupt,
-    std::bind(&disk_work, std::placeholders::_1, std::placeholders::_2)
+    std::bind(&disk_work, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3)
   )));
   file_worker.detach();
 
