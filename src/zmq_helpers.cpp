@@ -488,9 +488,9 @@ namespace murmur_hash3 {
   }
 
   //let the compiler pick which hash makes sense for your architecture
-  template<int> size_t specialized_hash_bytes(const void*, size_t);
-  template<> size_t specialized_hash_bytes<4>(const void* bytes, size_t length) { return murmur_hash3_x86_32(bytes, length, 1); }
-  template<> size_t specialized_hash_bytes<8>(const void* bytes, size_t length) { return murmur_hash3_x64_128(bytes, length, 1); }
+  template<int> inline size_t specialized_hash_bytes(const void*, size_t);
+  template<> inline size_t specialized_hash_bytes<4>(const void* bytes, size_t length) { return murmur_hash3_x86_32(bytes, length, 1); }
+  template<> inline size_t specialized_hash_bytes<8>(const void* bytes, size_t length) { return murmur_hash3_x64_128(bytes, length, 1); }
   inline size_t hash_bytes(const void* bytes, size_t length) { return specialized_hash_bytes<sizeof(size_t)>(bytes, length); }
 }
 
