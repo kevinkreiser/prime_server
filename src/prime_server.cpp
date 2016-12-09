@@ -173,8 +173,12 @@ namespace prime_server {
         sessions.emplace(std::move(requester), request_container_t{});
       }//disconnect by interrupting of all the requests
       else {
-        for(auto id_time_stamp : session->second.enqueued)
+        for(auto id_time_stamp : session->second.enqueued) {
           interrupt.send(static_cast<void*>(&id_time_stamp), sizeof(id_time_stamp), ZMQ_DONTWAIT);
+          //TODO: delete the matching request, this will require us to store the request id including the time
+          //since we arent actually using the time for anything at this point though we may be ok to just
+          //axe it entirely
+        }
         sessions.erase(session);
       }
     }//actual request data
@@ -360,7 +364,10 @@ namespace prime_server {
       //got interrupt(s)
       if(items[1].revents & ZMQ_POLLIN) {
         handle_interrupt(false);
-        //TODO: trim the fat while we are waiting for work
+        //TODO: we need to make sure the unordered map doesnt grow without bound
+        //to do that we have two options, just resize the thing down and let whatever
+        //outstanding cancellations get missed or actually remove the oldest ones first
+        //the risk vs speed benefit of the former is very tempting
       }
 
       //we want something more to do

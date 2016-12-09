@@ -104,7 +104,7 @@ namespace prime_server {
     virtual void flush_stream();
     size_t size() const;
 
-    //TODO: does this really belong here!?
+    //TODO: fix this when we refactor to avoid subclassing the server
     std::list<uint64_t> enqueued;
 
    protected:

@@ -81,11 +81,8 @@ namespace prime_server {
     //  log the response if log == true
     virtual void dequeue(const std::list<zmq::message_t>& messages) = 0;
 
-    //TODO: refactor enqueue/dequeue. into something like a session_t object that could
-    //do the protocol specific enqueueing and dequeueing. the interfaces are very close
-    //already and the things they do for both protocols are pretty similar. it would be
-    //nice to make a single object handle these bits rather than subclassing the server
-    //maybe we can just add functionality to the *_entity_t objects in the protcols?
+    //TODO: refactor enqueue/dequeue to be part of the request_container_t implementation
+    //this will allow us to avoid subclassing the server (which is not desirable)
 
     //contractual obligations for supplying your own request_info_t, the last 2 are strict for the purposes
     //of possibly allowing the proxy to easily peak at the request id without knowing the server protocol

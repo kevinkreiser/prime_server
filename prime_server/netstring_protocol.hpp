@@ -21,7 +21,7 @@ namespace prime_server {
     std::string body;
     size_t body_length;
 
-    //TODO: does this really belong here!?
+    //TODO: fix this when we refactor to avoid subclassing the server
     std::list<uint64_t> enqueued;
   };
 
