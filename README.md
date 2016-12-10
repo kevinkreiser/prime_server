@@ -13,8 +13,11 @@ Build Status
 
 Grab some deps
 --------------
-    # trusty didn't have czmq in the repositories so its repackaged here
+    # trusty didn't have czmq or newer zmq in the repositories so its repackaged here
     if [[ $(grep -cF trusty /etc/lsb-release) > 0 ]]; then
+      sudo add-apt-repository -y ppa:kevinkreiser/libsodium
+      sudo add-apt-repository -y ppa:kevinkreiser/libpgm
+      sudo add-apt-repository -y ppa:kevinkreiser/zeromq3
       sudo add-apt-repository -y ppa:kevinkreiser/czmq
       sudo apt-get update
     fi

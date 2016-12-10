@@ -12,6 +12,7 @@ namespace {
   struct interrupt_t : public std::runtime_error {
     interrupt_t(uint32_t id): std::runtime_error("Request " + std::to_string(id) + " was interrupted") {}
   };
+  constexpr uint32_t INTERRUPT_AGE_CUTOFF = 600; //request age in seconds
 }
 
 namespace prime_server {
@@ -168,16 +169,14 @@ namespace prime_server {
     //open or close connection
     const auto& body = *std::next(messages.begin());
     if(body.size() == 0) {
-      //connect by making space for a streaming request
+      //connecting makes space for a streaming request
       if(session == sessions.end()) {
         sessions.emplace(std::move(requester), request_container_t{});
-      }//disconnect by interrupting of all the requests
+      }//disconnecting interrupts all of the outstanding requests
       else {
         for(auto id_time_stamp : session->second.enqueued) {
           interrupt.send(static_cast<void*>(&id_time_stamp), sizeof(id_time_stamp), ZMQ_DONTWAIT);
-          //TODO: delete the matching request, this will require us to store the request id including the time
-          //since we arent actually using the time for anything at this point though we may be ok to just
-          //axe it entirely
+          requests.erase(id_time_stamp);
         }
         sessions.erase(session);
       }
@@ -364,10 +363,14 @@ namespace prime_server {
       //got interrupt(s)
       if(items[1].revents & ZMQ_POLLIN) {
         handle_interrupt(false);
-        //TODO: we need to make sure the unordered map doesnt grow without bound
-        //to do that we have two options, just resize the thing down and let whatever
-        //outstanding cancellations get missed or actually remove the oldest ones first
-        //the risk vs speed benefit of the former is very tempting
+        //cull off the old ones, but also note that the list is loosely ordered
+        //this means we can hold on to some older ones longer than we would have liked
+        //but it doesnt really matter because memory is cheap, time is expensive costs
+        auto now = static_cast<uint32_t>(difftime(time(nullptr), 0) + .5);
+        while(now - (interrupt_history.front() >> 32) > INTERRUPT_AGE_CUTOFF) {
+          interrupts.erase(interrupt_history.front());
+          interrupt_history.pop_front();
+        }
       }
 
       //we want something more to do
@@ -386,8 +389,10 @@ namespace prime_server {
   void worker_t::handle_interrupt(bool force_check) {
     //is there anything there right now
     auto messages = interrupt.recv_all(ZMQ_DONTWAIT);
-    for(const auto& message : messages)
-      interrupts.insert(*static_cast<const decltype(job)*>(message.data()));
+    for(const auto& message : messages) {
+      auto inserted = interrupts.insert(*static_cast<const decltype(job)*>(message.data()));
+      interrupt_history.push_back(*inserted.first);
+    }
 
     //either we just got more or we need to check the backlog
     if((force_check || messages.size()) && interrupts.find(job) != interrupts.cend())

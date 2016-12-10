@@ -147,14 +147,14 @@ namespace prime_server {
 
     //send on each request
     for(const auto& parsed_request : parsed_requests) {
-      netstring_request_info_t info{request_id++, static_cast<uint32_t>(difftime(time(nullptr), static_cast<time_t>(0)) + .5)};
+      netstring_request_info_t info{request_id++, static_cast<uint32_t>(difftime(time(nullptr), 0) + .5)};
       this->proxy.send(static_cast<const void*>(&info), sizeof(info), ZMQ_DONTWAIT | ZMQ_SNDMORE);
       this->proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT);
       if(log)
         log_transaction(request_id, request.body);
       //remember we are working on it
       request.enqueued.emplace_back(*static_cast<uint64_t*>(static_cast<void*>(&info)));
-      this->requests.emplace(info.id, requester);
+      this->requests.emplace(request.enqueued.back(), requester);
     }
     return true;
   }
@@ -162,7 +162,7 @@ namespace prime_server {
   void netstring_server_t::dequeue(const std::list<zmq::message_t>& messages) {
     //find the request
     const auto& info = *static_cast<const netstring_request_info_t*>(messages.front().data());
-    auto request = requests.find(info.id);
+    auto request = requests.find(*static_cast<const uint64_t*>(static_cast<const void*>(messages.front().data())));
     if(request == requests.end()) {
       logging::WARN("Unknown or timed-out request id: " + std::to_string(info.id));
       return;

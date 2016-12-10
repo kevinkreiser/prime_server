@@ -107,7 +107,7 @@ namespace prime_server {
     std::unordered_map<zmq::message_t, request_container_t> sessions;
     //a record of what requests we have in progress
     //TODO: keep time of request and kill requests that stick around for a long time
-    std::unordered_map<uint32_t, zmq::message_t> requests;
+    std::unordered_map<uint64_t, zmq::message_t> requests;
     uint32_t request_id;
   };
 
@@ -171,6 +171,7 @@ namespace prime_server {
     std::string heart_beat;
     uint64_t job;
     std::unordered_set<uint64_t> interrupts;
+    std::list<uint64_t> interrupt_history;
   };
 
 }

@@ -282,7 +282,7 @@ namespace prime_server {
     auto connection_header = headers.find("Connection");
     return http_request_info_t {
       id,
-      static_cast<uint32_t>(difftime(time(nullptr), static_cast<time_t>(0)) + .5),
+      static_cast<uint32_t>(difftime(time(nullptr), 0) + .5),
       static_cast<uint16_t>(version == "HTTP/1.0" ? 0 : 1),
       static_cast<uint16_t>(connection_header != headers.end() && connection_header->second == "Keep-Alive"),
       static_cast<uint16_t>(connection_header != headers.end() && connection_header->second == "Close")
@@ -676,14 +676,14 @@ namespace prime_server {
         log_request(info.id, parsed_request.log_line);
       //remember we are working on it
       request.enqueued.emplace_back(*static_cast<uint64_t*>(static_cast<void*>(&info)));
-      this->requests.emplace(info.id, requester);
+      this->requests.emplace(request.enqueued.back(), requester);
     }
     return true;
   }
   void http_server_t::dequeue(const std::list<zmq::message_t>& messages) {
     //find the request
     const auto& info = *static_cast<const http_request_info_t*>(messages.front().data());
-    auto request = requests.find(info.id);
+    auto request = requests.find(*static_cast<const uint64_t*>(static_cast<const void*>(messages.front().data())));
     if(request == requests.end()) {
       logging::WARN("Unknown or timed-out request id: " + std::to_string(info.id));
       return;
