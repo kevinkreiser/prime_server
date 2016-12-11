@@ -50,42 +50,28 @@ namespace prime_server {
     size_t batch_size;
   };
 
+  constexpr size_t DEFAULT_MAX_REQUEST_SIZE = 1024*1024*10; //10 megabytes
+  constexpr uint32_t DEFAULT_REQUEST_TIMEOUT = -1;          //infinity seconds
+
+  //TODO: bundle both request_containter_t (req, rep) and request_info_t into
+  //a single session_t that implements all the guts of the protocol
+
   //server sits between a clients and a load balanced backend
-  constexpr size_t DEFAULT_MAX_REQUEST_SIZE = 1024*1024*10;
   template <class request_container_t, class request_info_t>
   class server_t {
    public:
     server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint,
-      const std::string& interrupt_endpoint, bool log = false, size_t max_request_size = DEFAULT_MAX_REQUEST_SIZE);
+      const std::string& interrupt_endpoint, bool log = false, size_t max_request_size = DEFAULT_MAX_REQUEST_SIZE, uint32_t request_timeout = DEFAULT_REQUEST_TIMEOUT);
     virtual ~server_t();
     void serve();
    protected:
     void handle_request(std::list<zmq::message_t>& messages);
-    //implementing class shall:
-    //  take the request_container pump more bytes into and get back out >= 0 whole request objects
-    //  while there are bytes to process:
-    //    if the request is malformed or too large
-    //      signal the client socket appropriately
-    //      return false if terminating the session/connection is desired
-    //      log the request if log == true
-    //    otherwise, for each whole request:
-    //      send the requester as a message to the proxy
-    //      send the request as a message to the proxy
-    //      record the request with its id
-    //      log the request if log == true
-    virtual bool enqueue(const zmq::message_t& requester, const zmq::message_t& message, request_container_t& streaming_request) = 0;
-    //implementing class shall:
-    //  reply to the requester
-    //  remove the outstanding request as it was either satisfied or timed-out
-    //  may also remove the session depending on the original request or the result
-    //  log the response if log == true
-    virtual void dequeue(const std::list<zmq::message_t>& messages) = 0;
-
-    //TODO: refactor enqueue/dequeue to be part of the request_container_t implementation
-    //this will allow us to avoid subclassing the server (which is not desirable)
+    virtual bool enqueue(const zmq::message_t& requester, const zmq::message_t& message, request_container_t& streaming_request);
+    virtual bool dequeue(const request_info_t& info, const zmq::message_t& response);
+    void handle_timeouts();
 
     //contractual obligations for supplying your own request_info_t, the last 2 are strict for the purposes
-    //of possibly allowing the proxy to easily peak at the request id without knowing the server protocol
+    //of allowing the server/proxy/worker to easily peak at the request id and time stamp without knowing the protocol
     static_assert(std::is_trivial<request_info_t>::value, "request_info_t must be trivial");
     static_assert(std::is_same<decltype(request_info_t().id), uint32_t>::value, "request_info_t::id must be uint32_t");
     static_assert(std::is_same<decltype(request_info_t().time_stamp), uint32_t>::value, "request_info_t::time_stamp must be uint32_t");
@@ -102,13 +88,16 @@ namespace prime_server {
 
     bool log;
     size_t max_request_size;
+    uint32_t request_timeout;
+    uint32_t request_id;
+
     //a record of what open connections we have
     //TODO: keep time of last session activity and clear out stale sessions
     std::unordered_map<zmq::message_t, request_container_t> sessions;
     //a record of what requests we have in progress
-    //TODO: keep time of request and kill requests that stick around for a long time
     std::unordered_map<uint64_t, zmq::message_t> requests;
-    uint32_t request_id;
+    //order list of requests
+    std::list<request_info_t> request_history;
   };
 
   //proxy messages between layers of a backend load balancing in between

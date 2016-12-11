@@ -5,19 +5,14 @@
 #include <cstdlib>
 #include <ctime>
 
+using namespace prime_server;
+
 namespace {
 
-  void log_transaction(uint64_t id, const std::string& transaction) {
-    auto log_line = std::to_string(id);
-    log_line.push_back(' ');
-    log_line += logging::timestamp();
-    log_line.push_back(' ');
-    log_line += transaction;
-    log_line.push_back('\n');
-    logging::log(log_line);
-  }
-
-  const std::string INTERNAL_ERROR(prime_server::netstring_entity_t::to_string("INTERNAL_ERROR: empty response"));
+const netstring_entity_t::request_exception_t BAD_LENGTH("BAD_REQUEST: Non-numeric length");
+const netstring_entity_t::request_exception_t TOO_LONG("BAD_REQUEST: Request exceeded max");
+const netstring_entity_t::request_exception_t BAD_BODY_SEPARATOR("BAD_REQUEST: Missing ':' between length and body");
+const netstring_entity_t::request_exception_t BAD_MESSAGE_SEPARATOR("BAD_REQUEST: Missing ',' after body");
 
 }
 
@@ -25,6 +20,13 @@ namespace prime_server {
 
   netstring_entity_t::netstring_entity_t():body(),body_length(0) {
   }
+
+  netstring_request_info_t netstring_entity_t::to_info(uint32_t id) const {
+     return netstring_request_info_t {
+       id,
+       static_cast<uint32_t>(difftime(time(nullptr), 0) + .5)
+     };
+   }
 
   std::string netstring_entity_t::to_string() const {
     return std::to_string(body.size()) + ':' + body + ',';
@@ -42,6 +44,12 @@ namespace prime_server {
     return std::move(requests.front());
   }
 
+  const zmq::message_t& netstring_entity_t::timeout(netstring_request_info_t& info) {
+    static char TIMEOUT[] = "7:TIMEOUT,";
+    static const zmq::message_t t(static_cast<void*>(&TIMEOUT[0]), sizeof(TIMEOUT) - 1, [](void*,void*){});
+    return t;
+  }
+
   std::list<netstring_entity_t> netstring_entity_t::from_stream(const char* start, size_t length, size_t max_size) {
     std::list<netstring_entity_t> requests;
     size_t i = 0;
@@ -57,9 +65,9 @@ namespace prime_server {
             //get the length
             body.append(start, start + i);
             try { body_length = std::stoul(body); }
-            catch(...) { throw std::runtime_error("BAD_REQUEST: Non-numeric length"); }
+            catch(...) { throw BAD_LENGTH; }
             if(body_length > max_size)
-              throw std::runtime_error("TOO_LONG: Request exceeded max");
+              throw TOO_LONG;
             //reset for body
             start += i + 1;
             length -= i + 1;
@@ -67,8 +75,10 @@ namespace prime_server {
             body.clear();
             continue;
           }//this isnt what we expect
+          else if(i > 0)
+            throw BAD_BODY_SEPARATOR;
           else
-            throw std::runtime_error("BAD_REQUEST: Missing ':' between length and body");
+            throw BAD_LENGTH;
         }
         //next char
         ++i;
@@ -89,7 +99,7 @@ namespace prime_server {
           continue;
         }//this isnt what we expect
         else
-          throw std::runtime_error("BAD_REQUEST: Missing ',' after body");
+          throw BAD_MESSAGE_SEPARATOR;
       }
       //we werent looking for length, and the body didnt fit in what we had
       //so we are done for now and need more data
@@ -110,6 +120,43 @@ namespace prime_server {
     return body.size();
   }
 
+  void netstring_entity_t::log(uint32_t id) const {
+    auto line = std::to_string(id);
+    line.reserve(line.size() + body.size() + 64);
+    line.push_back(' ');
+    line.append(logging::timestamp());
+    line.push_back(' ');
+    line.append(body);
+    line.push_back('\n');
+    logging::log(line);
+  }
+
+  netstring_entity_t::request_exception_t::request_exception_t(const std::string& response):
+    response(netstring_entity_t::to_string(response)) {
+  }
+
+  void netstring_entity_t::request_exception_t::log(uint32_t id) const {
+    auto line = std::to_string(id);
+    line.reserve(line.size() + 64);
+    line.push_back(' ');
+    line.append(logging::timestamp());
+    line.append(" BAD_REQ ");
+    line.append(std::to_string(response.size()));
+    line.push_back('\n');
+    logging::log(line);
+  }
+
+  void netstring_request_info_t::log(size_t response_size) const {
+    auto line = std::to_string(id);
+    line.reserve(line.size() + 64);
+    line.push_back(' ');
+    line.append(logging::timestamp());
+    line.append(" OK_RESP ");
+    line.append(std::to_string(response_size));
+    line.push_back('\n');
+    logging::log(line);
+  }
+
   size_t netstring_client_t::stream_responses(const void* message, size_t size, bool& more) {
     auto responses = response.from_stream(static_cast<const char*>(message), size);
     for(const auto& parsed_response : responses) {
@@ -118,65 +165,6 @@ namespace prime_server {
       more = collect_function(static_cast<const void *>(formatted_response.c_str()), formatted_response.size());
     }
     return responses.size();
-  }
-
-  netstring_server_t::netstring_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint,
-                                         const std::string& result_endpoint, const std::string& interrupt_endpoint, bool log, size_t max_request_size):
-                                         server_t<netstring_entity_t, netstring_request_info_t>::server_t(context, client_endpoint, proxy_endpoint,
-                                         result_endpoint, interrupt_endpoint, log, max_request_size) {
-  }
-
-  netstring_server_t::~netstring_server_t(){}
-
-  bool netstring_server_t::enqueue(const zmq::message_t& requester, const zmq::message_t& message, netstring_entity_t& request) {
-    //do some parsing
-    std::list<netstring_entity_t> parsed_requests;
-    try {
-      parsed_requests = request.from_stream(static_cast<const char*>(message.data()), message.size(), max_request_size);
-    }//something went wrong either bad request or too long
-    catch(const std::runtime_error& e) {
-      client.send(requester, ZMQ_SNDMORE | ZMQ_DONTWAIT);
-      client.send(netstring_entity_t::to_string(e.what()), ZMQ_DONTWAIT);
-      if(log) {
-        log_transaction(request_id, e.what());
-        log_transaction(request_id, "REPLIED");
-      }
-      ++request_id;
-      return false;
-    }
-
-    //send on each request
-    for(const auto& parsed_request : parsed_requests) {
-      netstring_request_info_t info{request_id++, static_cast<uint32_t>(difftime(time(nullptr), 0) + .5)};
-      this->proxy.send(static_cast<const void*>(&info), sizeof(info), ZMQ_DONTWAIT | ZMQ_SNDMORE);
-      this->proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT);
-      if(log)
-        log_transaction(request_id, request.body);
-      //remember we are working on it
-      request.enqueued.emplace_back(*static_cast<uint64_t*>(static_cast<void*>(&info)));
-      this->requests.emplace(request.enqueued.back(), requester);
-    }
-    return true;
-  }
-
-  void netstring_server_t::dequeue(const std::list<zmq::message_t>& messages) {
-    //find the request
-    const auto& info = *static_cast<const netstring_request_info_t*>(messages.front().data());
-    auto request = requests.find(*static_cast<const uint64_t*>(static_cast<const void*>(messages.front().data())));
-    if(request == requests.end()) {
-      logging::WARN("Unknown or timed-out request id: " + std::to_string(info.id));
-      return;
-    }
-    //reply to the client with the response or an error
-    client.send(request->second, ZMQ_SNDMORE | ZMQ_DONTWAIT);
-    if(messages.size() == 2)
-      client.send(messages.back(), ZMQ_DONTWAIT);
-    else
-      client.send(INTERNAL_ERROR, ZMQ_DONTWAIT);
-    if(log)
-      log_transaction(info.id, "REPLIED");
-    //cleanup, but leave the session as netstring is always keep alive
-    requests.erase(request);
   }
 
 }

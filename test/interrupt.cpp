@@ -89,7 +89,7 @@ namespace {
 
     //server
     std::thread server(std::bind(&netstring_server_t::serve,
-      netstring_server_t(context, "ipc:///tmp/test_loop_server", "ipc:///tmp/test_loop_proxy_upstream", "ipc:///tmp/test_loop_results", "ipc:///tmp/test_loop_interrupt", true)));
+      netstring_server_t(context, "ipc:///tmp/test_loop_server", "ipc:///tmp/test_loop_proxy_upstream", "ipc:///tmp/test_loop_results", "ipc:///tmp/test_loop_interrupt", false, DEFAULT_MAX_REQUEST_SIZE, 1)));
     server.detach();
 
     //we want a client that is very fickle, we need the client to send a request and then bail right away before
@@ -130,6 +130,42 @@ namespace {
     condition.wait(lock);
   }
 
+  void test_timeout() {
+    zmq::context_t context;
+
+    //server
+    std::thread server(std::bind(&netstring_server_t::serve,
+      netstring_server_t(context, "ipc:///tmp/test_timeout_server", "ipc:///tmp/test_timeout_proxy_upstream", "ipc:///tmp/test_timeout_results", "ipc:///tmp/test_timeout_interrupt", false)));
+    server.detach();
+
+    //load balancer
+    std::thread proxy(std::bind(&proxy_t::forward, proxy_t(context, "ipc:///tmp/test_timeout_proxy_upstream", "ipc:///tmp/test_timeout_proxy_downstream")));
+    proxy.detach();
+
+    //busy worker
+    std::thread worker(std::bind(&worker_t::work,
+      worker_t(context, "ipc:///tmp/test_timeout_proxy_downstream", "ipc:///dev/null", "ipc:///tmp/test_timeout_results", "ipc:///tmp/test_timeout_interrupt",
+      [] (const std::list<zmq::message_t>& job, void*, worker_t::interrupt_function_t& interrupt) {
+        while(true);
+        return worker_t::result_t{};
+      })));
+    worker.detach();
+
+    std::string request = netstring_entity_t::to_string("wart uf mi");
+    testable_client_t* client;
+    client = new testable_client_t(context, "ipc:///tmp/test_timeout_server",
+      [&request, &client]() {
+        return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
+      },
+      [](const void* data, size_t size) {
+        auto response = netstring_entity_t::from_string(static_cast<const char*>(data), size);
+        if(response.body.substr(0, 7) != "TIMEOUT")
+          throw std::runtime_error("Expected TIMEOUT response!");
+        return false;
+      }, 1);
+    client->batch();
+  }
+
 }
 
 int main() {
@@ -141,6 +177,8 @@ int main() {
   suite.test(TEST_CASE(test_early));
 
   suite.test(TEST_CASE(test_loop));
+
+  suite.test(TEST_CASE(test_timeout));
 
   return suite.tear_down();
 }
