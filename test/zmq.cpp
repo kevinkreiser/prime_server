@@ -5,11 +5,9 @@
 #include <string>
 #include <thread>
 
-#include <iostream>
-
 namespace {
 
-std::string readable_string(size_t size) {
+  std::string readable_string(size_t size) {
     std::string s(200, ' ');
     for(size_t i = 0; i < s.size(); ++i)
       s[i] = (i % 95) + 32;
