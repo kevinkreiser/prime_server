@@ -89,7 +89,7 @@ namespace {
 
     //server
     std::thread server(std::bind(&netstring_server_t::serve,
-      netstring_server_t(context, "ipc:///tmp/test_loop_server", "ipc:///tmp/test_loop_proxy_upstream", "ipc:///tmp/test_loop_results", "ipc:///tmp/test_loop_interrupt", false, DEFAULT_MAX_REQUEST_SIZE, 1)));
+      netstring_server_t(context, "ipc:///tmp/test_loop_server", "ipc:///tmp/test_loop_proxy_upstream", "ipc:///tmp/test_loop_results", "ipc:///tmp/test_loop_interrupt", false)));
     server.detach();
 
     //we want a client that is very fickle, we need the client to send a request and then bail right away before
@@ -135,7 +135,7 @@ namespace {
 
     //server
     std::thread server(std::bind(&netstring_server_t::serve,
-      netstring_server_t(context, "ipc:///tmp/test_timeout_server", "ipc:///tmp/test_timeout_proxy_upstream", "ipc:///tmp/test_timeout_results", "ipc:///tmp/test_timeout_interrupt", false)));
+      netstring_server_t(context, "ipc:///tmp/test_timeout_server", "ipc:///tmp/test_timeout_proxy_upstream", "ipc:///tmp/test_timeout_results", "ipc:///tmp/test_timeout_interrupt", false, DEFAULT_MAX_REQUEST_SIZE, 1)));
     server.detach();
 
     //load balancer
@@ -152,9 +152,8 @@ namespace {
     worker.detach();
 
     std::string request = netstring_entity_t::to_string("wart uf mi");
-    testable_client_t* client;
-    client = new testable_client_t(context, "ipc:///tmp/test_timeout_server",
-      [&request, &client]() {
+    testable_client_t client(context, "ipc:///tmp/test_timeout_server",
+      [&request]() {
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
       [](const void* data, size_t size) {
@@ -163,7 +162,7 @@ namespace {
           throw std::runtime_error("Expected TIMEOUT response!");
         return false;
       }, 1);
-    client->batch();
+    client.batch();
   }
 
 }
