@@ -54,7 +54,7 @@ namespace {
 
     //server
     std::thread server(std::bind(&netstring_server_t::serve,
-      netstring_server_t(context, "ipc:///tmp/test_unshaped_server", "ipc:///tmp/test_unshaped_proxy_upstream", "ipc:///tmp/test_unshaped_results", false)));
+      netstring_server_t(context, "ipc:///tmp/test_unshaped_server", "ipc:///tmp/test_unshaped_proxy_upstream", "ipc:///tmp/test_unshaped_results", "ipc:///tmp/test_unshaped_interrupt", false)));
     server.detach();
 
     //load balancer for parsing
@@ -65,8 +65,8 @@ namespace {
     //a or b workers
     for(const auto& response : {std::string("A"), std::string("B")}) {
       std::thread worker(std::bind(&worker_t::work,
-        worker_t(context, "ipc:///tmp/test_unshaped_proxy_downstream", "ipc:///dev/null", "ipc:///tmp/test_unshaped_results",
-        [response] (const std::list<zmq::message_t>& job, void*) {
+        worker_t(context, "ipc:///tmp/test_unshaped_proxy_downstream", "ipc:///dev/null", "ipc:///tmp/test_unshaped_results", "ipc:///tmp/test_unshaped_interrupt",
+        [response] (const std::list<zmq::message_t>& job, void*, worker_t::interrupt_function_t&) {
           worker_t::result_t result{false, {netstring_entity_t::to_string(response)}, response};
           return result;
         }, [](){}, response
@@ -93,7 +93,7 @@ namespace {
 
     //server
     std::thread server(std::bind(&netstring_server_t::serve,
-      netstring_server_t(context, "ipc:///tmp/test_shaped_server", "ipc:///tmp/test_shaped_proxy_upstream", "ipc:///tmp/test_shaped_results", false)));
+      netstring_server_t(context, "ipc:///tmp/test_shaped_server", "ipc:///tmp/test_shaped_proxy_upstream", "ipc:///tmp/test_shaped_results", "ipc:///tmp/test_shaped_interrupt", false)));
     server.detach();
 
     //load balancer for parsing that favors heartbeats (ie workers) based on whats in the job to be forwarded
@@ -120,8 +120,8 @@ namespace {
     //A or B workers
     for(const auto& response : {std::string("A"), std::string("B")}) {
       std::thread worker(std::bind(&worker_t::work,
-        worker_t(context, "ipc:///tmp/test_shaped_proxy_downstream", "ipc:///dev/null", "ipc:///tmp/test_shaped_results",
-        [response] (const std::list<zmq::message_t>& job, void*) {
+        worker_t(context, "ipc:///tmp/test_shaped_proxy_downstream", "ipc:///dev/null", "ipc:///tmp/test_shaped_results", "ipc:///tmp/test_shaped_interrupt",
+        [response] (const std::list<zmq::message_t>& job, void*, worker_t::interrupt_function_t&) {
           worker_t::result_t result{false, {netstring_entity_t::to_string(response)}, response};
           return result;
         }, [](){}, response

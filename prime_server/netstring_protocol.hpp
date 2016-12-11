@@ -9,17 +9,37 @@
 
 namespace prime_server {
 
+  struct netstring_request_info_t {
+    uint32_t id;
+    uint32_t time_stamp;
+
+    void log(size_t response_size) const;
+    bool keep_alive() const { return true; }
+  };
+
   struct netstring_entity_t {
     netstring_entity_t();
+    netstring_request_info_t to_info(uint32_t id) const;
     std::string to_string() const;
     static std::string to_string(const std::string& message);
     static netstring_entity_t from_string(const char* start, size_t length);
+    static const zmq::message_t& timeout(netstring_request_info_t& info);
     std::list<netstring_entity_t> from_stream(const char* start, size_t length, size_t max_size = std::numeric_limits<size_t>::max());
     void flush_stream();
     size_t size() const;
+    void log(uint32_t id) const;
+
+    struct request_exception_t {
+      request_exception_t(const std::string& response);
+      void log(uint32_t id) const;
+      std::string response;
+    };
 
     std::string body;
     size_t body_length;
+
+    //TODO: fix this when we refactor to avoid subclassing the server
+    std::list<uint64_t> enqueued;
   };
 
   class netstring_client_t : public client_t {
@@ -30,16 +50,7 @@ namespace prime_server {
     netstring_entity_t response;
   };
 
-  class netstring_server_t : public server_t<netstring_entity_t, uint64_t> {
-   public:
-    netstring_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint,
-                       const std::string& result_endpoint, bool log = false, size_t max_request_size = DEFAULT_MAX_REQUEST_SIZE);
-    virtual ~netstring_server_t();
-   protected:
-    virtual bool enqueue(const zmq::message_t& requester, const zmq::message_t& message, netstring_entity_t& buffer);
-    virtual void dequeue(const std::list<zmq::message_t>& messages);
-    uint64_t request_id;
-  };
+  using netstring_server_t = server_t<netstring_entity_t, netstring_request_info_t>;
 
 }
 

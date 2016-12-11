@@ -48,7 +48,7 @@ namespace {
 
   void test_streaming_server() {
     zmq::context_t context;
-    testable_http_server_t server(context, "ipc:///tmp/test_http_server", "ipc:///tmp/test_http_proxy_upstream", "ipc:///tmp/test_http_results");
+    testable_http_server_t server(context, "ipc:///tmp/test_http_server", "ipc:///tmp/test_http_proxy_upstream", "ipc:///tmp/test_http_results", "ipc:///tmp/test_http_interrupt");
     server.passify();
 
     testable_http_request_t request;
@@ -129,8 +129,6 @@ namespace {
       throw std::runtime_error("Request parsing failed");
     if(request.to_info(0).connection_keep_alive != 0)
       throw std::runtime_error("Request parsing failed");
-    if(request.to_info(0).do_not_track != 0)
-      throw std::runtime_error("Request parsing failed");
 
     request_str = "GET /blah HTTP/1.0\r\nHost: *\r\nContent-Length: 5\r\nDNT: 0\r\nConnection: Close\r\nUser-Agent: fake-agent\r\n\r\nhello";
     request = http_request_t::from_string(request_str.c_str(), request_str.size());
@@ -144,8 +142,6 @@ namespace {
       throw std::runtime_error("Request parsing failed");
     if(request.to_info(0).connection_keep_alive != 0)
       throw std::runtime_error("Request parsing failed");
-    if(request.to_info(0).do_not_track != 0)
-      throw std::runtime_error("Request parsing failed");
 
     request_str = "POST /is_prime HTTP/1.1\r\nPragma: no-cache\r\nDNT: 1\r\nConnection: Keep-Alive\r\nContent-Type: text/xml; charset=UTF-8\r\nAccept-Encoding: gzip, deflate\r\nAccept-Language: de,en-US;q=0.7,en;q=0.3\r\nAccept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\nUser-Agent: Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:35.0) Gecko/20100101 Firefox/35.0\r\nCache-Control: no-cache\r\nContent-Length: 11\r\nHost: localhost:8002\r\n\r\n32416190071";
     request = http_request_t::from_string(request_str.c_str(), request_str.size());
@@ -156,8 +152,6 @@ namespace {
     if(request.to_info(0).connection_close != 0)
       throw std::runtime_error("Request parsing failed");
     if(request.to_info(0).connection_keep_alive != 1)
-      throw std::runtime_error("Request parsing failed");
-    if(request.to_info(0).do_not_track != 1)
       throw std::runtime_error("Request parsing failed");
   }
 
@@ -281,7 +275,7 @@ namespace {
 
     //server
     std::thread server(std::bind(&http_server_t::serve,
-     http_server_t(context, "ipc:///tmp/test_http_server", "ipc:///tmp/test_http_proxy_upstream", "ipc:///tmp/test_http_results", false, MAX_REQUEST_SIZE)));
+     http_server_t(context, "ipc:///tmp/test_http_server", "ipc:///tmp/test_http_proxy_upstream", "ipc:///tmp/test_http_results", "ipc:///tmp/test_http_interrupt", false, MAX_REQUEST_SIZE)));
     server.detach();
 
     //load balancer for parsing
@@ -291,8 +285,8 @@ namespace {
 
     //echo worker
     std::thread worker(std::bind(&worker_t::work,
-      worker_t(context, "ipc:///tmp/test_http_proxy_downstream", "ipc:///dev/null", "ipc:///tmp/test_http_results",
-      [] (const std::list<zmq::message_t>& job, void* request_info) {
+      worker_t(context, "ipc:///tmp/test_http_proxy_downstream", "ipc:///dev/null", "ipc:///tmp/test_http_results", "ipc:///tmp/test_http_interrupt",
+      [] (const std::list<zmq::message_t>& job, void* request_info, worker_t::interrupt_function_t&) {
         //could be a get or a post
         auto request = http_request_t::from_string(static_cast<const char*>(job.front().data()), job.front().size());
         http_response_t response(200, "OK");
@@ -302,7 +296,7 @@ namespace {
           response.body = request.path;
         else
           throw std::runtime_error("Wrong method, get or post expected");
-        response.from_info(*static_cast<http_request_t::info_t*>(request_info));
+        response.from_info(*static_cast<http_request_info_t*>(request_info));
 
         //send it back
         worker_t::result_t result{false};

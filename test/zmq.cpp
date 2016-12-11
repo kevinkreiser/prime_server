@@ -52,11 +52,8 @@ namespace {
     client.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
     client.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
     client.connect("ipc:///tmp/test_server");
-    #if ZMQ_VERSION_MAJOR >= 4
-    #if ZMQ_VERSION_MINOR >= 1
     client.recv_all(0);
-    #endif
-    #endif
+
     uint8_t identity[256];
     size_t identity_size = sizeof(identity);
     client.getsockopt(ZMQ_IDENTITY, identity, &identity_size);
@@ -94,22 +91,18 @@ namespace {
     server.bind("ipc:///tmp/test_server");
     client.connect("ipc:///tmp/test_server");
 
-    //greet each other
-    zmq::message_t identity;
-    #if ZMQ_VERSION_MAJOR >= 4
-    #if ZMQ_VERSION_MINOR >= 1
+    //great eachother
+    auto client_identity = std::move(server.recv_all(0).front());
     client.recv_all(0);
-    #endif
-    #endif
-    uint8_t client_identity[256];
-    size_t identity_size = sizeof(client_identity);
-    client.getsockopt(ZMQ_IDENTITY, client_identity, &identity_size);
+    uint8_t identity[256];
+    size_t identity_size = sizeof(identity);
+    client.getsockopt(ZMQ_IDENTITY, identity, &identity_size);
 
     //make some requests
     std::string request = readable_string(10000);
     std::string compounded;
     for(size_t i = 0; i  < 100; ++i) {
-      client.send(static_cast<const void*>(client_identity), identity_size, ZMQ_SNDMORE | ZMQ_DONTWAIT);
+      client.send(identity, identity_size, ZMQ_SNDMORE | ZMQ_DONTWAIT);
       client.send(request, ZMQ_DONTWAIT);
       compounded += request;
     }
@@ -120,9 +113,8 @@ namespace {
       auto messages = server.recv_all(ZMQ_DONTWAIT);
       if(messages.size() == 0)
         continue;
-      if(identity.size() != 0 && messages.front() != identity)
+      if(messages.front() != client_identity)
         throw std::runtime_error("Identity frame mismatch");
-      identity = std::move(messages.front());
       messages.pop_front();
       for(const auto& message : messages)
         combined_request.append(static_cast<const char*>(message.data()), message.size());
@@ -219,12 +211,8 @@ namespace {
     router.bind("ipc:///tmp/test_router_dealer");
 
     //great eachother
-    #if ZMQ_VERSION_MAJOR >= 4
-    #if ZMQ_VERSION_MINOR >= 1
     server.recv_all(0);
     client.recv_all(0);
-    #endif
-    #endif
     uint8_t identity[256];
     size_t identity_size = sizeof(identity);
     client.getsockopt(ZMQ_IDENTITY, identity, &identity_size);
@@ -255,11 +243,85 @@ namespace {
     }
   }
 
+  void test_stream_notify() {
+    //server
+    zmq::context_t context;
+    zmq::socket_t server(context, ZMQ_STREAM);
+    server.bind("ipc:///tmp/test_server");
+
+    //client
+    auto* client = new zmq::socket_t(context, ZMQ_STREAM);
+    client->connect("ipc:///tmp/test_server");
+    uint8_t identity[256];
+    size_t identity_size = sizeof(identity);
+    client->getsockopt(ZMQ_IDENTITY, identity, &identity_size);
+
+    //check the connection
+    auto conn = server.recv_all(0);
+    if(conn.size() != 2 || conn.front().size() != identity_size || conn.back().size() != 0)
+      throw std::logic_error("Connection should have garnered an identity frame followed by a blank message");
+    //the server and the client use different identities to refer to the client
+    zmq::message_t client_identity = std::move(conn.front());
+
+    //check identity
+    client->send(identity, identity_size, ZMQ_SNDMORE | ZMQ_DONTWAIT);
+    client->send(identity, identity_size, ZMQ_DONTWAIT);
+    auto msg = server.recv_all(0);
+    if(msg.size() != 2 || msg.front().size() != client_identity.size() || msg.back().size() == 0)
+      throw std::logic_error("Connection should have garnered an identity frame followed by a non blank message");
+    if(msg.front() != client_identity)
+      throw std::logic_error("The client identity frame didn't match");
+
+    //check the disconnection
+    delete client;
+    auto disconn = server.recv_all(0);
+    if(disconn.size() != 2 || disconn.front().size() != identity_size || disconn.back().size() != 0)
+      throw std::logic_error("Disconnection should have garnered a blank message");
+    if(disconn.front() != client_identity)
+      throw std::logic_error("The client identity frame didn't match");
+  }
+
+  void test_pub_sub() {
+    zmq::context_t context;
+
+    //publish forever
+    std::thread publisher([](zmq::context_t& context){
+      zmq::socket_t pub(context, ZMQ_PUB);
+      int disabled = 0;
+      pub.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
+      pub.bind("ipc:///tmp/test_pub_sub");
+      while(true)
+        pub.send("listen to this", strlen("listen to this"), ZMQ_DONTWAIT);
+    }, std::ref(context));
+    publisher.detach();
+
+    //wait to hear something
+    std::thread subscriber([](zmq::context_t& context) {
+      zmq::socket_t sub(context, ZMQ_SUB);
+      int disabled = 0;
+      sub.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
+      sub.setsockopt(ZMQ_SUBSCRIBE, "", 0);
+      sub.connect("ipc:///tmp/test_pub_sub");
+
+      zmq::pollitem_t item{ sub, 0, ZMQ_POLLIN, 0 };
+      zmq::poll(&item, 1, -1);
+
+      if(item.revents & ZMQ_POLLIN == false)
+        throw std::logic_error("Poller triggered but not for the right socket");
+      auto messages = sub.recv_all(0);
+      if(messages.size() != 1)
+        throw std::logic_error("Wrong number of published messages");
+      if(messages.front().str() != "listen to this")
+        throw std::logic_error("Wrong message contents");
+    }, std::ref(context));
+    subscriber.join();
+  }
+
 }
 
 int main() {
   //make this whole thing bail if it doesnt finish fast
-  alarm(120);
+  alarm(60);
 
   testing::suite suite("zmq");
 
@@ -270,6 +332,10 @@ int main() {
   suite.test(TEST_CASE(test_batch_overflow_router_dealer));
 
   suite.test(TEST_CASE(test_batch_overflow));
+
+  suite.test(TEST_CASE(test_stream_notify));
+
+  suite.test(TEST_CASE(test_pub_sub));
 
   return suite.tear_down();
 }

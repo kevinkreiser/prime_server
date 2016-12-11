@@ -2,6 +2,9 @@
 #include "logging.hpp"
 
 #include <curl/curl.h>
+#include <ctime>
+
+using namespace prime_server;
 
 //TODO: someone please replace the http protocol, its a giant mess. kthxbye
 
@@ -41,41 +44,13 @@ namespace {
     return decoded_str;
   }
 
-  void log_request(uint64_t id, const std::string& request) {
-    auto log_line = std::to_string(id);
-    log_line.push_back(' ');
-    log_line += logging::timestamp();
-    log_line.push_back(' ');
-    log_line += request;
-    log_line.push_back('\n');
-    logging::log(log_line);
-  }
-
-  void log_response(uint64_t id, uint16_t code, size_t length) {
-    auto log_line = std::to_string(id);
-    log_line.push_back(' ');
-    log_line += logging::timestamp();
-    log_line.push_back(' ');
-    log_line += std::to_string(code);
-    log_line.push_back(' ');
-    log_line += std::to_string(length);
-    log_line.push_back('\n');
-    logging::log(log_line);
-  }
-
-  struct request_exception_t : public std::runtime_error {
-    request_exception_t(const prime_server::http_response_t& response):
-      runtime_error(response.to_string()), code(response.code), response(what()) { }
-    const uint16_t code;
-    std::string response;
-  };
-
-  const prime_server::headers_t::value_type CORS{"Access-Control-Allow-Origin", "*"};
-  const request_exception_t RESPONSE_400(prime_server::http_response_t(400, "Bad Request", "Malformed HTTP request", {CORS}));
-  const request_exception_t RESPONSE_413(prime_server::http_response_t(413, "Request Entity Too Large", "The HTTP request was too large", {CORS}));
-  const request_exception_t RESPONSE_500(prime_server::http_response_t(500, "Internal Server Error", "The server encountered an unexpected condition which prevented it from fulfilling the request", {CORS}));
-  const request_exception_t RESPONSE_501(prime_server::http_response_t(501, "Not Implemented", "The HTTP request method is not supported", {CORS}));
-  const request_exception_t RESPONSE_505(prime_server::http_response_t(505, "HTTP Version Not Supported", "The HTTP request version is not supported", {CORS}));
+  const headers_t::value_type CORS{"Access-Control-Allow-Origin", "*"};
+  const http_request_t::request_exception_t RESPONSE_400(http_response_t(400, "Bad Request", "Malformed HTTP request", {CORS}));
+  const http_request_t::request_exception_t RESPONSE_413(http_response_t(413, "Request Entity Too Large", "The HTTP request was too large", {CORS}));
+  const http_request_t::request_exception_t RESPONSE_500(http_response_t(500, "Internal Server Error", "The server encountered an unexpected condition which prevented it from fulfilling the request", {CORS}));
+  const http_request_t::request_exception_t RESPONSE_501(http_response_t(501, "Not Implemented", "The HTTP request method is not supported", {CORS}));
+  const http_request_t::request_exception_t RESPONSE_504(http_response_t(504, "Gateway Time-out", "The server didn't respond in time", {CORS}));
+  const http_request_t::request_exception_t RESPONSE_505(http_response_t(505, "HTTP Version Not Supported", "The HTTP request version is not supported", {CORS}));
 
   template <class T>
   size_t name_max(const std::unordered_map<std::string, T>& methods) {
@@ -277,15 +252,14 @@ namespace prime_server {
                  http_entity_t(version, headers, body), method(method), path(path), query(query) {
   }
 
- http_request_t::info_t http_request_t::to_info(uint64_t id) const {
+ http_request_info_t http_request_t::to_info(uint32_t id) const {
     auto connection_header = headers.find("Connection");
-    auto do_not_track_header = headers.find("DNT");
-    return info_t {
+    return http_request_info_t {
       id,
-      static_cast<uint64_t>(version == "HTTP/1.0" ? 0 : 1),
-      static_cast<uint64_t>(connection_header != headers.end() && connection_header->second == "Keep-Alive"),
-      static_cast<uint64_t>(connection_header != headers.end() && connection_header->second == "Close"),
-      static_cast<uint64_t>(do_not_track_header != headers.end() && do_not_track_header->second == "1"),
+      static_cast<uint32_t>(difftime(time(nullptr), 0) + .5),
+      static_cast<uint16_t>(version == "HTTP/1.0" ? 0 : 1),
+      static_cast<uint16_t>(connection_header != headers.end() && connection_header->second == "Keep-Alive"),
+      static_cast<uint16_t>(connection_header != headers.end() && connection_header->second == "Close")
     };
   }
 
@@ -344,6 +318,13 @@ namespace prime_server {
     else
       request += "\r\n";
     return request;
+  }
+
+  const zmq::message_t& http_request_t::timeout(http_request_info_t& info) {
+    static std::string response(RESPONSE_504.response);
+    static const zmq::message_t t(&response[0], response.size(), [](void*,void*){});
+    info.response_code = RESPONSE_504.code;
+    return t;
   }
 
   http_request_t http_request_t::from_string(const char* start, size_t length) {
@@ -503,6 +484,47 @@ namespace prime_server {
     return consumed + partial_buffer.size();
   }
 
+  void http_request_t::log(uint32_t id) const {
+    auto line = std::to_string(id);
+    line.reserve(line.size() + log_line.size() + 64);
+    line.push_back(' ');
+    line.append(logging::timestamp());
+    line.push_back(' ');
+    line.append(log_line);
+    line.push_back('\n');
+    logging::log(line);
+  }
+
+  http_request_t::request_exception_t::request_exception_t(const http_response_t& response):
+    response(response.to_string()), code(response.code) {
+  }
+
+  void http_request_t::request_exception_t::log(uint32_t id) const {
+    auto line = std::to_string(id);
+    line.reserve(line.size() + 64);
+    line.push_back(' ');
+    line.append(logging::timestamp());
+    line.push_back(' ');
+    line.append(std::to_string(code));
+    line.push_back(' ');
+    line.append(std::to_string(response.size()));
+    line.push_back('\n');
+    logging::log(line);
+  }
+
+  void http_request_info_t::log(size_t response_size) const {
+    auto line = std::to_string(id);
+    line.reserve(line.size() + 64);
+    line.push_back(' ');
+    line.append(logging::timestamp());
+    line.push_back(' ');
+    line.append(std::to_string(response_code));
+    line.push_back(' ');
+    line.append(std::to_string(response_size));
+    line.push_back('\n');
+    logging::log(line);
+  }
+
   http_response_t::~http_response_t(){};
 
   http_response_t::http_response_t():http_entity_t("", headers_t{}, ""){
@@ -515,7 +537,7 @@ namespace prime_server {
                   http_entity_t(version, headers, body), code(code), message(message) {
   }
 
-  void http_response_t::from_info(http_request_t::info_t& info) {
+  void http_response_t::from_info(http_request_info_t& info) {
     version = info.version ? "HTTP/1.1" : "HTTP/1.0";
     if(info.connection_keep_alive)
       headers.emplace("Connection", "Keep-Alive");
@@ -642,65 +664,4 @@ namespace prime_server {
     return response;
   }
 
-  http_server_t::http_server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint, const std::string& result_endpoint, bool log, size_t max_request_size):
-    server_t<http_request_t, http_request_t::info_t>::server_t(context, client_endpoint, proxy_endpoint, result_endpoint, log, max_request_size), request_id(0) {
-  }
-  http_server_t::~http_server_t(){}
-
-  bool http_server_t::enqueue(const zmq::message_t& requester, const zmq::message_t& message, http_request_t& request) {
-    //do some parsing
-    std::list<http_request_t> parsed_requests;
-    try {
-      parsed_requests = request.from_stream(static_cast<const char*>(message.data()), message.size(), max_request_size);
-    }//something went wrong, either in parsing or size limitation
-    catch(const request_exception_t& e) {
-      client.send(requester, ZMQ_SNDMORE | ZMQ_DONTWAIT);
-      client.send(e.response, ZMQ_DONTWAIT);
-      if(log) {
-        log_request(request_id, request.log_line);
-        log_response(request_id, e.code, e.response.size());
-      }
-      ++request_id;
-      return false;
-    }
-
-    //send on each request
-    for(const auto& parsed_request : parsed_requests) {
-      //figure out if we are expecting to close this request or not
-      auto info = parsed_request.to_info(request_id);
-      //send on the request
-      this->proxy.send(static_cast<const void*>(&info), sizeof(info), ZMQ_DONTWAIT | ZMQ_SNDMORE);
-      this->proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT);
-      if(log)
-        log_request(request_id, parsed_request.log_line);
-      //remember we are working on it
-      this->requests.emplace(request_id++, requester);
-    }
-    return true;
-  }
-  void http_server_t::dequeue(const std::list<zmq::message_t>& messages) {
-    //find the request
-    const auto& request_info = *static_cast<const http_request_t::info_t*>(messages.front().data());
-    auto request = requests.find(request_info.id);
-    if(request == requests.end()) {
-      logging::WARN("Unknown or timed-out request id: " + std::to_string(request_info.id));
-      return;
-    }
-    //reply to the client with the response or an error
-    client.send(request->second, ZMQ_SNDMORE | ZMQ_DONTWAIT);
-    if(messages.size() == 2)
-      client.send(messages.back(), ZMQ_DONTWAIT);
-    else
-      client.send(RESPONSE_500.response, ZMQ_DONTWAIT);
-    if(log)
-      log_response(request_info.id, request_info.response_code, messages.back().size());
-    //cleanup, session may or may not be keep alive
-    if((request_info.version == 0 && !request_info.connection_keep_alive) ||
-       (request_info.version == 1 && request_info.connection_close)){
-      this->client.send(request->second, ZMQ_DONTWAIT | ZMQ_SNDMORE);
-      this->client.send(static_cast<const void*>(""), 0, ZMQ_DONTWAIT);
-      sessions.erase(request->second);
-    }
-    requests.erase(request);
-  }
 }

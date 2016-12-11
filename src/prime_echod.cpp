@@ -35,11 +35,12 @@ int main(int argc, char** argv) {
   //change these to tcp://known.ip.address.with:port if you want to do this across machines
   zmq::context_t context;
   std::string result_endpoint = "ipc:///tmp/result_endpoint";
+  std::string request_interrupt = "ipc://request_interrupt";
   std::string proxy_endpoint = "ipc:///tmp/proxy_endpoint";
 
   //server
   std::thread server_thread = std::thread(std::bind(&http_server_t::serve,
-    http_server_t(context, server_endpoint, proxy_endpoint + "_upstream", result_endpoint, true)));
+    http_server_t(context, server_endpoint, proxy_endpoint + "_upstream", result_endpoint, request_interrupt, true)));
 
   //load balancer for parsing
   std::thread echo_proxy(std::bind(&proxy_t::forward, proxy_t(context, proxy_endpoint + "_upstream", proxy_endpoint + "_downstream")));
@@ -49,19 +50,19 @@ int main(int argc, char** argv) {
   std::list<std::thread> echo_worker_threads;
   for(size_t i = 0; i < worker_concurrency; ++i) {
     echo_worker_threads.emplace_back(std::bind(&worker_t::work,
-      worker_t(context, proxy_endpoint + "_downstream", "ipc:///dev/null", result_endpoint,
-      [] (const std::list<zmq::message_t>& job, void* request_info) {
+      worker_t(context, proxy_endpoint + "_downstream", "ipc:///dev/null", result_endpoint, request_interrupt,
+      [] (const std::list<zmq::message_t>& job, void* request_info, worker_t::interrupt_function_t&) {
         worker_t::result_t result{false};
         try {
           //echo
           http_response_t response(200, "OK", std::string(static_cast<const char*>(job.front().data()), job.front().size()));
-          response.from_info(*static_cast<http_request_t::info_t*>(request_info));
+          response.from_info(*static_cast<http_request_info_t*>(request_info));
           result.messages = {response.to_string()};
         }
         catch(const std::exception& e) {
           //complain
           http_response_t response(400, "Bad Request", e.what());
-          response.from_info(*static_cast<http_request_t::info_t*>(request_info));
+          response.from_info(*static_cast<http_request_info_t*>(request_info));
           result.messages = {response.to_string()};
         }
         return result;

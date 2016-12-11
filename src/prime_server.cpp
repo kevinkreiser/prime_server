@@ -8,6 +8,13 @@
 #include "http_protocol.hpp"
 #include "logging.hpp"
 
+namespace {
+  struct interrupt_t : public std::runtime_error {
+    interrupt_t(uint32_t id): std::runtime_error("Request " + std::to_string(id) + " was interrupted") {}
+  };
+  constexpr uint32_t INTERRUPT_AGE_CUTOFF = 600; //request age in seconds
+}
+
 namespace prime_server {
 
   client_t::client_t(zmq::context_t& context, const std::string& server_endpoint, const request_function_t& request_function,
@@ -21,26 +28,21 @@ namespace prime_server {
   }
   client_t::~client_t(){}
   void client_t::batch() {
-#if ZMQ_VERSION_MAJOR >= 4
-#if ZMQ_VERSION_MINOR >= 1
     //swallow the first response as its just for connecting
-    //TODO: make sure it looks right
-    server.recv_all(0);
-#endif
-#endif
+    auto connection = server.recv_all(0);
+    if(connection.size() != 2 || connection.front().size() == 0 || connection.back().size() != 0)
+      throw std::logic_error("Connection should have garnered an identity frame followed by a blank message");
 
     //need the identity to identify our connection when we send stuff
     uint8_t identity[256];
     size_t identity_size = sizeof(identity);
     server.getsockopt(ZMQ_IDENTITY, identity, &identity_size);
 
-    //keep going while we expect more results
-    bool more = true;
-    while(more) {
-
+    bool more;
+    do {
       //request some
-      size_t current_batch;
-      for(current_batch = 0; current_batch < batch_size; ++current_batch) {
+      size_t current_batch = 0;
+      while(current_batch++ < batch_size) {
         try {
           //see if we are still making stuff
           auto request = request_function();
@@ -56,8 +58,9 @@ namespace prime_server {
       }
 
       //receive some
+      more = false;
       current_batch = 0;
-      while(more && current_batch < batch_size) {
+      while(current_batch < batch_size) {
         try {
           //see if we are still waiting for stuff
           auto messages = server.recv_all(0);
@@ -67,14 +70,18 @@ namespace prime_server {
         catch(const std::exception& e) {
           logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " client_t: " + e.what());
         }
+        if(!more)
+          break;
       }
-    }
+    //keep going while we expect more results
+    }while(more);
   }
 
   template <class request_container_t, class request_info_t>
   server_t<request_container_t, request_info_t>::server_t(zmq::context_t& context, const std::string& client_endpoint, const std::string& proxy_endpoint,
-    const std::string& result_endpoint, bool log, size_t max_request_size): client(context, ZMQ_STREAM), proxy(context, ZMQ_DEALER), loopback(context, ZMQ_SUB),
-    log(log), max_request_size(max_request_size) {
+    const std::string& result_endpoint, const std::string& interrupt_endpoint, bool log, size_t max_request_size, uint32_t request_timeout):
+    client(context, ZMQ_STREAM), proxy(context, ZMQ_DEALER), loopback(context, ZMQ_SUB), interrupt(context, ZMQ_PUB),
+    log(log), max_request_size(max_request_size), request_timeout(request_timeout), request_id(0) {
 
     int disabled = 0;
     client.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
@@ -90,6 +97,9 @@ namespace prime_server {
     loopback.setsockopt(ZMQ_SUBSCRIBE, "", 0);
     loopback.bind(result_endpoint.c_str());
 
+    interrupt.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
+    interrupt.bind(interrupt_endpoint.c_str());
+
     sessions.reserve(1024);
     requests.reserve(1024);
   }
@@ -99,18 +109,19 @@ namespace prime_server {
 
   template <class request_container_t, class request_info_t>
   void server_t<request_container_t, request_info_t>::serve() {
+    int poll_timeout = request_timeout * 1000;
     while(true) {
       //check for activity on the client socket and the result socket
       //TODO: set a timeout based on session inactivity timeout or request timeout
       zmq::pollitem_t items[] = { { loopback, 0, ZMQ_POLLIN, 0 }, { client, 0, ZMQ_POLLIN, 0 } };
-      zmq::poll(items, 2, -1);
+      zmq::poll(items, 2, poll_timeout);
 
       //got a new result
       if(items[0].revents & ZMQ_POLLIN) {
         try {
-          auto messages = loopback.recv_all(ZMQ_DONTWAIT);
           //reply to client and cleanup request or session
-          dequeue(messages);
+          auto messages = loopback.recv_all(ZMQ_DONTWAIT);
+          dequeue(*static_cast<const request_info_t*>(messages.front().data()), messages.back());
         }
         catch(const std::exception& e) {
           logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " server_t: " + e.what());
@@ -120,6 +131,7 @@ namespace prime_server {
       //got a new request
       if(items[1].revents & ZMQ_POLLIN) {
         try {
+          //parse the request and possible forward the work on
           auto messages = client.recv_all(ZMQ_DONTWAIT);
           handle_request(messages);
         }
@@ -128,8 +140,22 @@ namespace prime_server {
         }
       }
 
-      //TODO: kill stale sessions
+      //check the age of a few things
+      handle_timeouts();
+
     }
+  }
+
+  template <class request_container_t, class request_info_t>
+  void server_t<request_container_t, request_info_t>::handle_timeouts() {
+    //kill timed out requests, NOTE: setting a huge request time out would be very stupid
+    auto drop_dead = static_cast<int64_t>(difftime(time(nullptr), 0) + .5) - request_timeout;
+    while(drop_dead > 0 && request_history.size() && request_history.front().time_stamp < drop_dead) {
+      dequeue(request_history.front(), request_container_t::timeout(request_history.front()));
+      request_history.pop_front();
+    }
+
+    //TODO: kill stale sessions
   }
 
   template <class request_container_t, class request_info_t>
@@ -144,30 +170,32 @@ namespace prime_server {
       return;
     }
 
+    //in versions 4.1 and up ZMQ_STREAM_NOTIFY is defaulted to on which means
+    //you will receive connect and disconnect messages on stream sockets
+    //for a time this was broken. 4.0 did not send them, then 4.1 did, then 4.2
+    //didn't but it was agreed that it would be better if we just kept it on
+    //and added an option, ZMQ_STREAM_NOTIFY, to turn it off. this was back ported
+    //to 4.1 so that from 4.1 on you'll get these connect and disconnect messages
+    //unless you turn it off.
+
     //get some info about the client
     auto requester = std::move(messages.front());
     auto session = sessions.find(requester);
-#if ZMQ_VERSION_MAJOR <= 4
-#if ZMQ_VERSION_MINOR < 1
-    //version 4.0 of stream didn't seem to send a blank connection message
-    //then they did in 4.1: http://zeromq.org/docs:4-1-upgrade
-    //but now they don't again in 4.2 unless you tell them to with NOTIFY
-    //and even more complicated stuff happened which got back ported for
-    //the sake of consistency. in any case watch out for this
-    if(session == sessions.end())
-      session = sessions.insert({std::move(requester), request_container_t{}}).first;
-#endif
-#endif
 
     //open or close connection
     const auto& body = *std::next(messages.begin());
     if(body.size() == 0) {
-      //new client
-      if(session == sessions.end())
+      //connecting makes space for a streaming request
+      if(session == sessions.end()) {
         sessions.emplace(std::move(requester), request_container_t{});
-      //TODO: check if disconnecting client has a partial request waiting here
-      else
+      }//disconnecting interrupts all of the outstanding requests
+      else {
+        for(auto id_time_stamp : session->second.enqueued) {
+          interrupt.send(static_cast<void*>(&id_time_stamp), sizeof(id_time_stamp), ZMQ_DONTWAIT);
+          requests.erase(id_time_stamp);
+        }
         sessions.erase(session);
+      }
     }//actual request data
     else {
       if(session != sessions.end()) {
@@ -175,12 +203,73 @@ namespace prime_server {
         if(!enqueue(session->first, body, session->second)) {
           client.send(session->first, ZMQ_SNDMORE | ZMQ_DONTWAIT);
           client.send(static_cast<const void*>(""), 0, ZMQ_DONTWAIT);
+          for(auto id_time_stamp : session->second.enqueued)
+            interrupt.send(static_cast<void*>(&id_time_stamp), sizeof(id_time_stamp), ZMQ_DONTWAIT);
           sessions.erase(session);
         }
       }
       else
         logging::WARN("Ignoring request: unknown client");
     }
+  }
+
+  template <class request_container_t, class request_info_t>
+  bool server_t<request_container_t, request_info_t>::enqueue(const zmq::message_t& requester, const zmq::message_t& message, request_container_t& request) {
+    //do some parsing
+    std::list<request_container_t> parsed_requests;
+    try {
+      parsed_requests = request.from_stream(static_cast<const char*>(message.data()), message.size(), max_request_size);
+    }//something went wrong, either in parsing or size limitation
+    catch(const typename request_container_t::request_exception_t& e) {
+      client.send(requester, ZMQ_SNDMORE | ZMQ_DONTWAIT);
+      client.send(e.response, ZMQ_DONTWAIT);
+      if(log) {
+        request.log(request_id);
+        e.log(request_id);
+      }
+      ++request_id;
+      return false;
+    }
+
+    //send on each request
+    for(const auto& parsed_request : parsed_requests) {
+      //figure out if we are expecting to close this request or not
+      auto info = parsed_request.to_info(request_id++);
+      //send on the request
+      this->proxy.send(static_cast<const void*>(&info), sizeof(info), ZMQ_DONTWAIT | ZMQ_SNDMORE);
+      this->proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT);
+      if(log)
+        parsed_request.log(info.id);
+      //remember we are working on it
+      request.enqueued.emplace_back(*static_cast<uint64_t*>(static_cast<void*>(&info)));
+      this->requests.emplace(request.enqueued.back(), requester);
+      this->request_history.emplace_back(std::move(info));
+    }
+    return true;
+  }
+
+  template <class request_container_t, class request_info_t>
+  bool server_t<request_container_t, request_info_t>::dequeue(const request_info_t& info, const zmq::message_t& response) {
+    //find the request
+    auto request = requests.find(*static_cast<const uint64_t*>(static_cast<const void*>(&info)));
+    if(request == requests.cend())
+      return false;
+    //reply to the client with the response or an error
+    client.send(request->second, ZMQ_SNDMORE | ZMQ_DONTWAIT);
+    client.send(response, ZMQ_DONTWAIT);
+    if(log)
+      info.log(response.size());
+    //cleanup, session may or may not be keep alive
+    if(!info.keep_alive()){
+      this->client.send(request->second, ZMQ_DONTWAIT | ZMQ_SNDMORE);
+      this->client.send(static_cast<const void*>(""), 0, ZMQ_DONTWAIT);
+      auto session = sessions.find(request->second);
+      for(auto id_time_stamp : session->second.enqueued)
+        interrupt.send(static_cast<void*>(&id_time_stamp), sizeof(id_time_stamp), ZMQ_DONTWAIT);
+      sessions.erase(session);
+    }
+    requests.erase(request);
+    return true;
   }
 
   proxy_t::proxy_t(zmq::context_t& context, const std::string& upstream_endpoint, const std::string& downstream_endpoint, const choose_function_t& choose_function):
@@ -268,9 +357,10 @@ namespace prime_server {
   }
 
   worker_t::worker_t(zmq::context_t& context, const std::string& upstream_proxy_endpoint, const std::string& downstream_proxy_endpoint,
-    const std::string& result_endpoint, const work_function_t& work_function, const cleanup_function_t& cleanup_function, const std::string& heart_beat):
-    upstream_proxy(context, ZMQ_DEALER), downstream_proxy(context, ZMQ_DEALER), loopback(context, ZMQ_PUB),
-    work_function(work_function), cleanup_function(cleanup_function), heart_beat_interval(5000), heart_beat(heart_beat) {
+                     const std::string& result_endpoint, const std::string& interrupt_endpoint, const work_function_t& work_function,
+                     const cleanup_function_t& cleanup_function, const std::string& heart_beat):
+    upstream_proxy(context, ZMQ_DEALER), downstream_proxy(context, ZMQ_DEALER), loopback(context, ZMQ_PUB), interrupt(context, ZMQ_SUB),
+    work_function(work_function), cleanup_function(cleanup_function), heart_beat_interval(5000), heart_beat(heart_beat), job(std::numeric_limits<decltype(job)>::max()) {
 
     int disabled = 0;
 
@@ -284,26 +374,36 @@ namespace prime_server {
 
     loopback.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
     loopback.connect(result_endpoint.c_str());
+
+    interrupt.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
+    interrupt.setsockopt(ZMQ_SUBSCRIBE, "", 0);
+    interrupt.connect(interrupt_endpoint.c_str());
   }
+  worker_t::~worker_t() {}
   void worker_t::work() {
     //give us something to do
     advertise();
+    //give client code a way to abort
+    interrupt_function_t bail = std::bind(&worker_t::handle_interrupt, this, false);
 
     //keep forwarding messages
     while(true) {
       //check for activity on the in bound socket, timeout after heart_beat interval
-      zmq::pollitem_t item = { upstream_proxy, 0, ZMQ_POLLIN, 0 };
-      zmq::poll(&item, 1, heart_beat_interval);
+      zmq::pollitem_t items[] = { { upstream_proxy, 0, ZMQ_POLLIN, 0 }, { interrupt, 0, ZMQ_POLLIN, 0 } };
+      zmq::poll(items, 2, heart_beat_interval);
 
       //got some work to do
-      if(item.revents & ZMQ_POLLIN) {
+      if(items[0].revents & ZMQ_POLLIN) {
         try {
           //strip off the request info
           auto messages = upstream_proxy.recv_all(0);
           auto request_info = std::move(messages.front());
           messages.pop_front();
+          //check if this request_info is one we should abort
+          job = *static_cast<const uint64_t*>(request_info.data());
+          handle_interrupt(true);
           //do the work
-          auto result = work_function(messages, request_info.data());
+          auto result = work_function(messages, request_info.data(), bail);
           //we'll keep advertising with this heartbeat
           heart_beat = std::move(result.heart_beat);
           //should we send this on to the next proxy
@@ -311,10 +411,8 @@ namespace prime_server {
             downstream_proxy.send(request_info, ZMQ_SNDMORE);
             downstream_proxy.send_all(result.messages, 0);
           }//or are we done
-          else {
+          else if(result.messages.size() != 0) {
             loopback.send(request_info, ZMQ_SNDMORE);
-            if(result.messages.size() == 0)
-              logging::ERROR("At least one result message is required for the loopback");
             if(result.messages.size() > 1) {
               logging::WARN("Sending more than one result message over the loopback will result in additional parts being dropped");
               result.messages.resize(1);
@@ -322,13 +420,33 @@ namespace prime_server {
             if(result.messages.back().size() == 0)
               logging::WARN("Sending empty messages will disconnect the client");
             loopback.send_all(result.messages, 0);
+          }//an empty result is no good
+          else {
+            logging::ERROR("At least one result message is required for the loopback");
           }
-        }
+        }//either interrupted or something unknown TODO: catch everything to avoid crashing?
+        catch(const interrupt_t& i) { logging::WARN(i.what()); }
         catch(const std::exception& e) { logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what()); }
+
+        //reset the job
+        job = std::numeric_limits<decltype(job)>::max();
 
         //do some cleanup
         try { cleanup_function(); }
         catch(const std::exception& e) { logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what()); }
+      }
+
+      //got interrupt(s)
+      if(items[1].revents & ZMQ_POLLIN) {
+        handle_interrupt(false);
+        //cull off the old ones, but also note that the list is loosely ordered
+        //this means we can hold on to some older ones longer than we would have liked
+        //but it doesnt really matter because time is more expensive than memory
+        auto drop_dead = static_cast<uint32_t>(difftime(time(nullptr), 0) + .5) - INTERRUPT_AGE_CUTOFF;
+        while(interrupt_history.size() && (interrupt_history.front() >> 32) < drop_dead) {
+          interrupts.erase(interrupt_history.front());
+          interrupt_history.pop_front();
+        }
       }
 
       //we want something more to do
@@ -344,10 +462,22 @@ namespace prime_server {
       logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " worker_t: " + e.what());
     }
   }
+  void worker_t::handle_interrupt(bool force_check) {
+    //is there anything there right now
+    auto messages = interrupt.recv_all(ZMQ_DONTWAIT);
+    for(const auto& message : messages) {
+      auto inserted = interrupts.insert(*static_cast<const decltype(job)*>(message.data()));
+      interrupt_history.push_back(*inserted.first);
+    }
+
+    //either we just got more or we need to check the backlog
+    if((force_check || messages.size()) && interrupts.find(job) != interrupts.cend())
+      throw interrupt_t(job << 32);
+  }
 
   //explicit instantiation for netstring and http
-  template class server_t<netstring_entity_t, uint64_t>;
-  template class server_t<http_request_t, http_request_t::info_t>;
+  template class server_t<netstring_entity_t, netstring_request_info_t>;
+  template class server_t<http_request_t, http_request_info_t>;
 
 
 }

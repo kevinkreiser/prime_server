@@ -49,6 +49,7 @@ test/zmq
 test/netstring
 test/http
 test/shaping
+test/interrupt
 test/*.log
 test/*.trs
 

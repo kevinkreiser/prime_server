@@ -9,9 +9,9 @@ using namespace prime_server;
 
 int main(int argc, char** argv) {
 
-  if(argc < 4) {
+  if(argc < 5) {
     logging::ERROR("Usage: " + std::string(argv[0]) +
-      " [tcp|ipc]://upstream_proxy_endpoint[:tcp_port] [tcp|ipc]://downstream_proxy_endpoint[:tcp_port] [tcp|ipc]://server_result_loopback[:tcp_port]");
+      " [tcp|ipc]://upstream_proxy_endpoint[:tcp_port] [tcp|ipc]://downstream_proxy_endpoint[:tcp_port] [tcp|ipc]://server_result_loopback[:tcp_port] [tcp|ipc]://server_request_interrupt[:tcp_port]");
     return EXIT_FAILURE;
   }
 
@@ -19,17 +19,20 @@ int main(int argc, char** argv) {
   std::string upstream_proxy_endpoint(argv[1]);
   std::string downstream_proxy_endpoint(argv[2]);
   std::string server_result_loopback(argv[3]);
+  std::string server_request_interrupt(argv[4]);
   if(upstream_proxy_endpoint.find("://") != 3)
     logging::ERROR("bad upstream proxy endpoint");
   if(downstream_proxy_endpoint.find("://") != 3)
     logging::ERROR("bad downstream proxy endpoint");
   if(server_result_loopback.find("://") != 3)
     logging::ERROR("bad server result loopback");
+  if(server_request_interrupt.find("://") != 3)
+    logging::ERROR("bad server request interrupt");
 
   //start it up
   zmq::context_t context;
-  worker_t worker(context, upstream_proxy_endpoint, downstream_proxy_endpoint, server_result_loopback,
-    [](const std::list<zmq::message_t>& messages, void* request_info){
+  worker_t worker(context, upstream_proxy_endpoint, downstream_proxy_endpoint, server_result_loopback, server_request_interrupt,
+    [](const std::list<zmq::message_t>& messages, void* request_info, worker_t::interrupt_function_t&){
       auto request = http_request_t::from_string(static_cast<const char*>(messages.front().data()), messages.front().size());
 
       worker_t::result_t result{false};
@@ -51,12 +54,12 @@ int main(int argc, char** argv) {
         body.assign((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
 
         http_response_t response(200, "OK", body);
-        response.from_info(*static_cast<http_request_t::info_t*>(request_info));
+        response.from_info(*static_cast<http_request_info_t*>(request_info));
         result.messages.emplace_back(response.to_string());
       }
       catch(...) {
         http_response_t response(404, "Not Found");
-        response.from_info(*static_cast<http_request_t::info_t*>(request_info));
+        response.from_info(*static_cast<http_request_info_t*>(request_info));
         result.messages.emplace_back(response.to_string());
       }
       return result;

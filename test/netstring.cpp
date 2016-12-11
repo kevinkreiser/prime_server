@@ -43,7 +43,7 @@ namespace {
 
   void test_streaming_server() {
     zmq::context_t context;
-    testable_netstring_server_t server(context, "ipc:///tmp/test_netstring_server", "ipc:///tmp/test_netstring_proxy_upstream", "ipc:///tmp/test_netstring_results");
+    testable_netstring_server_t server(context, "ipc:///tmp/test_netstring_server", "ipc:///tmp/test_netstring_proxy_upstream", "ipc:///tmp/test_netstring_results", "ipc:///tmp/test_netstring_interrupt");
     server.passify();
 
     netstring_entity_t request;
@@ -149,7 +149,7 @@ namespace {
 
     //server
     std::thread server(std::bind(&netstring_server_t::serve,
-      netstring_server_t(context, "ipc:///tmp/test_netstring_server", "ipc:///tmp/test_netstring_proxy_upstream", "ipc:///tmp/test_netstring_results", false, MAX_REQUEST_SIZE)));
+      netstring_server_t(context, "ipc:///tmp/test_netstring_server", "ipc:///tmp/test_netstring_proxy_upstream", "ipc:///tmp/test_netstring_results", "ipc:///tmp/test_netstring_interrupt", false, MAX_REQUEST_SIZE)));
     server.detach();
 
     //load balancer for parsing
@@ -159,8 +159,8 @@ namespace {
 
     //echo worker
     std::thread worker(std::bind(&worker_t::work,
-      worker_t(context, "ipc:///tmp/test_netstring_proxy_downstream", "ipc:///dev/null", "ipc:///tmp/test_netstring_results",
-      [] (const std::list<zmq::message_t>& job, void*) {
+      worker_t(context, "ipc:///tmp/test_netstring_proxy_downstream", "ipc:///dev/null", "ipc:///tmp/test_netstring_results", "ipc:///tmp/test_netstring_interrupt",
+      [] (const std::list<zmq::message_t>& job, void*, worker_t::interrupt_function_t&) {
         worker_t::result_t result{false};
         auto request = netstring_entity_t::from_string(static_cast<const char*>(job.front().data()), job.front().size());
         auto response = netstring_entity_t::to_string(request.body);
