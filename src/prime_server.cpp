@@ -472,7 +472,7 @@ namespace prime_server {
 
     //either we just got more or we need to check the backlog
     if((force_check || messages.size()) && interrupts.find(job) != interrupts.cend())
-      throw interrupt_t(job << 32);
+      throw interrupt_t(job & 0xFFFFFFFF);
   }
 
   //explicit instantiation for netstring and http
