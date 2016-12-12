@@ -148,9 +148,10 @@ namespace prime_server {
 
   template <class request_container_t, class request_info_t>
   void server_t<request_container_t, request_info_t>::handle_timeouts() {
-    //kill timed out requests, NOTE: setting a huge request time out would be very stupid
+    //kill timed out requests
     auto drop_dead = static_cast<int64_t>(difftime(time(nullptr), 0) + .5) - request_timeout;
     while(drop_dead > 0 && request_history.size() && request_history.front().time_stamp < drop_dead) {
+      interrupt.send(static_cast<void*>(&request_history.front()), sizeof(uint64_t), ZMQ_DONTWAIT);
       dequeue(request_history.front(), request_container_t::timeout(request_history.front()));
       request_history.pop_front();
     }
@@ -472,7 +473,7 @@ namespace prime_server {
 
     //either we just got more or we need to check the backlog
     if((force_check || messages.size()) && interrupts.find(job) != interrupts.cend())
-      throw interrupt_t(job << 32);
+      throw interrupt_t(job & 0xFFFFFFFF);
   }
 
   //explicit instantiation for netstring and http
