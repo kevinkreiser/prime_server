@@ -151,6 +151,7 @@ namespace prime_server {
     //kill timed out requests, NOTE: setting a huge request time out would be very stupid
     auto drop_dead = static_cast<int64_t>(difftime(time(nullptr), 0) + .5) - request_timeout;
     while(drop_dead > 0 && request_history.size() && request_history.front().time_stamp < drop_dead) {
+      interrupt.send(static_cast<void*>(&request_history.front()), sizeof(uint64_t), ZMQ_DONTWAIT);
       dequeue(request_history.front(), request_container_t::timeout(request_history.front()));
       request_history.pop_front();
     }
