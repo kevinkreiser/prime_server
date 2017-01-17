@@ -4,7 +4,7 @@
 //some version info
 #define PRIME_SERVER_VERSION_MAJOR 0
 #define PRIME_SERVER_VERSION_MINOR 6
-#define PRIME_SERVER_VERSION_PATCH 2
+#define PRIME_SERVER_VERSION_PATCH 3
 
 #include <functional>
 #include <string>
