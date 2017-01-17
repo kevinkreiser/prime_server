@@ -269,10 +269,14 @@ namespace prime_server {
 
   std::string http_request_t::to_string(const method_t& method, const std::string& path, const std::string& body, const query_t& query,
                                const headers_t& headers, const std::string& version) {
+    //get the method on there
     auto itr = METHOD_TO_STRING.find(method);
     if(itr == METHOD_TO_STRING.end())
       throw std::runtime_error("Unsupported http request method");
-    std::string request = itr->second + ' ';
+    std::string request;
+    request.reserve(16 + path.size() + headers.size() * 32 + body.size());
+    request += itr->second;
+    request.push_back(' ');
 
     //path and query string
     std::string pq = path;
@@ -300,8 +304,6 @@ namespace prime_server {
 
     //headers
     for(const auto& header : headers) {
-      if(header.first == "Content-Length")
-        continue;
       request += header.first;
       request += ": ";
       request += header.second;
@@ -310,9 +312,12 @@ namespace prime_server {
 
     //body
     if(body.size()) {
-      request += "Content-Length: ";
-      request += std::to_string(body.size());
-      request += "\r\n\r\n";
+      if(headers.find("Content-Length") == headers.cend()) {
+        request += "Content-Length: ";
+        request += std::to_string(body.size());
+        request += "\r\n";
+      }
+      request += "\r\n";
       request += body;
     }
     else
