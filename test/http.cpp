@@ -153,6 +153,14 @@ namespace {
       throw std::runtime_error("Request parsing failed");
     if(request.to_info(0).connection_keep_alive != 1)
       throw std::runtime_error("Request parsing failed");
+
+    request_str = "GET /is_prime HTTP/1.1\r\ncOnTeNt-LeNgTh:         11\r\n\r\n32416190071";
+    request = http_request_t::from_string(request_str.c_str(), request_str.size());
+    if(request.body != "32416190071")
+      throw std::runtime_error("Request parsing failed");
+    auto content_length = request.headers.find("content-length");
+    if(content_length == request.headers.cend() || content_length->second != "11")
+      throw std::runtime_error("Request parsing failed");
   }
 
   void test_query_parsing() {
