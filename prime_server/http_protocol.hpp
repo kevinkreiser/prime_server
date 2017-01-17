@@ -6,7 +6,9 @@
 
 #include <unordered_map>
 #include <list>
+#include <algorithm>
 #include <cstdint>
+#include <cctype>
 #include <string>
 #include <limits>
 
@@ -32,7 +34,21 @@ namespace prime_server {
     std::string buffer;
   };
 
-  using headers_t = std::unordered_map<std::string, std::string>;
+  struct caseless_predicates_t : public std::hash<std::string> {
+    size_t operator()(const std::string& key) const {
+      auto lower = key;
+      std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+      return std::hash<std::string>::operator()(lower);
+    }
+    size_t operator()(const std::string& lhs, const std::string& rhs) const {
+      return lhs.size() == rhs.size() && std::equal(lhs.begin(), lhs.end(), rhs.begin(),
+        [](char a, char b) {
+          return ::tolower(a) == ::tolower(b);
+        }
+      );
+    }
+  };
+  using headers_t = std::unordered_map<std::string, std::string, caseless_predicates_t, caseless_predicates_t>;
   using query_t = std::unordered_map<std::string, std::list<std::string> >;
   enum method_t { OPTIONS, GET, HEAD, POST, PUT, DELETE, TRACE, CONNECT };
   const std::unordered_map<std::string, method_t> STRING_TO_METHOD {
