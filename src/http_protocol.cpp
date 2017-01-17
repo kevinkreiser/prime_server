@@ -269,10 +269,14 @@ namespace prime_server {
 
   std::string http_request_t::to_string(const method_t& method, const std::string& path, const std::string& body, const query_t& query,
                                const headers_t& headers, const std::string& version) {
+    //get the method on there
     auto itr = METHOD_TO_STRING.find(method);
     if(itr == METHOD_TO_STRING.end())
       throw std::runtime_error("Unsupported http request method");
-    std::string request = itr->second + ' ';
+    std::string request;
+    request.reserve(16 + path.size() + headers.size() * 32 + body.size());
+    request += itr->second;
+    request.push_back(' ');
 
     //path and query string
     std::string pq = path;
@@ -300,8 +304,6 @@ namespace prime_server {
 
     //headers
     for(const auto& header : headers) {
-      if(header.first == "Content-Length")
-        continue;
       request += header.first;
       request += ": ";
       request += header.second;
@@ -310,9 +312,12 @@ namespace prime_server {
 
     //body
     if(body.size()) {
-      request += "Content-Length: ";
-      request += std::to_string(body.size());
-      request += "\r\n\r\n";
+      if(headers.find("Content-Length") == headers.cend()) {
+        request += "Content-Length: ";
+        request += std::to_string(body.size());
+        request += "\r\n";
+      }
+      request += "\r\n";
       request += body;
     }
     else
@@ -431,10 +436,14 @@ namespace prime_server {
         case HEADERS: {
           //a header is here
           if(partial_buffer.size()) {
-            auto pos = partial_buffer.find(": ");
-            if(pos == std::string::npos)
+            //TODO: its really perverse but the rfc defines LWS (linear white space) to be not just space:
+            //LWS = [CRLF] 1*( SP | HT ), we could make a set above and move the value_begin while the char
+            //is in the set, basically implement TRIM.. lets instead hope to ditch our custom parser
+            size_t field_end, value_begin;
+            if((field_end = partial_buffer.find(':')) == std::string::npos ||
+               (value_begin = partial_buffer.find_first_not_of(' ', field_end + 1)) == std::string::npos)
               throw RESPONSE_400;
-            headers.insert({partial_buffer.substr(0, pos), partial_buffer.substr(pos + 2)});
+            headers.insert({partial_buffer.substr(0, field_end), partial_buffer.substr(value_begin)});
           }//the end or body
           else {
             //standard length specified

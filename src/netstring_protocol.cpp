@@ -10,7 +10,7 @@ using namespace prime_server;
 namespace {
 
 const netstring_entity_t::request_exception_t BAD_LENGTH("BAD_REQUEST: Non-numeric length");
-const netstring_entity_t::request_exception_t TOO_LONG("BAD_REQUEST: Request exceeded max");
+const netstring_entity_t::request_exception_t TOO_LONG("BAD_REQUEST: Request exceeded maximum length");
 const netstring_entity_t::request_exception_t BAD_BODY_SEPARATOR("BAD_REQUEST: Missing ':' between length and body");
 const netstring_entity_t::request_exception_t BAD_MESSAGE_SEPARATOR("BAD_REQUEST: Missing ',' after body");
 
