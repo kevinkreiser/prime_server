@@ -431,10 +431,14 @@ namespace prime_server {
         case HEADERS: {
           //a header is here
           if(partial_buffer.size()) {
-            auto pos = partial_buffer.find(": ");
-            if(pos == std::string::npos)
+            //TODO: its really perverse but the rfc defines LWS (linear white space) to be not just space:
+            //LWS = [CRLF] 1*( SP | HT ), we could make a set above and move the value_begin while the char
+            //is in the set, basically implement TRIM.. lets instead hope to ditch our custom parser
+            size_t field_end, value_begin;
+            if((field_end = partial_buffer.find(':')) == std::string::npos ||
+               (value_begin = partial_buffer.find_first_not_of(' ', field_end + 1)) == std::string::npos)
               throw RESPONSE_400;
-            headers.insert({partial_buffer.substr(0, pos), partial_buffer.substr(pos + 2)});
+            headers.insert({partial_buffer.substr(0, field_end), partial_buffer.substr(value_begin)});
           }//the end or body
           else {
             //standard length specified
