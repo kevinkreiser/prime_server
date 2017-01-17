@@ -205,8 +205,8 @@ namespace {
       },
       [](const void* data, size_t size) {
         auto response = netstring_entity_t::from_string(static_cast<const char*>(data), size);
-        if(response.body.substr(0, 8) != "TOO_LONG")
-          throw std::runtime_error("Expected TOO_LONG response!");
+        if(response.body != "BAD_REQUEST: Request exceeded maximum length")
+          throw std::runtime_error("Expected exceeded max response!");
         return false;
       }, 1
     );
