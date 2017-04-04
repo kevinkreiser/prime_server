@@ -306,7 +306,7 @@ namespace {
       zmq::pollitem_t item{ sub, 0, ZMQ_POLLIN, 0 };
       zmq::poll(&item, 1, -1);
 
-      if(item.revents & ZMQ_POLLIN == false)
+      if(!(item.revents & ZMQ_POLLIN))
         throw std::logic_error("Poller triggered but not for the right socket");
       auto messages = sub.recv_all(0);
       if(messages.size() != 1)

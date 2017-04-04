@@ -15,6 +15,7 @@ namespace prime_server {
 
     void log(size_t response_size) const;
     bool keep_alive() const { return true; }
+    explicit operator uint64_t() const { return static_cast<uint64_t>(id) | (static_cast<uint64_t>(time_stamp) << 32); }
   };
 
   struct netstring_entity_t {

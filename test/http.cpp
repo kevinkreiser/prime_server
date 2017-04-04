@@ -407,6 +407,8 @@ int main() {
 
   suite.test(TEST_CASE(test_response));
 
+  suite.test(TEST_CASE(test_response_parsing));
+
   suite.test(TEST_CASE(test_parallel_clients));
 
   suite.test(TEST_CASE(test_malformed));
