@@ -74,7 +74,6 @@ namespace prime_server {
           http_response_t response(200, "OK", buffer, headers_t{CORS, mime_header(path)});
           response.from_info(request_info);
           result.messages = {response.to_string()};
-          return result;
         }
       }//a directory
       else if(allow_listing && (s.st_mode & S_IFDIR)) {
@@ -96,12 +95,14 @@ namespace prime_server {
         http_response_t response(200, "OK", listing, headers_t{CORS, HTML_MIME});
         response.from_info(request_info);
         result.messages = {response.to_string()};
-        return result;
+      }//didn't make the cut
+      else {
+        http_response_t response(404, "Not Found", "Not Found");
+        response.from_info(request_info);
+        result.messages = {response.to_string()};
       }
-      //didn't make the cut
-      http_response_t response(404, "Not Found", "Not Found");
-      response.from_info(request_info);
-      result.messages = {response.to_string()};
+      //hand it back
+      return result;
     }
 
   }
