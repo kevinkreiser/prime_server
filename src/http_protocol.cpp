@@ -10,19 +10,6 @@ using namespace prime_server;
 
 namespace {
 
-  //check if base starts with pattern
-  bool startswith(const char* base, const char *pattern) {
-    if(base == nullptr || pattern == nullptr)
-      return false;
-    while(*base != '\0' && *pattern != '\0') {
-      if(*base != *pattern)
-        return false;
-      ++base;
-      ++pattern;
-    }
-    return true;
-  }
-
   const std::string CONTENT_LENGTH("\r\nContent-Length: ");
   const std::string DOUBLE_RETURN("\r\n\r\n");
 
@@ -192,7 +179,7 @@ namespace prime_server {
     if(body_length) {
       //while(current++ != end && --body_length);
       //we have enough
-      if(end - current > body_length) {
+      if(static_cast<size_t>(end - current) > body_length) {
         current += body_length;
         body_length = 0;
       }//we dont

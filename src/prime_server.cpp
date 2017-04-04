@@ -242,7 +242,7 @@ namespace prime_server {
       if(log)
         parsed_request.log(info.id);
       //remember we are working on it
-      request.enqueued.emplace_back(*static_cast<typename decltype(requests)::key_type*>(static_cast<void*>(&info)));
+      request.enqueued.emplace_back(static_cast<typename decltype(requests)::key_type>(info));
       this->requests.emplace(request.enqueued.back(), requester);
       this->request_history.emplace_back(std::move(info));
     }
@@ -252,7 +252,7 @@ namespace prime_server {
   template <class request_container_t, class request_info_t>
   bool server_t<request_container_t, request_info_t>::dequeue(const request_info_t& info, const zmq::message_t& response) {
     //find the request
-    auto request = requests.find(*static_cast<const typename decltype(requests)::key_type*>(static_cast<const void*>(&info)));
+    auto request = requests.find(static_cast<typename decltype(requests)::key_type>(info));
     if(request == requests.cend())
       return false;
     //reply to the client with the response or an error

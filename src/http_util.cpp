@@ -10,6 +10,7 @@
 
 using namespace prime_server::http;
 namespace {
+
   std::unordered_map<std::string, header_t> load_mimes() {
     //hardcode some just in case we cant get some automatically
     std::unordered_map<std::string, header_t> mimes{
@@ -24,18 +25,6 @@ namespace {
     //TODO: you can get some of these from /etc/mime.types
 
     return mimes;
-  }
-
-  struct stat canonical_path(const std::string& root, std::string& path) {
-    //yeah we only allow one dot at a time
-    for(size_t p = 0, i = path.find('.', 0); i != std::string::npos; p = i, i = path.find('.', i))
-      if(p + 1 == i)
-        path[p] = path[i] = '/';
-    //and this better be a regular file that exists
-    struct stat s;
-    if(stat((root + path).c_str(), &s))
-      s.st_mode = 0;
-    return s;
   }
 
 }
@@ -66,7 +55,7 @@ namespace prime_server {
       if(stat(canonical.c_str(), &s))
         s.st_mode = 0;
       //a regular file
-      if(s.st_size <= size_limit && (s.st_mode & S_IFREG)) {
+      if(static_cast<size_t>(s.st_size) <= size_limit && (s.st_mode & S_IFREG)) {
         //have to be able to open it
         std::fstream input(canonical, std::ios::in | std::ios::binary);
         if(input) {

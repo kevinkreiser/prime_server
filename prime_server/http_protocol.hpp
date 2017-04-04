@@ -98,6 +98,7 @@ namespace prime_server {
 
     void log(size_t response_size) const;
     bool keep_alive() const { return (version == 0 && connection_keep_alive) || (version == 1 && !connection_close); }
+    explicit operator uint64_t() const { return static_cast<uint64_t>(id) | (static_cast<uint64_t>(time_stamp) << 32); }
   };
 
   class http_response_t;
