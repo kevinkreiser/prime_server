@@ -390,6 +390,35 @@ namespace {
     client.batch();
   }
 
+  void test_expect_header() {
+    zmq::context_t context;
+
+    //make a request
+    size_t start = 0;
+    auto request = http_request_t::to_string(POST, "", "noed_so_gross", {}, {{"Expect", "100-continue"}});
+    std::string response;
+
+    http_client_t client(context, "ipc:///tmp/test_http_server_deamon",
+      //we chop this where the post body starts so we send in two parts
+      [&request, &start]() {
+        auto end = request.find("\r\n\r\n", start);
+        end != request.npos ? end += 4 : end = request.size();
+        auto part = std::make_pair(static_cast<const void*>(request.c_str() + start), end - start);
+        start = end;
+        return part;
+      },
+      //if the first part went through we'll get a continue for the second part
+      [&request, &response](const void* data, size_t size) {
+        response.append(static_cast<const char*>(data), size);
+        return request.size();
+      }, 1
+    );
+    //request and receive
+    client.batch();
+    if(response.find("Continue") == response.npos)
+      throw std::logic_error("No continue was sent back when sending the expect header");
+  }
+
 }
 
 int main() {
@@ -421,6 +450,8 @@ int main() {
   suite.test(TEST_CASE(test_too_large));
 
   suite.test(TEST_CASE(test_large_request));
+
+  suite.test(TEST_CASE(test_expect_header));
 
   return suite.tear_down();
 }
