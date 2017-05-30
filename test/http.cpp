@@ -46,6 +46,46 @@ namespace {
     using http_client_t::buffer;
   };
 
+  constexpr size_t MAX_REQUEST_SIZE = 1024*1024;
+  void setup() {
+
+    zmq::context_t context;
+
+    //server
+    std::thread server(std::bind(&http_server_t::serve,
+     http_server_t(context, "ipc:///tmp/test_http_server_deamon", "ipc:///tmp/test_http_proxy_upstream_deamon",
+       "ipc:///tmp/test_http_results_deamon", "ipc:///tmp/test_http_interrupt_deamon", false, MAX_REQUEST_SIZE)));
+    server.detach();
+
+    //load balancer for parsing
+    std::thread proxy(std::bind(&proxy_t::forward,
+      proxy_t(context, "ipc:///tmp/test_http_proxy_upstream_deamon", "ipc:///tmp/test_http_proxy_downstream_deamon")));
+    proxy.detach();
+
+    //echo worker
+    std::thread worker(std::bind(&worker_t::work,
+      worker_t(context, "ipc:///tmp/test_http_proxy_downstream_deamon", "ipc:///dev/null", "ipc:///tmp/test_http_results_deamon", "ipc:///tmp/test_http_interrupt_deamon",
+      [] (const std::list<zmq::message_t>& job, void* request_info, worker_t::interrupt_function_t&) {
+        //could be a get or a post
+        auto request = http_request_t::from_string(static_cast<const char*>(job.front().data()), job.front().size());
+        http_response_t response(200, "OK");
+        if(request.method == method_t::POST)
+          response.body = request.body;
+        else if(request.method == method_t::GET)
+          response.body = request.path;
+        else
+          throw std::runtime_error("Wrong method, get or post expected");
+        response.from_info(*static_cast<http_request_info_t*>(request_info));
+
+        //send it back
+        worker_t::result_t result{false};
+        result.messages.emplace_back(response.to_string());
+        return result;
+      }
+    )));
+    worker.detach();
+  }
+
   void test_streaming_server() {
     zmq::context_t context;
     testable_http_server_t server(context, "ipc:///tmp/test_http_server", "ipc:///tmp/test_http_proxy_upstream", "ipc:///tmp/test_http_results", "ipc:///tmp/test_http_interrupt");
@@ -245,7 +285,7 @@ namespace {
     std::unordered_set<std::string> requests;
     size_t received = 0;
     std::string request;
-    http_client_t client(context, "ipc:///tmp/test_http_server",
+    http_client_t client(context, "ipc:///tmp/test_http_server_deamon",
       [&requests, &request]() {
         //we want more requests
         if(requests.size() < total) {
@@ -275,46 +315,9 @@ namespace {
     client.batch();
   }
 
-  constexpr size_t MAX_REQUEST_SIZE = 1024*1024;
-
   void test_parallel_clients() {
-
-    zmq::context_t context;
-
-    //server
-    std::thread server(std::bind(&http_server_t::serve,
-     http_server_t(context, "ipc:///tmp/test_http_server", "ipc:///tmp/test_http_proxy_upstream", "ipc:///tmp/test_http_results", "ipc:///tmp/test_http_interrupt", false, MAX_REQUEST_SIZE)));
-    server.detach();
-
-    //load balancer for parsing
-    std::thread proxy(std::bind(&proxy_t::forward,
-      proxy_t(context, "ipc:///tmp/test_http_proxy_upstream", "ipc:///tmp/test_http_proxy_downstream")));
-    proxy.detach();
-
-    //echo worker
-    std::thread worker(std::bind(&worker_t::work,
-      worker_t(context, "ipc:///tmp/test_http_proxy_downstream", "ipc:///dev/null", "ipc:///tmp/test_http_results", "ipc:///tmp/test_http_interrupt",
-      [] (const std::list<zmq::message_t>& job, void* request_info, worker_t::interrupt_function_t&) {
-        //could be a get or a post
-        auto request = http_request_t::from_string(static_cast<const char*>(job.front().data()), job.front().size());
-        http_response_t response(200, "OK");
-        if(request.method == method_t::POST)
-          response.body = request.body;
-        else if(request.method == method_t::GET)
-          response.body = request.path;
-        else
-          throw std::runtime_error("Wrong method, get or post expected");
-        response.from_info(*static_cast<http_request_info_t*>(request_info));
-
-        //send it back
-        worker_t::result_t result{false};
-        result.messages.emplace_back(response.to_string());
-        return result;
-      }
-    )));
-    worker.detach();
-
     //make a bunch of clients
+    zmq::context_t context;
     std::thread client1(std::bind(&http_client_work, std::ref(context)));
     std::thread client2(std::bind(&http_client_work,  std::ref(context)));
     client1.join();
@@ -324,7 +327,7 @@ namespace {
   void test_malformed() {
     zmq::context_t context;
     std::string request = "isch_doch_unsinn";
-    http_client_t client(context, "ipc:///tmp/test_http_server",
+    http_client_t client(context, "ipc:///tmp/test_http_server_deamon",
       [&request]() {
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
@@ -343,7 +346,7 @@ namespace {
   void test_too_large() {
     zmq::context_t context;
     std::string request = http_request_t(POST, "/", std::string(MAX_REQUEST_SIZE + 10, '!')).to_string();
-    http_client_t client(context, "ipc:///tmp/test_http_server",
+    http_client_t client(context, "ipc:///tmp/test_http_server_deamon",
       [&request]() {
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
@@ -369,7 +372,7 @@ namespace {
     auto request = http_request_t::to_string(POST, "", request_body);
 
     //see if we get it back
-    http_client_t client(context, "ipc:///tmp/test_http_server",
+    http_client_t client(context, "ipc:///tmp/test_http_server_deamon",
       [&request]() {
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
@@ -394,6 +397,8 @@ int main() {
   alarm(240);
 
   testing::suite suite("http");
+
+  setup();
 
   suite.test(TEST_CASE(test_streaming_client));
 
