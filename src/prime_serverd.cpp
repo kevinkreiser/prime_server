@@ -109,21 +109,24 @@ int main(int argc, char** argv) {
     compute_worker_threads.emplace_back(std::bind(&worker_t::work,
       worker_t(context, compute_proxy_endpoint + "_downstream", "ipc:///dev/null", result_endpoint, request_interrupt,
       [] (const std::list<zmq::message_t>& job, void* request_info, worker_t::interrupt_function_t&) {
-        //check if its prime
-        size_t prime = *static_cast<const size_t*>(job.front().data());
-        size_t divisor = 2;
-        size_t high = prime;
-        while(divisor < high) {
-          if(prime % divisor == 0)
-            break;
-          high = prime / divisor;
-          ++divisor;
+        //do some quick rejection
+        size_t number = *static_cast<const size_t*>(job.front().data());
+        size_t divisor = 3;
+        if(number % 3 != 0) {
+          divisor = 5;
+          while(divisor * divisor <= number) {
+            if(number % divisor == 0)
+              break;
+            divisor += 6;
+          }
         }
 
-        //if it was prime send it back unmolested, else send back 2 which we know is prime
-        if(divisor < high)
-          prime = 2;
-        http_response_t response(200, "OK", std::to_string(prime));
+        //if the divisor's square is larger than the prime then we found a prime
+        if(divisor * divisor > number)
+          divisor = number;
+
+        //give back the number you asked for and the divisor we found
+        http_response_t response(200, "OK", std::to_string(divisor) + "," + std::to_string(number));
         response.from_info(*static_cast<http_request_info_t*>(request_info));
         worker_t::result_t result{false};
         result.messages.emplace_back(response.to_string());
@@ -142,24 +145,26 @@ int main(int argc, char** argv) {
     //std::this_thread::sleep_for(std::chrono::seconds(1));
 
     //client makes requests and gets back responses in a batch fashion
-    size_t produced_requests = 0, collected_results = 0;
+    size_t produced_requests = 0, collected_results = 0, prime = 3;
     std::string request;
     std::set<size_t> primes = {2};
     http_client_t client(context, server_endpoint,
-      [&request, requests, &produced_requests]() {
+      [requests, &request, &produced_requests, &prime]() {
         //blank request means we are done
-        if(produced_requests < requests)
-          request = http_request_t::to_string(method_t::GET, "/is_prime?possible_prime=" + std::to_string(produced_requests++ * 2 + 3));
-        else
-          request.clear();
+        request = produced_requests >= requests ? "" :
+          http_request_t::to_string(method_t::GET, "/is_prime?possible_prime=" + std::to_string(prime));
+        prime = prime + (produced_requests++ % 4 ? 2 : 4);
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
       [requests, &primes, &collected_results] (const void* message, size_t length) {
         //get the result and tell if there is more or not
         std::string response_str(static_cast<const char*>(message), length);
         try {
-          size_t number = std::stoul(response_str.substr(response_str.rfind('\n')));
-          primes.insert(number);
+          auto body = response_str.substr(response_str.rfind('\n') + 1);
+          size_t divisor = std::stoul(body.substr(0, body.rfind(',')));
+          size_t number = std::stoul(body.substr(body.rfind(',') + 1));
+          if(divisor == number)
+            primes.insert(number);
         }
         catch(...) {
           logging::ERROR("Responded with: " + response_str);
