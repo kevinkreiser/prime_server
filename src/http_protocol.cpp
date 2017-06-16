@@ -31,9 +31,17 @@ namespace {
     return decoded_str;
   }
 
+  bool caseless_compare(const std::string& a, const std::string& b) {
+    return a.size() == b.size() && std::equal(a.cbegin(), a.cend(), b.cbegin(), [](std::string::value_type x, std::string::value_type y) {
+      return ::tolower(x) == ::tolower(y);
+    });
+  }
+
   const headers_t::value_type CORS{"Access-Control-Allow-Origin", "*"};
+  const http_request_t::request_exception_t RESPONSE_100(http_response_t(100, "Continue", "Expectation succeeded", {CORS}));
   const http_request_t::request_exception_t RESPONSE_400(http_response_t(400, "Bad Request", "Malformed HTTP request", {CORS}));
   const http_request_t::request_exception_t RESPONSE_413(http_response_t(413, "Request Entity Too Large", "The HTTP request was too large", {CORS}));
+  const http_request_t::request_exception_t RESPONSE_417(http_response_t(417, "Expectation Failed", "The server cannot meet the requirements of the Expect request-header field", {CORS}));
   const http_request_t::request_exception_t RESPONSE_500(http_response_t(500, "Internal Server Error", "The server encountered an unexpected condition which prevented it from fulfilling the request", {CORS}));
   const http_request_t::request_exception_t RESPONSE_501(http_response_t(501, "Not Implemented", "The HTTP request method is not supported", {CORS}));
   const http_request_t::request_exception_t RESPONSE_504(http_response_t(504, "Gateway Time-out", "The server didn't respond in time", {CORS}));

@@ -246,6 +246,22 @@ namespace prime_server {
       this->requests.emplace(request.enqueued.back(), requester);
       this->request_history.emplace_back(std::move(info));
     }
+
+    //some requests can require a response before the request can continue, http expect continue for example
+    /*const typename request_container_t::request_exception_t* handshake = request.handshake();
+    if(handshake) {
+      //TODO: actually send an intermidate request down to a worker and let it decide if
+      //it should proceed or not based on the actual headers contained in the partial request
+      client.send(requester, ZMQ_SNDMORE | ZMQ_DONTWAIT);
+      client.send(handshake->response, ZMQ_DONTWAIT);
+      if(log) {
+        request.log(request_id);
+        handshake->log(request_id);
+      }
+      ++request_id;
+    }*/
+
+    //return true to keep the session alive and carry on with parsing
     return true;
   }
 
