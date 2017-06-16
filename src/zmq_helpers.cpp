@@ -20,8 +20,8 @@ namespace zmq {
 
     //wrap it in RAII goodness
     ptr.reset(context,
-      [](void* context) {
-        assert(zmq_ctx_term(context) == 0);
+      [](void* c) {
+        assert(zmq_ctx_term(c) == 0);
       });
   }
   context_t::operator void*() {
@@ -36,9 +36,9 @@ namespace zmq {
 
     //wrap it in RAII goodness
     ptr.reset(message,
-      [](zmq_msg_t* message) {
-        assert(zmq_msg_close(message) == 0);
-        delete message;
+      [](zmq_msg_t* m) {
+        assert(zmq_msg_close(m) == 0);
+        delete m;
       });
   }
   message_t::message_t(size_t size) {
@@ -94,8 +94,8 @@ namespace zmq {
 
     //wrap it in RAII goodness
     ptr.reset(socket,
-      [](void* socket){
-        assert(zmq_close(socket) == 0);
+      [](void* s){
+        assert(zmq_close(s) == 0);
       });
   }
   //set an option on this socket

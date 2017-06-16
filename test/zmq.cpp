@@ -4,74 +4,74 @@
 #include <unistd.h>
 #include <string>
 #include <thread>
+#include <atomic>
+#include <chrono>
 
 namespace {
 
   std::string readable_string(size_t size) {
-    std::string s(200, ' ');
+    std::string s(size, ' ');
     for(size_t i = 0; i < s.size(); ++i)
       s[i] = (i % 95) + 32;
     return s;
   }
 
-  void server_thread(zmq::context_t& context, const std::string& request, size_t iterations) {
-    zmq::socket_t server(context, ZMQ_STREAM);
-
-    int disabled = 0;
-    server.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
-    server.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
-    server.bind("ipc:///tmp/test_server");
-
-    zmq::message_t identity;
-
-    std::string compounded;
-    for(size_t i = 0; i < iterations; ++i)
-      compounded += request;
-
-    std::string combined_request;
-    while(combined_request.size() < compounded.size()) {
-      auto messages = server.recv_all(ZMQ_DONTWAIT);
-      if(messages.size() == 0)
-        continue;
-      if(identity.size() != 0 && messages.front() != identity)
-        throw std::runtime_error("Identity frame mismatch");
-      identity = std::move(messages.front());
-      messages.pop_front();
-      for(const auto& message : messages)
-        combined_request.append(static_cast<const char*>(message.data()), message.size());
-    }
-
-    if(combined_request != compounded)
-      throw std::runtime_error("Unexpected request data");
-  }
-
-  void client_thread(zmq::context_t& context, const std::string& request, size_t iterations) {
-    zmq::socket_t client(context, ZMQ_STREAM);
-
-    int disabled = 0;
-    client.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
-    client.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
-    client.connect("ipc:///tmp/test_server");
-    client.recv_all(0);
-
-    uint8_t identity[256];
-    size_t identity_size = sizeof(identity);
-    client.getsockopt(ZMQ_IDENTITY, identity, &identity_size);
-
-    for(size_t i = 0; i < iterations; ++i) {
-      client.send(static_cast<const void*>(identity), identity_size, ZMQ_SNDMORE);
-      client.send(request, 0);
-    }
-  }
-
   void test_batch_overflow_asynchronous() {
     zmq::context_t context;
-
     std::string request = readable_string(200);
+    size_t iterations = 1000000;
 
-    std::thread server(std::bind(&server_thread, context, request, 1000000));
-    std::thread client(std::bind(&client_thread, context, request, 1000000));
+    //start a steaming server thread
+    std::thread server([&context, &request, iterations](){
+      int disabled = 0;
+      zmq::socket_t server(context, ZMQ_STREAM);
+      server.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
+      server.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
+      server.bind("ipc:///tmp/test_server");
 
+      zmq::message_t identity;
+
+      std::string compounded;
+      for(size_t i = 0; i < iterations; ++i)
+        compounded += request;
+
+      std::string combined_request;
+      while(combined_request.size() < compounded.size()) {
+        auto messages = server.recv_all(ZMQ_DONTWAIT);
+        if(messages.size() == 0)
+          continue;
+        if(identity.size() != 0 && messages.front() != identity)
+          throw std::runtime_error("Identity frame mismatch");
+        identity = std::move(messages.front());
+        messages.pop_front();
+        for(const auto& message : messages)
+          combined_request.append(static_cast<const char*>(message.data()), message.size());
+      }
+
+      if(combined_request != compounded)
+        throw std::runtime_error("Unexpected request data");
+    });
+
+    //start a streaming client thread
+    std::thread client([&context,&request,iterations](){
+      int disabled = 0;
+      zmq::socket_t client(context, ZMQ_STREAM);
+      client.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
+      client.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
+      client.connect("ipc:///tmp/test_server");
+      client.recv_all(0);
+
+      uint8_t identity[256];
+      size_t identity_size = sizeof(identity);
+      client.getsockopt(ZMQ_IDENTITY, identity, &identity_size);
+
+      for(size_t i = 0; i < iterations; ++i) {
+        client.send(static_cast<const void*>(identity), identity_size, ZMQ_SNDMORE);
+        client.send(request, 0);
+      }
+    });
+
+    //wait for them to finish
     server.join();
     client.join();
   }
@@ -283,20 +283,22 @@ namespace {
 
   void test_pub_sub() {
     zmq::context_t context;
+    std::atomic<bool> done(false);
 
     //publish forever
-    std::thread publisher([](zmq::context_t& context){
+    std::thread publisher([&done, &context](){
       zmq::socket_t pub(context, ZMQ_PUB);
       int disabled = 0;
       pub.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
       pub.bind("ipc:///tmp/test_pub_sub");
-      while(true)
+      while(!done) {
         pub.send("listen to this", strlen("listen to this"), ZMQ_DONTWAIT);
-    }, std::ref(context));
-    publisher.detach();
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+      }
+    });
 
     //wait to hear something
-    std::thread subscriber([](zmq::context_t& context) {
+    std::thread subscriber([&done, &context]() {
       zmq::socket_t sub(context, ZMQ_SUB);
       int disabled = 0;
       sub.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
@@ -313,7 +315,11 @@ namespace {
         throw std::logic_error("Wrong number of published messages");
       if(messages.front().str() != "listen to this")
         throw std::logic_error("Wrong message contents");
-    }, std::ref(context));
+      done = true;
+    });
+
+    //wait for finish
+    publisher.join();
     subscriber.join();
   }
 
