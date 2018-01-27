@@ -606,6 +606,7 @@ namespace prime_server {
           state = CODE;
           break;
         }
+        case TRAILER:
         case HEADERS: {
           //a header is here
           if(partial_buffer.size()) {
@@ -616,12 +617,13 @@ namespace prime_server {
           }//the end or body
           else {
             auto value = headers.find("Content-Length");
-            if(value != headers.end()) {
+            if(state != TRAILER && value != headers.end()) {
               body_length = std::stoul(value->second);
               delimiter = "";
               state = BODY;
             }//streaming chunks
-            else if((value = headers.find("Transfer-Encoding")) != headers.end() && value->second == "chunked") {
+            else if(state != TRAILER && (value = headers.find("Transfer-Encoding")) != headers.end() &&
+                value->second == "chunked") {
               state = CHUNK_LENGTH;
             }
             else {
@@ -638,12 +640,17 @@ namespace prime_server {
           break;
         }
         case CHUNK_LENGTH: {
-          //TODO: actually parse out the length
-          throw std::runtime_error("not implemented");
+          //TODO: dont ignore extensions
+          try { body_length = std::stoul(partial_buffer, nullptr, 16); }
+          catch(...) { throw std::runtime_error("Expected chunk length"); }
+          state = body_length ? CHUNK : TRAILER;
+          break;
         }
         case CHUNK: {
-          //TODO: add the chunk to the body
-          throw std::runtime_error("not implemented");
+          //drop the CRLF part of the chunk
+          body.append(partial_buffer);
+          state = CHUNK_LENGTH;
+          break;
         }
       }
 
