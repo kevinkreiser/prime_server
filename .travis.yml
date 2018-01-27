@@ -23,7 +23,7 @@ matrix:
       install:
         - brew install automake libtool zeromq czmq
       script:
-        - ./autogen.sh && ./configure CFLAGS='-fsanitize=address' && make -j$(sysctl -n hw.ncpu) && test/interrupt
+        - ./autogen.sh && ./configure CFLAGS='-fsanitize=address' && make -j$(sysctl -n hw.ncpu) test/interrupt && test/interrupt
 after_failure:
   - cat config.log
   - cat test/*.log
