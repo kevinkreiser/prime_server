@@ -449,8 +449,6 @@ namespace {
 }
 
 int main() {
-  //make this whole thing bail if it doesnt finish fast
-  alarm(240);
 
   testing::suite suite("http");
 
@@ -468,6 +466,11 @@ int main() {
 
   suite.test(TEST_CASE(test_response_parsing));
 
+  suite.test(TEST_CASE(test_chunked_encoding));
+
+  //fail if it hangs
+  alarm(300);
+
   suite.test(TEST_CASE(test_parallel_clients));
 
   suite.test(TEST_CASE(test_malformed));
@@ -476,7 +479,7 @@ int main() {
 
   suite.test(TEST_CASE(test_large_request));
 
-  suite.test(TEST_CASE(test_chunked_encoding));
+
 
   return suite.tear_down();
 }

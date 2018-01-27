@@ -246,8 +246,6 @@ namespace {
 }
 
 int main() {
-  //make this whole thing bail if it doesnt finish fast
-  alarm(240);
 
   testing::suite suite("netstring");
 
@@ -256,6 +254,9 @@ int main() {
   suite.test(TEST_CASE(test_streaming_server));
 
   suite.test(TEST_CASE(test_entity));
+
+  //fail if it hangs
+  alarm(300);
 
   suite.test(TEST_CASE(test_parallel_clients));
 
