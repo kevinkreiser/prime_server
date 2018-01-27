@@ -474,8 +474,7 @@ namespace prime_server {
         }
         case CHUNK: {
           //drop the CRLF part of the chunk
-          body.append(partial_buffer, 0, body_length);
-          body_length = 0;
+          body.append(partial_buffer);
           state = CHUNK_LENGTH;
           break;
         }
