@@ -410,6 +410,9 @@ namespace {
         reqs.front().headers.begin()->second != "chunked")
       throw std::logic_error("Should have a single transfer encoding header set to chunked");
 
+    if(reqs.front().body != "a chunk with \r\n in itachunkwithanexstensiondone")
+      throw std::logic_error("The chunked body was wrong");
+
     //reset for another with trailer
     req.flush_stream();
     piece = "POST /is_prime HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n15\r\na chunk with \r\n in it";
@@ -422,7 +425,12 @@ namespace {
     if(reqs.size() != 0)
       throw std::logic_error("There should be no full requests yet");
 
-    piece = "4\r\ndone\r\n0\r\ntrailerA: A\r\ntrailerB: B\r\n\r\n";
+    piece = "5\r\nsp";
+    reqs = req.from_stream(piece.c_str(), piece.size());
+    if(reqs.size() != 0)
+      throw std::logic_error("There should be no full requests yet");
+
+    piece = "lit\r\n0\r\ntrailerA: A\r\ntrailerB: B\r\n\r\n";
     reqs = req.from_stream(piece.c_str(), piece.size());
     if(reqs.size() != 1)
       throw std::logic_error("There should be 1 full reply now");
@@ -433,6 +441,9 @@ namespace {
         b == reqs.front().headers.cend() || a->first != "trailerA" || b->first != "trailerB" ||
         a->second != "A" || b->second != "B")
       throw std::logic_error("Should have 3 headers, 1 for chunked and 2 in the trailer");
+
+    if(reqs.front().body != "a chunk with \r\n in itachunkwithanexstensionsplit")
+      throw std::logic_error("The chunked body was wrong");
   }
 
 }
