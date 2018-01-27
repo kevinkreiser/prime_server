@@ -72,7 +72,7 @@ namespace prime_server {
     virtual ~http_entity_t();
     virtual std::string to_string() const = 0;
    protected:
-    enum state_t { METHOD, MESSAGE, CODE, PATH, VERSION, HEADERS, BODY, CHUNKS };
+    enum state_t { METHOD, MESSAGE, CODE, PATH, VERSION, HEADERS, BODY, CHUNK_LENGTH, CHUNK, TRAILER };
     virtual void flush_stream(const state_t state);
 
     //state for streaming parsing
