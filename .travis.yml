@@ -25,10 +25,5 @@ matrix:
       script:
         - ./autogen.sh && ./configure CFLAGS="-O0" CXXFLAGS="-O0" && make test -j$(sysctl -n hw.ncpu)
 after_failure:
-  - ulimit -c unlimited
-  - test/interrupt
-  - ls -al
-  - libtool --help
-  - libtool --mode=execute gdb test/interrupt core -ex where
   - cat config.log
   - cat test/*.log
