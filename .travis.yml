@@ -27,6 +27,8 @@ matrix:
 after_failure:
   - ulimit -c unlimited
   - test/interrupt
+  - ls -al
+  - libtool --help
   - libtool --mode=execute gdb test/interrupt core -ex where
   - cat config.log
   - cat test/*.log
