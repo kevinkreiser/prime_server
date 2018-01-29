@@ -23,7 +23,7 @@ matrix:
       install:
         - brew install automake libtool zeromq czmq gdb
       script:
-        - ./autogen.sh && ./configure CFLAGS="-g3 -O0" CXXFLAGS="-g3 -O0" && make test -j$(sysctl -n hw.ncpu)
+        - ./autogen.sh && ./configure CFLAGS="-g3 -O2" CXXFLAGS="-g3 -O2" && make test -j$(sysctl -n hw.ncpu)
 after_failure:
   - ulimit -c unlimited
   - test/interrupt
