@@ -92,7 +92,7 @@ namespace {
       netstring_server_t(context, "ipc:///tmp/test_loop_server", "ipc:///tmp/test_loop_proxy_upstream", "ipc:///tmp/test_loop_results", "ipc:///tmp/test_loop_interrupt", false)));
     server.detach();
 
-    //we want a client that is very fickle, we need the client to send a request and then bail right away before
+    //we want a client that is very fickle, we need the client to send a request and then bail right away
     //clients always work in batch mode which is to say they send n requests and then wait for n responses. to trick
     //the client into hanging up without a response we've made it so that the act of making a request sets the expected
     //number of responses to 0. this will skip the loop that tries to collect n responses because it thinks it needs 0
