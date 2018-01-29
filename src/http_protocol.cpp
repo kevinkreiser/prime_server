@@ -187,20 +187,20 @@ namespace prime_server {
         body_length -= end - current;
         current = end;
       }
-      c = body_length != 0;
-    }//go until delimiter
-    else {
-      while((c = *(delimiter + partial_length)) != '\0' && current != end) {
-        if(c != *current)
-          partial_length = 0;
-        else
-          ++partial_length;
-        ++current;
-      }
     }
+
+    //go until delimiter
+    while((c = *(delimiter + partial_length)) != '\0' && current != end) {
+      if(c != *current)
+        partial_length = 0;
+      else
+        ++partial_length;
+      ++current;
+    }
+
     //we found the delimiter
     size_t length = current - cursor;
-    if(c == '\0') {
+    if(c == '\0' && !body_length) {
       if(length < partial_length)
         partial_buffer.resize(partial_buffer.size() - (partial_length - length));
       else
@@ -210,6 +210,7 @@ namespace prime_server {
       consumed += length;
       return true;
     }
+
     //we ran out
     partial_buffer.append(cursor, length);
     return false;
@@ -423,6 +424,7 @@ namespace prime_server {
           state = HEADERS;
           break;
         }
+        case TRAILER:
         case HEADERS: {
           //a header is here
           if(partial_buffer.size()) {
@@ -438,14 +440,16 @@ namespace prime_server {
           else {
             //standard length specified
             headers_t::const_iterator value;
-            if((value = headers.find("Content-Length")) != headers.end()) {
+            if(state != TRAILER && (value = headers.find("Content-Length")) != headers.end()) {
               try{ body_length = std::stoul(value->second); }
               catch(...) { throw RESPONSE_400; }
+              delimiter = "";
               state = BODY;
             }//streaming chunks
-            else if((value = headers.find("Transfer-Encoding")) != headers.end() && value->second == "chunked") {
-              state = CHUNKS;
-            }//simple GET
+            else if(state != TRAILER && (value = headers.find("Transfer-Encoding")) != headers.end()
+                && value->second == "chunked") {
+              state = CHUNK_LENGTH;
+            }//simple GET or end of TRAILER
             else {
               requests.emplace_back(method, path, body, query, headers, version);
               requests.back().log_line.swap(log_line);
@@ -461,9 +465,18 @@ namespace prime_server {
           flush_stream();
           break;
         }
-        case CHUNKS: {
-          //TODO: actually parse out the length and chunk by alternating
-          throw RESPONSE_501;
+        case CHUNK_LENGTH: {
+          //TODO: dont ignore extensions
+          try { body_length = std::stoul(partial_buffer, nullptr, 16); }
+          catch(...) { throw RESPONSE_400; }
+          state = body_length ? CHUNK : TRAILER;
+          break;
+        }
+        case CHUNK: {
+          //drop the CRLF part of the chunk
+          body.append(partial_buffer);
+          state = CHUNK_LENGTH;
+          break;
         }
       }
 
@@ -593,6 +606,7 @@ namespace prime_server {
           state = CODE;
           break;
         }
+        case TRAILER:
         case HEADERS: {
           //a header is here
           if(partial_buffer.size()) {
@@ -602,13 +616,17 @@ namespace prime_server {
             headers.insert({partial_buffer.substr(0, pos), partial_buffer.substr(pos + 2)});
           }//the end or body
           else {
-            auto length_str = headers.find("Content-Length");
-            if(length_str != headers.end()) {
-              body_length = std::stoul(length_str->second);
+            auto value = headers.find("Content-Length");
+            if(state != TRAILER && value != headers.end()) {
+              body_length = std::stoul(value->second);
+              delimiter = "";
               state = BODY;
+            }//streaming chunks
+            else if(state != TRAILER && (value = headers.find("Transfer-Encoding")) != headers.end() &&
+                value->second == "chunked") {
+              state = CHUNK_LENGTH;
             }
             else {
-              //TODO: check for chunked
               responses.emplace_back(code, message, body, headers, version);
               flush_stream();
             }
@@ -621,9 +639,18 @@ namespace prime_server {
           flush_stream();
           break;
         }
-        case CHUNKS: {
-          //TODO: actually parse out the length and chunk by alternating
-          throw std::runtime_error("not implemented");
+        case CHUNK_LENGTH: {
+          //TODO: dont ignore extensions
+          try { body_length = std::stoul(partial_buffer, nullptr, 16); }
+          catch(...) { throw std::runtime_error("Expected chunk length"); }
+          state = body_length ? CHUNK : TRAILER;
+          break;
+        }
+        case CHUNK: {
+          //drop the CRLF part of the chunk
+          body.append(partial_buffer);
+          state = CHUNK_LENGTH;
+          break;
         }
       }
 

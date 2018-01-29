@@ -387,11 +387,68 @@ namespace {
     client.batch();
   }
 
+  void test_chunked_encoding() {
+    http_request_t req;
+
+    std::string piece = "POST /is_prime HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n15\r\na chunk with \r\n in it\r\n";
+    auto reqs = req.from_stream(piece.c_str(), piece.size());
+    if(reqs.size() != 0)
+      throw std::logic_error("There should be no full requests yet");
+
+    piece = "10:someextension\r\nachunkwithanexstension\r\n";
+    reqs = req.from_stream(piece.c_str(), piece.size());
+    if(reqs.size() != 0)
+      throw std::logic_error("There should be no full requests yet");
+
+    piece = "4\r\ndone\r\n0\r\n\r\n";
+    reqs = req.from_stream(piece.c_str(), piece.size());
+    if(reqs.size() != 1)
+      throw std::logic_error("There should be 1 full reply now");
+
+    if(reqs.front().headers.size() != 1 ||
+        reqs.front().headers.begin()->first != "Transfer-Encoding" ||
+        reqs.front().headers.begin()->second != "chunked")
+      throw std::logic_error("Should have a single transfer encoding header set to chunked");
+
+    if(reqs.front().body != "a chunk with \r\n in itachunkwithanexstensiondone")
+      throw std::logic_error("The chunked body was wrong");
+
+    //reset for another with trailer
+    req.flush_stream();
+    piece = "POST /is_prime HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n15\r\na chunk with \r\n in it";
+    reqs = req.from_stream(piece.c_str(), piece.size());
+    if (reqs.size() != 0)
+      throw std::logic_error("There should be no full requests yet");
+
+    piece = "\r\n10:someextension\r\nachunkwithanexstension\r\n";
+    reqs = req.from_stream(piece.c_str(), piece.size());
+    if(reqs.size() != 0)
+      throw std::logic_error("There should be no full requests yet");
+
+    piece = "5\r\nsp";
+    reqs = req.from_stream(piece.c_str(), piece.size());
+    if(reqs.size() != 0)
+      throw std::logic_error("There should be no full requests yet");
+
+    piece = "lit\r\n0\r\ntrailerA: A\r\ntrailerB: B\r\n\r\n";
+    reqs = req.from_stream(piece.c_str(), piece.size());
+    if(reqs.size() != 1)
+      throw std::logic_error("There should be 1 full reply now");
+
+    auto a = reqs.front().headers.find("trailerA");
+    auto b = reqs.front().headers.find("trailerB");
+    if(reqs.front().headers.size() != 3 || a == reqs.front().headers.cend() ||
+        b == reqs.front().headers.cend() || a->first != "trailerA" || b->first != "trailerB" ||
+        a->second != "A" || b->second != "B")
+      throw std::logic_error("Should have 3 headers, 1 for chunked and 2 in the trailer");
+
+    if(reqs.front().body != "a chunk with \r\n in itachunkwithanexstensionsplit")
+      throw std::logic_error("The chunked body was wrong");
+  }
+
 }
 
 int main() {
-  //make this whole thing bail if it doesnt finish fast
-  alarm(240);
 
   testing::suite suite("http");
 
@@ -409,6 +466,11 @@ int main() {
 
   suite.test(TEST_CASE(test_response_parsing));
 
+  suite.test(TEST_CASE(test_chunked_encoding));
+
+  //fail if it hangs
+  alarm(300);
+
   suite.test(TEST_CASE(test_parallel_clients));
 
   suite.test(TEST_CASE(test_malformed));
@@ -416,6 +478,8 @@ int main() {
   suite.test(TEST_CASE(test_too_large));
 
   suite.test(TEST_CASE(test_large_request));
+
+
 
   return suite.tear_down();
 }
