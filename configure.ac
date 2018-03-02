@@ -32,6 +32,11 @@ AX_CXX_COMPILE_STDCXX_11([noext],[mandatory])
 # check zmq version
 PKG_CHECK_MODULES([DEPS], [libzmq >= 4.1.4 libczmq >= 3.0 libcurl >= 7.22.0])
 
+# require pthread as a regular dep because we need it everywhere
+AX_PTHREAD(, [AC_MSG_ERROR([cannot find libpthread])])
+DEPS_CFLAGS="${DEPS_CFLAGS} ${PTHREAD_CFLAGS}"
+DEPS_LIBS="${DEPS_LIBS} ${PTHREAD_LIBS}"
+
 # optionally enable coverage information
 CHECK_COVERAGE
 
