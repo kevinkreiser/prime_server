@@ -63,3 +63,6 @@ coverage/
 .cproject
 .project
 .settings
+
+# CMake out-of-source build directories
+build/
