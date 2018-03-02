@@ -5,9 +5,6 @@ INCLUDE(FindPkgConfig)
 # Use a C++11 enabled compiler
 set(CMAKE_CXX_STANDARD 11)
 
-# Use the find scripts in cmake/ directory
-set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
-
 # Handle the dependencies
 pkg_check_modules(CURL REQUIRED libcurl>=7.22.0)
 include_directories(${CURL_INCLUDE_DIR})
@@ -21,69 +18,63 @@ include_directories(${CZMQ_INCLUDE_DIR})
 find_package (Threads REQUIRED)
 
 # Include the hpp files
-include_directories(${CMAKE_SOURCE_DIR}/prime_server)
-
-set (PRIME_LIBRARY_SOURCES
-		${CMAKE_SOURCE_DIR}/src/http_protocol.cpp
-		${CMAKE_SOURCE_DIR}/src/http_util.cpp
-		${CMAKE_SOURCE_DIR}/src/netstring_protocol.cpp
-		${CMAKE_SOURCE_DIR}/src/prime_server.cpp
-		${CMAKE_SOURCE_DIR}/src/zmq_helpers.cpp)
-
-set(PRIME_ECHOD_SOURCES
-		${CMAKE_SOURCE_DIR}/src/prime_echod.cpp)
-
-set(PRIME_FILED_SOURCES
-		${CMAKE_SOURCE_DIR}/src/prime_filed.cpp)
-
-set(PRIME_HTTPD_SOURCES
-		${CMAKE_SOURCE_DIR}/src/prime_httpd.cpp)			
-
-set(PRIME_SERVERD_SOURCES
-		${CMAKE_SOURCE_DIR}/src/prime_serverd.cpp)
-
-set(PRIME_PROXYD_SOURCES
-		${CMAKE_SOURCE_DIR}/src/prime_proxyd.cpp)
-
-set(PRIME_WORKERD_SOURCES
-		${CMAKE_SOURCE_DIR}/src/prime_workerd.cpp)
+include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/prime_server)
 
 
+set(PRIME_LIBRARY_HEADERS
+	${CMAKE_SOURCE_DIR}/prime_server.hpp
+	${CMAKE_SOURCE_DIR}/http_util.hpp
+	${CMAKE_SOURCE_DIR}/netstring_protocol.hpp
+	${CMAKE_SOURCE_DIR}/logging.hpp
+	${CMAKE_SOURCE_DIR}/zmq_helpers.hpp
+	${CMAKE_SOURCE_DIR}/http_protocol.hpp)
+
+set(PRIME_LIBRARY_SOURCES
+	${CMAKE_SOURCE_DIR}/src/http_protocol.cpp
+	${CMAKE_SOURCE_DIR}/src/http_util.cpp
+	${CMAKE_SOURCE_DIR}/src/netstring_protocol.cpp
+	${CMAKE_SOURCE_DIR}/src/prime_server.cpp
+	${CMAKE_SOURCE_DIR}/src/zmq_helpers.cpp)
 
 # Build the library
 add_library(prime_server SHARED ${PRIME_LIBRARY_SOURCES})
-target_link_libraries(prime_server 
-						${ZMQ_LIBRARIES} 
-						${CZMQ_LIBRARIES}
-						${CURL_LIBRARIES})
+target_link_libraries(prime_server
+	${ZMQ_LIBRARIES}
+	${CZMQ_LIBRARIES}
+	${CURL_LIBRARIES})
 
 # Build executables
-add_executable(prime_echod ${PRIME_ECHOD_SOURCES})
+add_executable(prime_echod ${CMAKE_SOURCE_DIR}/src/prime_echod.cpp)
 target_link_libraries(prime_echod prime_server ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(prime_filed ${PRIME_FILED_SOURCES})
+add_executable(prime_filed ${CMAKE_SOURCE_DIR}/src/prime_filed.cpp)
 target_link_libraries(prime_filed prime_server ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(prime_httpd ${PRIME_HTTPD_SOURCES})
+add_executable(prime_httpd ${CMAKE_SOURCE_DIR}/src/prime_httpd.cpp)
 target_link_libraries(prime_httpd prime_server ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(prime_serverd ${PRIME_SERVERD_SOURCES})
+add_executable(prime_serverd ${CMAKE_SOURCE_DIR}/src/prime_serverd.cpp)
 target_link_libraries(prime_serverd prime_server ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(prime_proxyd ${PRIME_PROXYD_SOURCES})
+add_executable(prime_proxyd ${CMAKE_SOURCE_DIR}/src/prime_proxyd.cpp)
 target_link_libraries(prime_proxyd prime_server ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(prime_workerd ${PRIME_WORKERD_SOURCES})
+add_executable(prime_workerd ${CMAKE_SOURCE_DIR}/src/prime_workerd.cpp)
 target_link_libraries(prime_workerd prime_server ${CMAKE_THREAD_LIBS_INIT})
 
 # Install
-install(TARGETS prime_server LIBRARY DESTINATION lib)
+set_target_properties(prime_server PROPERTIES PUBLIC_HEADER "${PRIME_LIBRARY_HEADERS}")
+
+install(TARGETS prime_server
+	LIBRARY DESTINATION /usr/local/lib
+	PUBLIC_HEADER DESTINATION /usr/local/include)
+
 install(TARGETS prime_echod
-				prime_filed
-				prime_httpd
-				prime_serverd
-				prime_proxyd
-				prime_workerd DESTINATION bin)
+	prime_filed
+	prime_httpd
+	prime_serverd
+	prime_proxyd
+	prime_workerd DESTINATION /usr/local/bin)
 
 # Add tests - Requires CTest
 enable_testing()
