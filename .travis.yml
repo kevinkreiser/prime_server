@@ -15,7 +15,7 @@ matrix:
       install:
         - sudo apt-get install -y -qq autoconf automake libtool make cmake gcc g++ lcov libcurl4-openssl-dev libzmq3-dev libczmq-dev
       script:
-        - rm -rf build && cd build && cmake ../  && make test -j$(nproc)
+        - rm -rf build && mkdir build && cd build && cmake ../  && make test -j$(nproc)
     - os: osx
       compiler: clang
       before_install:
