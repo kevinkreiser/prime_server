@@ -15,13 +15,13 @@ matrix:
       install:
         - sudo apt-get install -y -qq autoconf automake libtool make cmake gcc g++ lcov libcurl4-openssl-dev libzmq3-dev libczmq-dev
       script:
-        - rm -rf build && mkdir build && cd build && cmake ../  && make -j$(nproc) && make test
+        - mkdir build && cd build && cmake ../ && make all test -j$(nproc)
     - os: osx
       compiler: clang
       before_install:
         - brew update
       install:
-        - brew install automake libtool zeromq czmq
+        - brew install cmake zeromq czmq
       script:
         - ./autogen.sh && ./configure CFLAGS="-O0" CXXFLAGS="-O0" && make test -j$(sysctl -n hw.ncpu)
 after_failure:
