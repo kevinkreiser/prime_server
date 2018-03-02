@@ -21,7 +21,7 @@ matrix:
       before_install:
         - brew update
       install:
-        - brew install cmake zeromq czmq
+        - brew install zeromq czmq #cmake
       script:
         - mkdir build && cd build && cmake ../ && make all test -j$(sysctl -n hw.ncpu)
 after_failure:
