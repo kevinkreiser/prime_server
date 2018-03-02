@@ -21,7 +21,7 @@ matrix:
       before_install:
         - brew update
       install:
-        - brew install automake libtool zeromq czmq
+        - brew install libtool zeromq czmq #automake
       script:
         - ./autogen.sh && ./configure CFLAGS="-O0" CXXFLAGS="-O0" && make test -j$(sysctl -n hw.ncpu)
 after_failure:
