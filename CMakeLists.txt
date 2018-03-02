@@ -18,7 +18,7 @@ find_package(CZMQ 3.0 REQUIRED)
 include_directories(${CZMQ_INCLUDE_DIRS})
 
 # Include the hpp files
-include_directories(prime_server/)
+include_directories(${CMAKE_SOURCE_DIR}/prime_server)
 
 set (PRIME_LIBRARY_SOURCES
 		${CMAKE_SOURCE_DIR}/src/http_protocol.cpp
