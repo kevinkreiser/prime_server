@@ -22,12 +22,12 @@ include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/prime_server)
 
 
 set(PRIME_LIBRARY_HEADERS
-	${CMAKE_SOURCE_DIR}/prime_server.hpp
-	${CMAKE_SOURCE_DIR}/http_util.hpp
-	${CMAKE_SOURCE_DIR}/netstring_protocol.hpp
-	${CMAKE_SOURCE_DIR}/logging.hpp
-	${CMAKE_SOURCE_DIR}/zmq_helpers.hpp
-	${CMAKE_SOURCE_DIR}/http_protocol.hpp)
+	${CMAKE_SOURCE_DIR}/prime_server/prime_server.hpp
+	${CMAKE_SOURCE_DIR}/prime_server/http_util.hpp
+	${CMAKE_SOURCE_DIR}/prime_server/netstring_protocol.hpp
+	${CMAKE_SOURCE_DIR}/prime_server/logging.hpp
+	${CMAKE_SOURCE_DIR}/prime_server/zmq_helpers.hpp
+	${CMAKE_SOURCE_DIR}/prime_server/http_protocol.hpp)
 
 set(PRIME_LIBRARY_SOURCES
 	${CMAKE_SOURCE_DIR}/src/http_protocol.cpp

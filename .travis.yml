@@ -25,5 +25,5 @@ matrix:
       script:
         - cmake . && make all test -j$(sysctl -n hw.ncpu)
 after_failure:
-  - cat config.log
-  - cat test/*.log
+  - cat build/CMakeCache.txt
+  - cat build/Testing/Temporary/LastTest.log
