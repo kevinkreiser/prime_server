@@ -51,17 +51,6 @@ namespace prime_server {
   using headers_t = std::unordered_map<std::string, std::string, caseless_predicates_t, caseless_predicates_t>;
   using query_t = std::unordered_map<std::string, std::list<std::string> >;
   enum method_t { OPTIONS, GET, HEAD, POST, PUT, DELETE, TRACE, CONNECT };
-  const std::unordered_map<std::string, method_t> STRING_TO_METHOD {
-    {"OPTIONS", method_t::OPTIONS}, {"GET", method_t::GET}, {"HEAD", method_t::HEAD}, {"POST", method_t::POST},
-    {"PUT", method_t::PUT}, {"DELETE", method_t::DELETE}, {"TRACE", method_t::TRACE}, {"CONNECT", method_t::CONNECT}
-  };
-  const std::unordered_map<method_t, std::string, std::hash<int> > METHOD_TO_STRING{
-    {method_t::OPTIONS, "OPTIONS"}, {method_t::GET, "GET"}, {method_t::HEAD, "HEAD"}, {method_t::POST, "POST"},
-    {method_t::PUT, "PUT"}, {method_t::DELETE, "DELETE"}, {method_t::TRACE, "TRACE"}, {method_t::CONNECT, "CONNECT"}
-  };
-  const std::unordered_map<std::string, bool> SUPPORTED_VERSIONS {
-    {"HTTP/1.0", true}, {"HTTP/1.1", true}
-  };
 
   struct http_entity_t {
     std::string version;
