@@ -76,6 +76,12 @@ install(TARGETS prime_echod
 	prime_proxyd
 	prime_workerd DESTINATION "bin")
 
+CONFIGURE_FILE(
+	"${CMAKE_CURRENT_SOURCE_DIR}/libprime_server.pc.in"
+	"${CMAKE_CURRENT_BINARY_DIR}/libprime_server.pc"
+	@ONLY)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libprime_server.pc" DESTINATION share/pkgconfig)
+
 # Add tests - Requires CTest
 enable_testing()
 
@@ -98,3 +104,4 @@ add_test(shaping shaping)
 add_executable(zmq ${CMAKE_SOURCE_DIR}/test/zmq.cpp)
 target_link_libraries(zmq prime_server ${CMAKE_THREAD_LIBS_INIT})
 add_test(zmq zmq)
+
