@@ -80,7 +80,7 @@ CONFIGURE_FILE(
 	"${CMAKE_CURRENT_SOURCE_DIR}/libprime_server.pc.in"
 	"${CMAKE_CURRENT_BINARY_DIR}/libprime_server.pc"
 	@ONLY)
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libprime_server.pc" DESTINATION share/pkgconfig)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libprime_server.pc" DESTINATION lib/pkgconfig)
 
 # Add tests - Requires CTest
 enable_testing()
