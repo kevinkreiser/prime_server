@@ -66,15 +66,15 @@ target_link_libraries(prime_workerd prime_server ${CMAKE_THREAD_LIBS_INIT})
 set_target_properties(prime_server PROPERTIES PUBLIC_HEADER "${PRIME_LIBRARY_HEADERS}")
 
 install(TARGETS prime_server
-	LIBRARY DESTINATION /usr/local/lib
 	PUBLIC_HEADER DESTINATION /usr/local/include)
+	LIBRARY DESTINATION "lib"
 
 install(TARGETS prime_echod
 	prime_filed
 	prime_httpd
 	prime_serverd
 	prime_proxyd
-	prime_workerd DESTINATION /usr/local/bin)
+	prime_workerd DESTINATION "bin")
 
 # Add tests - Requires CTest
 enable_testing()
