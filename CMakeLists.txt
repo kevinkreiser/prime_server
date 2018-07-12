@@ -2,6 +2,25 @@ cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 project(prime_server LANGUAGES CXX C)
 INCLUDE(FindPkgConfig)
 
+## Get version
+file(STRINGS "${CMAKE_SOURCE_DIR}/prime_server/prime_server.hpp" version_lines REGEX "PRIME_SERVER_VERSION_(MAJOR|MINOR|PATCH)")
+foreach(line ${version_lines})
+  if("${line}" MATCHES "(PRIME_SERVER_VERSION_(MAJOR|MINOR|PATCH))[\t ]+([0-9]+)")
+    set(${CMAKE_MATCH_1} ${CMAKE_MATCH_3})
+  endif()
+endforeach()
+if(DEFINED PRIME_SERVER_VERSION_MAJOR)
+  set(VERSION "${PRIME_SERVER_VERSION_MAJOR}")
+  if(DEFINED PRIME_SERVER_VERSION_MINOR)
+    set(VERSION "${VERSION}.${PRIME_SERVER_VERSION_MINOR}")
+    if(DEFINED PRIME_SERVER_VERSION_PATCH)
+      set(VERSION "${VERSION}.${PRIME_SERVER_VERSION_PATCH}")
+    endif()
+  endif()
+else()
+  message(FATAL_ERROR "No prime_server major version")
+endif()
+
 # Use a C++11 enabled compiler
 set(CMAKE_CXX_STANDARD 11)
 
@@ -19,7 +38,6 @@ find_package (Threads REQUIRED)
 
 # Include the hpp files
 include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/prime_server)
-
 
 set(PRIME_LIBRARY_HEADERS
 	${CMAKE_SOURCE_DIR}/prime_server/prime_server.hpp
@@ -62,19 +80,32 @@ target_link_libraries(prime_proxyd prime_server ${CMAKE_THREAD_LIBS_INIT})
 add_executable(prime_workerd ${CMAKE_SOURCE_DIR}/src/prime_workerd.cpp)
 target_link_libraries(prime_workerd prime_server ${CMAKE_THREAD_LIBS_INIT})
 
-# Install
 set_target_properties(prime_server PROPERTIES PUBLIC_HEADER "${PRIME_LIBRARY_HEADERS}")
 
+# Install paths
+set(prefix "${CMAKE_INSTALL_PREFIX}")
+set(exec_prefix "${CMAKE_INSTALL_PREFIX}")
+set(bindir "${CMAKE_INSTALL_PREFIX}/bin")
+set(libdir "${CMAKE_INSTALL_PREFIX}/lib")
+set(includedir "${CMAKE_INSTALL_PREFIX}/include/prime_server")
+set(pkgconfigdir "${CMAKE_INSTALL_PREFIX}/lib/pkgconfig")
+
 install(TARGETS prime_server
-	LIBRARY DESTINATION /usr/local/lib
-	PUBLIC_HEADER DESTINATION /usr/local/include)
+	LIBRARY DESTINATION ${libdir}
+	PUBLIC_HEADER DESTINATION ${includedir})
 
 install(TARGETS prime_echod
 	prime_filed
 	prime_httpd
 	prime_serverd
 	prime_proxyd
-	prime_workerd DESTINATION /usr/local/bin)
+	prime_workerd DESTINATION ${bindir})
+
+CONFIGURE_FILE(
+	"${CMAKE_CURRENT_SOURCE_DIR}/libprime_server.pc.in"
+	"${CMAKE_CURRENT_BINARY_DIR}/libprime_server.pc"
+	@ONLY)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libprime_server.pc" DESTINATION ${pkgconfigdir})
 
 # Add tests - Requires CTest
 enable_testing()
@@ -98,3 +129,4 @@ add_test(shaping shaping)
 add_executable(zmq ${CMAKE_SOURCE_DIR}/test/zmq.cpp)
 target_link_libraries(zmq prime_server ${CMAKE_THREAD_LIBS_INIT})
 add_test(zmq zmq)
+
