@@ -1,7 +1,7 @@
-prefix=@CMAKE_INSTALL_PREFIX@
-exec_prefix=${prefix}
-libdir=${prefix}/lib
-includedir=${prefix}/include/prime_server
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
 
 Name: libprime_server
 Description: prime_server c++ library
