@@ -145,7 +145,125 @@ The idea was enticing; could we build a minimal HTTP server with just ZMQ to sit
 The API
 -------
 
-TODO: describe the bits of the API so people have more than example programs to figure out how to use it
+The API consists of essentially 3 parts:
+
+* Client/server stuff - the bits that make and answer requests. The server stands between clients and the pipeline of workers and load balancing proxies.
+* Proxy/worker stuff - the bits that fulfill the requests. The proxy sits between a pool of workers at a given stage in the pipeline and the next stage. The proxy knows what workers are available to do work and will not send on a request until a worker is available to take it. The workers are responsible to either send their results to another stage of the pipeline (the next proxy) or a sensible, protocol specific, response back to the server who will forward it on to the client.
+* Protocol stuff - the bits that parse and serialize requests and responses respectively. It's a prearranged format that makes it possible for the client to speak something that the worker understands and vice-versa. HTTP is pretty useful here but other protocols exist. You can even create your own if you like. Also note that intermediate stages of workers can talk whatever protocol they like to each other.
+
+So you want to make a web service. How can you do that… For the sake of example, let's say you want to do that all in the same process… In real life (i.e. production) you don't want to do that because, well, the wishlist again. But yeah let's just learn the easy way shall we?
+
+Well what do you want to build? "Let's make the '**B**eautiful **U**nicode **T**ext **T**ransmission' service, the only API featuring artisanal text art!", you say. We're not sure we like where you're going with this but hey, it's your service! Let's get the library installed:
+
+    sudo add-apt-repository ppa:kevinkreiser/prime-server
+    sudo apt-get update
+    sudo apt-get install libprime-server-dev
+
+Ok great, let's write our program against it, call it `art.cpp`. We'll start by including a few things we'll need:
+
+    //prime_server guts
+    #include <prime_server/prime_server.hpp>
+    #include <prime_server/http_protocol.hpp>
+    using namespace prime_server;
+
+    //nuts and bolts required
+    #include <thread>
+    #include <functional>
+    #include <chrono>
+    #include <string>
+    #include <list>
+    #include <vector>
+    #include <csignal>
+
+    //configuration constants for various sockets
+    const std::string server_endpoint = "tcp://*:8002";
+    const std::string result_endpoint = "ipc:///tmp/result_endpoint";
+    const std::string proxy_endpoint = "ipc:///tmp/proxy_endpoint";
+
+    //assortment of artisional content
+    const std::vector<std::string> art = { "(_,_)", "(_|_)", "(_*_)",
+                                      "(‿ˠ‿)", "(‿ꜟ‿)", "(‿ε‿)" };
+
+So first off we're including a couple of bits from `libprime_server` itself mainly for the setup of the pipeline and, as you guessed it, the stuff we need to talk the HTTP protocol. After that we include a bunch of standard data structures that we'll make use of throughout the program, it'll be pretty obvious.. Then we have some configuration. Basically we have to tell the different threads' sockets where to find each other. The first one there is a `tcp` socket so that webclients can connect to us through normal means. The other two are unix domain sockets but could be `tcp` if you want to run different parts of this on different machines. For example you could run one stage of the pipeline on machines with fat graphics cards for the GPGPU win, whereas another stage might run better on machines with metric tons of RAM. Finally we have our super sweet text art. Alright now how do we actually return a response to someone looking for some '**T**extual **U**nicode **S**tuff of **H**igh **I**ntellectual **E**xcitement'?
+
+    //actually serve up content
+    worker_t::result_t art_work(const std::list<zmq::message_t>& job, void* request_info) {
+      //false means this is going back to the client, there is no next stage of the pipeline
+      worker_t::result_t result{false};
+      //this type differs per protocol hence the void* fun
+      auto& info = *static_cast<http_request_t::info_t*>(request_info);
+      http_response_t response;
+      try {
+        //TODO: actually use/validate the request parameters
+        auto request = http_request_t::from_string(
+          static_cast<const char*>(job.front().data()), job.front().size());
+        //get your art here
+        response = http_response_t(200, "OK", art[info.id % art.size()]);
+      }
+      catch(const std::exception& e) {
+        //complain
+        response = http_response_t(400, "Bad Request", e.what());
+      }
+      //does some tricky stuff with headers and different versions of http
+      response.from_info(info);
+      //formats the response to protocal that the client will understand
+      result.messages.emplace_back(response.to_string());
+      return result;
+    }
+
+We basically just have to define a `work` function/object/lambda whose signature matches what the API expects. The `worker_t::result_t` is the bit that `prime_server` will be shuttling around your architecture. The bulk of this function is just stuff you have to do at every stage in your pipeline. You'll need to unpack the message from the previous stage; in this case it was the server itself so the `work` function assumes its valid HTTP-looking bytes. You'll then want to formulate a response, either to be sent back to the client or forwarded to the next stage in the pipeline. In our case the workers respond to the client in all scenarios so we always initialize `worker_t::result_t::intermediate` as `false`. If it were `true` the worker would attempt to forward the result of this stage to the proxy for the next pool of workers. At the end we simply do some formatting to the response so that the client will make sense of it and we store this in `worker_t::result_t::messages`. OK so now what is left to do? Not much, just hook up some plumbing, basically constructing your pipeline.
+
+    int main(void) {
+      zmq::context_t context;
+
+      //http server, false turns off request/response logging
+      std::thread server = std::thread(std::bind(&http_server_t::serve,
+        http_server_t(context, server_endpoint, proxy_endpoint + "_upstream", result_endpoint, false)));
+
+      //load balancer
+      std::thread proxy(
+        std::bind(&proxy_t::forward,
+          proxy_t(context, proxy_endpoint + "_upstream", proxy_endpoint + "_downstream")));
+      proxy.detach();
+
+      //workers
+      auto worker_concurrency = std::max<size_t>(1, std::thread::hardware_concurrency());
+      std::list<std::thread> workers;
+      for(size_t i = 0; i < worker_concurrency; ++i) {
+        //worker function could be defined inline here via lambda, it could be std::bind'd to an instance method
+        //or simply just a free function like we have here
+        workers.emplace_back(std::bind(&worker_t::work,
+          worker_t(context, proxy_endpoint + "_downstream", "ipc:///tmp/NO_ENDPOINT", result_endpoint, &art_work)));
+        workers.back().detach();
+      }
+
+      //listen for SIGINT and terminate if we hear it
+      std::signal(SIGINT, [](int s){ std::this_thread::sleep_for(std::chrono::seconds(1)); exit(1); });
+      server.join();
+
+      return 0;
+    }
+
+First things first, all `zmq` communication requires a `context`. So we get one of those and pass it around to all the bits. Our setup is really simple, we run an `http_server_t` in one thread. The server keeps track of and forwards requests on to a load balancing `proxy_t` in another thread. The proxy keeps a queue of requests and shuttles them FIFO style to the first non-busy `worker_t` that it has in its inventory. We spawn a bunch of `worker_t`s which are constantly handshaking with the proxy. "I'm here" and "I'm done" messages let the proxy know which workers are bored and which are busy. This should minimize latency in so far as a greedy scheduler can. You'll notice the program is pretty much meant to be run as a daemon which is why it waits for `SIGINT`. `ctl-c` it away when you are done with it.
+
+Now we'll get your **R**esponsive **U**nicode **M**essages **P**ortal shaking.. err.. cracking.. err.. running.. with this:
+
+    g++ art.cpp -std=c++11 -lprime_server -o art
+    ./art
+
+From another terminal, you can hit it with curl to bask in your glorious, yet somewhat inappropriate, art work:
+
+    k@k:~$ for i in {0..7}; do curl "localhost:8002"; echo; done
+    (_,_)
+    (_|_)
+    (_*_)
+    (‿ˠ‿)
+    (‿ꜟ‿)
+    (‿ε‿)
+    (_,_)
+    (_|_)
+
+If you're interested in more sample code you can check out [Valhalla](http://github.com/valhalla/valhalla) or any of the sample daemon programs (in `src/*d.cpp`) in the [prime_server source](https://github.com/kevinkreiser/prime_server/tree/master/src).
 
 The Future
 ----------
