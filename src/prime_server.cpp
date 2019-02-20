@@ -264,7 +264,7 @@ namespace prime_server {
     if(request == requests.cend())
       return false;
     //reply to the client with the response or an error however, if sending the identity frame failed
-    //we cannot send the response/error because it will hange the entire socket
+    //we cannot send the response/error because it will hang the entire socket
     if(!client.send(request->second, ZMQ_SNDMORE | ZMQ_DONTWAIT) || !client.send(response, ZMQ_DONTWAIT))
       logging::ERROR("Server failed to dequeue request");
     else if(log)
@@ -419,7 +419,7 @@ namespace prime_server {
           heart_beat = std::move(result.heart_beat);
           //should we send this on to the next proxy
           if(result.intermediate) {
-            //if this fails calling send_all will hang the socket
+            //TODO: retry?
             if(!downstream_proxy.send(request_info, ZMQ_SNDMORE) ||
                !downstream_proxy.send_all(result.messages, 0))
               logging::ERROR("Worker failed to forward intermediate result");
@@ -431,7 +431,7 @@ namespace prime_server {
             }
             if(result.messages.back().empty())
               logging::WARN("Sending empty messages will disconnect the client");
-            //if this fails calling send_all below will hang the socket
+            //TODO: retry
             if(!loopback.send(request_info, ZMQ_SNDMORE) ||
                !loopback.send_all(result.messages, 0))
               logging::ERROR("Worker failed to forward final result");
