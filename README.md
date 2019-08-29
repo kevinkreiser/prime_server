@@ -6,13 +6,13 @@
     |                                                       
     '                                                       
 
-Build Status
-------------
+# Build Status
 
 [![Build Status](https://travis-ci.org/kevinkreiser/prime_server.svg?branch=master)](https://travis-ci.org/kevinkreiser/prime_server)
 
-Grab some deps
---------------
+# Quick Start
+
+## Grab some deps
 
 ```bash
 # trusty didn't have czmq or newer zmq in the repositories so its repackaged here
@@ -29,8 +29,7 @@ sudo apt-get install autoconf automake libtool make gcc g++ lcov
 sudo apt-get install libcurl4-openssl-dev libzmq3-dev libczmq-dev
 ```
 
-Build and Install
------------------
+## Build and Install
 
 ```bash
 # dont forget submodules
@@ -42,8 +41,7 @@ make test -j8
 sudo make install
 ```
 
-Run it
-------
+## Run it
 
 The library comes with a standalone binary which is essentially just a server or a simulated one that tells you whether or not a given input number is prime. The aim isn't really to do any type of novel large prime computation but rather to contrive a system whose units of work are highly non-uniform in terms of their time to completion (and yes random sleeps are boring). This is a common problem in many other workflows and primes seemed like a simple way to illustrate this.
 
@@ -71,8 +69,22 @@ kill $server_pid
 #be semi-amazed that its an order of magnitude faster
 ```
 
-The Point
----------
+# Motivation, Documentation and Experimentation
+
+## The Introduction
+
+`prime_server` is an API for building HTTP SOAs. Less the acronyms: it’s a library and executables which marry an http server to talk to clients, with a distributed computing backend to do the work. As an example we’ve made a sample application that will tell you if a given number is prime. If you’d like to give that a shot try installing and running it:
+
+```bash
+sudo add-apt-repository ppa:kevinkreiser/prime-server
+sudo apt-get update
+sudo apt-get install libprime-server0 libprime-server-dev prime-server-bin
+prime_serverd tcp://*:8002 &
+curl "http://localhost:8002/is_prime?possible_prime=32416190071"
+killall prime_serverd
+```
+
+## The Point
 
 What we want is a tool that lets you build a system that is pipelined and parallelized ie. the ZMQ "butterfly" or "parallel pipeline" pattern. See [this tutorial](http://zeromq.org/tutorials:butterfly). We'll get to why in a bit but first, this is kind of what it should look like:
 
@@ -116,8 +128,7 @@ You may be asking yourself, why on earth are all of the worker pools hooked into
 1. A request could enter an error state at any stage of the pipeline. It's important to be able to signal this back to the client as soon as possible.
 2. More generally, certain requests have known results (error or otherwise) without going through all stages of the pipeline.
 
-The Impetus
------------
+## The Impetus
 
 The toy example of an HTTP service that computes whether or not a number is prime is a simple illustration of why someone might want a setup as described above. But it's not the actual use-case that drove the creation of this project. Having worked on a few service oriented archtectures my team members and I noticed that we'd compiled what amounted to a wishlist of architectural features. In buzz-word form those were roughly:
 
@@ -136,8 +147,7 @@ We needed to handle HTTP requests that would have widely varying degrees of comp
 
 But its worse than that! You might imagine that finding a path through a graph sounds pretty straight forward but making that path useful to the client requires a bunch of extra work. Conveniently, or sometimes through great effort, decomposing a problem into discrete steps can help you with that wish list. Doing so in the context of an HTTP server API requires a little extra consideration. Basically, catering to (or hoping for) many simultaneous users makes most of those buzz-words relavant. Especially the last one (again just kidding).
 
-The Path
---------
+## The Path
 
 This was so fun to build for so many reasons. The first thing to do was prove out the ZMQ butterfly pattern as a tiny Github gist. The idea was that we could put an HTTP server in front of the this pattern and hit some of those pesky wishlist items just by having separate stages of the pipeline. Surprisingly, learning this pattern and figuring out how it would work in a concrete scenario was another delight.
 
@@ -149,8 +159,7 @@ Next we scoured the internet for HTTP servers that had ZMQ bindings to put in fr
 
 The idea was enticing; could we build a minimal HTTP server with just ZMQ to sit in front of our pipeline? We threw some stuff into a gist once again and started testing. Before long and with very little code, we had something! From there though it was on to writing an HTTP state machine to handle the streaming nature of the socket type. Writing state machines, especially against a couple of protocol versions at the same time is torture in terms code re-use. But we'll get to that in future work section.
 
-The API
--------
+## The API
 
 The API consists of essentially 3 parts:
 
@@ -284,8 +293,7 @@ k@k:~$ for i in {0..7}; do curl "localhost:8002"; echo; done
 
 If you're interested in more sample code you can check out [Valhalla](http://github.com/valhalla/valhalla) or any of the sample daemon programs (in `src/*d.cpp`) in the [prime_server source](https://github.com/kevinkreiser/prime_server/tree/master/src).
 
-The Future
-----------
+## The Future
 
 The first thing we should do is make use of a proper HTTP parser. There are some impressive ones out there, notibly [PicoHTTPParser](https://github.com/h2o/picohttpparser) which is used in one of the webservers ([H2O](https://github.com/h2o/h2o)) we came across in our searching. There may be a few issues with the streaming nature of the `ZMQ_STREAM` socket but they are worth working out so as not to have to maintain the mess of code required to properly parse HTTP.
 
@@ -332,8 +340,7 @@ For example say you wanted to offer up math as a service (MaS of course). You mi
 
 Now of course you could implement this all in a client side library, but for the sake of argument, ignore the impracticality for a second. What you wouldn't want to do is write a worker that does all three things. It would be nicer to isolate workers based on the type of work they perform (again the wishlist). This requires forwarding to a specific worker pool based on the url (in this example). Which brings up another `TODO`, we probably want to allow the server to forward requests to worker pools based on the URL (lots of other servers have this). Furthermore some of these operations are more complex than others. If you watched your system for a while (with a statistically relevant amount of traffic) you could look at the amount of CPU spent per stage and reallocate proportionally sized worker pools. You could even dynamically size the worker pools based on current traffic if you were really slick ;o)
 
-The Conclusion
---------------
+## The Conclusion
 
 This has been a fantastic little experiment to have worked on. Even better it's been successful. I can claim that because it's used in at least one production system. Taking some excellent tools (ZMQ mostly) and building a new tool to help others build yet more tools is a very rewarding experience. If you think you may be interested in building a project/service/tool using this work, let us know! If you find something wrong submit an issue or better yet pull request a fix!
 
