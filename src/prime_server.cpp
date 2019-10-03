@@ -366,6 +366,9 @@ namespace prime_server {
       }
     }
   }
+  const zmq::message_t* proxy_t::no_selection(const std::list<zmq::message_t>&, const std::list<zmq::message_t>&) {
+    return nullptr;
+  }
 
   worker_t::worker_t(zmq::context_t& context, const std::string& upstream_proxy_endpoint, const std::string& downstream_proxy_endpoint,
                      const std::string& result_endpoint, const std::string& interrupt_endpoint, const work_function_t& work_function,
@@ -489,6 +492,7 @@ namespace prime_server {
     if((force_check || messages.size()) && interrupts.find(job) != interrupts.cend())
       throw interrupt_t(job & 0xFFFFFFFF);
   }
+  void worker_t::no_cleanup(){}
 
   //explicit instantiation for netstring and http
   template class server_t<netstring_entity_t, netstring_request_info_t>;

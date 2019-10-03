@@ -106,11 +106,12 @@ namespace prime_server {
     //allows you to favor a certain heartbeat/worker for a given job
     using choose_function_t = std::function<const zmq::message_t* (const std::list<zmq::message_t>&, const std::list<zmq::message_t>&)>;
     proxy_t(zmq::context_t& context, const std::string& upstream_endpoint, const std::string& downstream_endpoint,
-      const choose_function_t& choose_function = [](const std::list<zmq::message_t>&, const std::list<zmq::message_t>&){return nullptr;});
+      const choose_function_t& choose_function = no_selection);
     virtual ~proxy_t();
     void forward();
    protected:
     virtual int expire();
+    static const zmq::message_t* no_selection(const std::list<zmq::message_t>&, const std::list<zmq::message_t>&);
 
     zmq::socket_t upstream;
     zmq::socket_t downstream;
@@ -142,12 +143,13 @@ namespace prime_server {
 
     worker_t(zmq::context_t& context, const std::string& upstream_proxy_endpoint, const std::string& downstream_proxy_endpoint,
       const std::string& result_endpoint, const std::string& interrupt_endpoint, const work_function_t& work_function,
-      const cleanup_function_t& cleanup_function = [](){}, const std::string& heart_beat = "");
+      const cleanup_function_t& cleanup_function = no_cleanup, const std::string& heart_beat = "");
     virtual ~worker_t();
     void work();
    protected:
     void advertise();
     virtual void handle_interrupt(bool force_check);
+    static void no_cleanup();
 
     zmq::socket_t upstream_proxy;
     zmq::socket_t downstream_proxy;
