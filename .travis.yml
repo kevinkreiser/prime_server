@@ -13,17 +13,17 @@ matrix:
         - sudo add-apt-repository -y ppa:kevinkreiser/czmq
         - sudo apt-get update
       install:
-        - sudo apt-get install -y -qq make cmake gcc g++ libcurl4-openssl-dev libzmq3-dev libczmq-dev
+        - sudo apt-get install -y -qq autoconf automake libtool make cmake gcc g++ lcov libcurl4-openssl-dev libzmq3-dev libczmq-dev
       script:
-        - cmake . && make all test -j$(nproc)
+        - ./autogen.sh && ./configure && make all test -j$(nproc)
     - os: osx
       compiler: clang
       before_install:
         - brew update
       install:
-        - brew install zeromq czmq #cmake
+        - brew install automake libtool zeromq czmq cmake
       script:
-        - cmake . && make all test -j$(sysctl -n hw.ncpu)
+        - ./autogen.sh && ./configure && make all test -j$(sysctl -n hw.ncpu)
 after_failure:
   - cat build/CMakeCache.txt
   - cat build/Testing/Temporary/LastTest.log
