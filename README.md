@@ -1,10 +1,10 @@
 
-             o                                              
+             o
     .,-. .--..  .--.--. .-.     .--. .-. .--..    ._.-. .--.
-    |   )|   |  |  |  |(.-'     `--.(.-' |    \  / (.-' |   
-    |`-' ' -' `-'  '  `-`--'____`--' `--''     `'   `--''   
-    |                                                       
-    '                                                       
+    |   )|   |  |  |  |(.-'     `--.(.-' |    \  / (.-' |
+    |`-' ' -' `-'  '  `-`--'____`--' `--''     `'   `--''
+    |
+    '
 
 # Build Status
 
@@ -13,6 +13,8 @@
 # Quick Start
 
 ## Grab some deps
+
+On Linux:
 
 ```bash
 # trusty didn't have czmq or newer zmq in the repositories so its repackaged here
@@ -24,9 +26,16 @@ if [[ $(grep -cF trusty /etc/lsb-release) > 0 ]]; then
   sudo apt-get update
 fi
 # grab some standard autotools stuff
-sudo apt-get install autoconf automake libtool make gcc g++ lcov 
+sudo apt-get install autoconf automake libtool make gcc g++ lcov
 # grab curl (for url de/encode) and zmq for the awesomeness
 sudo apt-get install libcurl4-openssl-dev libzmq3-dev libczmq-dev
+```
+
+On MacOS, we assume that you've installed XCode developer tools and
+[Homebrew](https://brew.sh/):
+
+```
+brew install autoconf automake zmq czmq
 ```
 
 ## Build and Install
@@ -343,24 +352,3 @@ Now of course you could implement this all in a client side library, but for the
 ## The Conclusion
 
 This has been a fantastic little experiment to have worked on. Even better it's been successful. I can claim that because it's used in at least one production system. Taking some excellent tools (ZMQ mostly) and building a new tool to help others build yet more tools is a very rewarding experience. If you think you may be interested in building a project/service/tool using this work, let us know! If you find something wrong submit an issue or better yet pull request a fix!
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
