@@ -21,7 +21,8 @@ namespace zmq {
     //wrap it in RAII goodness
     ptr.reset(context,
       [](void* context) {
-        assert(zmq_ctx_term(context) == 0);
+        auto ret = zmq_ctx_term(context);
+        assert(ret == 0);
       });
   }
   context_t::operator void*() {
@@ -37,7 +38,8 @@ namespace zmq {
     //wrap it in RAII goodness
     ptr.reset(message,
       [](zmq_msg_t* message) {
-        assert(zmq_msg_close(message) == 0);
+        auto ret = zmq_msg_close(message);
+        assert(ret == 0);
         delete message;
       });
   }
@@ -50,12 +52,15 @@ namespace zmq {
     //wrap it in RAII goodness
     ptr.reset(message,
       [](zmq_msg_t* message) {
-        assert(zmq_msg_close(message) == 0);
+        auto ret = zmq_msg_close(message);
+        assert(ret == 0);
         delete message;
       });
   }
   void message_t::reset(size_t size) {
-    assert(zmq_msg_close(ptr.get()) == 0);
+    auto ret = zmq_msg_close(ptr.get());
+    assert(ret == 0);
+
     if(zmq_msg_init_size(ptr.get(), size) != 0)
       throw std::runtime_error(zmq_strerror(zmq_errno()));
   }
@@ -95,7 +100,8 @@ namespace zmq {
     //wrap it in RAII goodness
     ptr.reset(socket,
       [](void* socket){
-        assert(zmq_close(socket) == 0);
+        auto ret = zmq_close(socket);
+        assert(ret == 0);
       });
   }
   //set an option on this socket
