@@ -101,7 +101,7 @@ namespace prime_server {
     explicit operator uint64_t() const { return static_cast<uint64_t>(id) | (static_cast<uint64_t>(time_stamp) << 32); }
   };
 
-  class http_response_t;
+  struct http_response_t;
   struct http_request_t : public http_entity_t {
    public:
     method_t method;
@@ -121,6 +121,7 @@ namespace prime_server {
     static http_request_t from_string(const char* start, size_t length);
     static query_t split_path_query(std::string& path);
     std::list<http_request_t> from_stream(const char* start, size_t length, size_t max_size = std::numeric_limits<size_t>::max());
+    using http_entity_t::flush_stream;
     virtual void flush_stream();
     size_t size() const;
     void log(uint32_t id) const;
@@ -157,6 +158,7 @@ namespace prime_server {
     std::list<http_response_t> from_stream(const char* start, size_t length);
     static std::string generic(unsigned code, const std::string& message, const headers_t& headers = headers_t{}, const std::string& body = "",
                                const std::string& version = "HTTP/1.1");
+    using http_entity_t::flush_stream;
     virtual void flush_stream();
 
    protected:
