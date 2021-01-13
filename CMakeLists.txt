@@ -24,6 +24,9 @@ endif()
 # Use a C++11 enabled compiler
 set(CMAKE_CXX_STANDARD 11)
 
+# Show all warnings and treat as errors
+add_compile_options(-Wall -Wextra -pedantic -Werror)
+
 # Handle the dependencies
 pkg_check_modules(CURL REQUIRED libcurl>=7.22.0)
 include_directories(${CURL_INCLUDE_DIR})

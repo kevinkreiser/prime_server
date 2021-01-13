@@ -57,9 +57,9 @@ namespace {
     //busy worker
     std::thread worker(std::bind(&testable_worker_t::work,
       testable_worker_t(context, "ipc:///tmp/test_early_proxy_downstream", "ipc:///dev/null", "ipc:///tmp/test_early_results", "ipc:///tmp/test_early_interrupt",
-      [] (const std::list<zmq::message_t>& job, void*, worker_t::interrupt_function_t&) {
+      [] (const std::list<zmq::message_t>&, void*, worker_t::interrupt_function_t&) {
         while(true);
-        return worker_t::result_t{false, {netstring_entity_t::to_string("i schteck fescht")}};
+        return worker_t::result_t{false, {netstring_entity_t::to_string("i schteck fescht")}, {}};
       })));
     worker.detach();
 
@@ -73,7 +73,7 @@ namespace {
         client->batch_size = 0;
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
-      [](const void* data, size_t size) { return false; }, 1);
+      [](const void*, size_t) { return false; }, 1);
     client->batch();
 
     //wait for job, disconnect, wait for cancel
@@ -103,7 +103,7 @@ namespace {
         client->batch_size = 0;
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
-      [](const void* data, size_t size) { return false; }, 1);
+      [](const void*, size_t) { return false; }, 1);
     client->batch();
 
     //load balancer
@@ -113,13 +113,13 @@ namespace {
     //busy worker
     std::thread worker(std::bind(&worker_t::work,
       worker_t(context, "ipc:///tmp/test_loop_proxy_downstream", "ipc:///dev/null", "ipc:///tmp/test_loop_results", "ipc:///tmp/test_loop_interrupt",
-      [] (const std::list<zmq::message_t>& job, void*, worker_t::interrupt_function_t& interrupt) {
+      [] (const std::list<zmq::message_t>&, void*, worker_t::interrupt_function_t& interrupt) {
         condition.notify_one();
         while(true) {
           try { interrupt(); }
           catch (...) { condition.notify_one(); }
         }
-        return worker_t::result_t{false, {netstring_entity_t::to_string("i schteck fescht")}};
+        return worker_t::result_t{false, {netstring_entity_t::to_string("i schteck fescht")}, {}};
       })));
     worker.detach();
 
@@ -145,7 +145,7 @@ namespace {
     //busy worker
     std::thread worker(std::bind(&worker_t::work,
       worker_t(context, "ipc:///tmp/test_timeout_proxy_downstream", "ipc:///dev/null", "ipc:///tmp/test_timeout_results", "ipc:///tmp/test_timeout_interrupt",
-      [] (const std::list<zmq::message_t>& job, void*, worker_t::interrupt_function_t& interrupt) {
+      [] (const std::list<zmq::message_t>&, void*, worker_t::interrupt_function_t&) {
         while(true);
         return worker_t::result_t{};
       })));

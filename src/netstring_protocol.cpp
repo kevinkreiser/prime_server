@@ -44,7 +44,7 @@ namespace prime_server {
     return std::move(requests.front());
   }
 
-  const zmq::message_t& netstring_entity_t::timeout(netstring_request_info_t& info) {
+  const zmq::message_t& netstring_entity_t::timeout(netstring_request_info_t&) {
     static char TIMEOUT[] = "7:TIMEOUT,";
     static const zmq::message_t t(static_cast<void*>(&TIMEOUT[0]), sizeof(TIMEOUT) - 1, [](void*,void*){});
     return t;

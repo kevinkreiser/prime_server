@@ -35,7 +35,7 @@ int main(int argc, char** argv) {
     [](const std::list<zmq::message_t>& messages, void* request_info, worker_t::interrupt_function_t&){
       auto request = http_request_t::from_string(static_cast<const char*>(messages.front().data()), messages.front().size());
 
-      worker_t::result_t result{false};
+      worker_t::result_t result{false, {}, {}};
       try {
         //TODO: bail if its too large or..
         //make a list of jobs, one for each chunk of a chunked encoding response

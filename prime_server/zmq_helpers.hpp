@@ -21,7 +21,7 @@ namespace zmq {
   };
 
   struct message_t {
-    explicit message_t(void* data, size_t size, void (*free_function)(void*,void*) = [](void* ptr, void* hint){delete[] static_cast<unsigned char*>(ptr);});
+    explicit message_t(void* data, size_t size, void (*free_function)(void*,void*) = [](void* ptr, void* /*hint*/){delete[] static_cast<unsigned char*>(ptr);});
     explicit message_t(size_t size = 0);
     void reset(size_t size = 0);
     operator zmq_msg_t*();

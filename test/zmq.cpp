@@ -7,8 +7,8 @@
 
 namespace {
 
-  std::string readable_string(size_t size) {
-    std::string s(200, ' ');
+  std::string readable_string(size_t size = 200) {
+    std::string s(size, ' ');
     for(size_t i = 0; i < s.size(); ++i)
       s[i] = (i % 95) + 32;
     return s;

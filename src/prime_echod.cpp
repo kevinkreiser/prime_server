@@ -52,7 +52,7 @@ int main(int argc, char** argv) {
     echo_worker_threads.emplace_back(std::bind(&worker_t::work,
       worker_t(context, proxy_endpoint + "_downstream", "ipc:///dev/null", result_endpoint, request_interrupt,
       [] (const std::list<zmq::message_t>& job, void* request_info, worker_t::interrupt_function_t&) {
-        worker_t::result_t result{false};
+        worker_t::result_t result{false, {}, {}};
         try {
           //echo
           http_response_t response(200, "OK", std::string(static_cast<const char*>(job.front().data()), job.front().size()));

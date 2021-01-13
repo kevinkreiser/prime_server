@@ -17,7 +17,7 @@ using namespace prime_server;
 std::string root = "./";
 
 worker_t::result_t disk_work(const std::list<zmq::message_t>& job, void* request_info, worker_t::interrupt_function_t&) {
-  worker_t::result_t result{false};
+  worker_t::result_t result{false, {}, {}};
   try {
     //check the disk
     auto request = http_request_t::from_string(static_cast<const char*>(job.front().data()), job.front().size());
@@ -70,7 +70,7 @@ int main(int argc, char** argv) {
   file_worker.detach();
 
   //listen for SIGINT and terminate if we hear it
-  std::signal(SIGINT, [](int s){ std::this_thread::sleep_for(std::chrono::seconds(1)); exit(1); });
+  std::signal(SIGINT, [](int){ std::this_thread::sleep_for(std::chrono::seconds(1)); exit(1); });
   server.join();
 
 

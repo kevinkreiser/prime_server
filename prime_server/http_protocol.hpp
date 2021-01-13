@@ -68,12 +68,12 @@ namespace prime_server {
     headers_t headers;
     std::string body;
     http_entity_t(const std::string& version, const headers_t& headers, const std::string& body);
-
     virtual ~http_entity_t();
     virtual std::string to_string() const = 0;
+
    protected:
     enum state_t { METHOD, MESSAGE, CODE, PATH, VERSION, HEADERS, BODY, CHUNK_LENGTH, CHUNK, TRAILER };
-    virtual void flush_stream(const state_t state);
+    void flush_stream(const state_t state);
 
     //state for streaming parsing
     const char *cursor, *end, *delimiter;
@@ -101,7 +101,7 @@ namespace prime_server {
     explicit operator uint64_t() const { return static_cast<uint64_t>(id) | (static_cast<uint64_t>(time_stamp) << 32); }
   };
 
-  class http_response_t;
+  struct http_response_t;
   struct http_request_t : public http_entity_t {
    public:
     method_t method;
@@ -114,14 +114,14 @@ namespace prime_server {
                    const headers_t& headers = headers_t{}, const std::string& version = "HTTP/1.1");
 
     http_request_info_t to_info(uint32_t id) const;
-    virtual std::string to_string() const;
+    void flush_stream();
+    virtual std::string to_string() const override;
     static std::string to_string(const method_t& method, const std::string& path, const std::string& body = "", const query_t& query = query_t{},
                                  const headers_t& headers = headers_t{}, const std::string& version = "HTTP/1.1");
     static const zmq::message_t& timeout(http_request_info_t& info);
     static http_request_t from_string(const char* start, size_t length);
     static query_t split_path_query(std::string& path);
     std::list<http_request_t> from_stream(const char* start, size_t length, size_t max_size = std::numeric_limits<size_t>::max());
-    virtual void flush_stream();
     size_t size() const;
     void log(uint32_t id) const;
 
@@ -152,13 +152,12 @@ namespace prime_server {
     http_response_t(unsigned code, const std::string& message, const std::string& body = "", const headers_t& headers = headers_t{},
                     const std::string& version = "HTTP/1.1");
     void from_info(http_request_info_t& info);
-    virtual std::string to_string() const;
+    void flush_stream();
+    virtual std::string to_string() const override;
     static http_response_t from_string(const char* start, size_t length);
     std::list<http_response_t> from_stream(const char* start, size_t length);
     static std::string generic(unsigned code, const std::string& message, const headers_t& headers = headers_t{}, const std::string& body = "",
                                const std::string& version = "HTTP/1.1");
-    virtual void flush_stream();
-
    protected:
     std::string log_line;
   };

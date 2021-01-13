@@ -307,7 +307,7 @@ namespace {
         response.from_info(*static_cast<http_request_info_t*>(request_info));
 
         //send it back
-        worker_t::result_t result{false};
+        worker_t::result_t result{false, {}, {}};
         result.messages.emplace_back(response.to_string());
         return result;
       }

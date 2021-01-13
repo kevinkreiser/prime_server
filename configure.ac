@@ -4,7 +4,7 @@ AC_INIT([prime_server],
 	[prime_server-[m4_esyscmd([./version.sh])]],
 	[https://github.com/kevinkreiser/prime_server])
 AC_CONFIG_AUX_DIR([.])
-AM_INIT_AUTOMAKE([subdir-objects parallel-tests])
+AM_INIT_AUTOMAKE([-Wall -Werror subdir-objects parallel-tests])
 LT_INIT
 AC_SUBST([LIBTOOL_DEPS])
 
