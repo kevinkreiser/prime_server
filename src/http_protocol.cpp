@@ -31,14 +31,33 @@ namespace {
     return decoded_str;
   }
 
-  const headers_t::value_type CORS{"Access-Control-Allow-Origin", "*"};
-  const http_request_t::request_exception_t RESPONSE_400(http_response_t(400, "Bad Request", "Malformed HTTP request", {CORS}));
-  const http_request_t::request_exception_t RESPONSE_413(http_response_t(413, "Request Entity Too Large", "The HTTP request was too large", {CORS}));
-  const http_request_t::request_exception_t RESPONSE_500(http_response_t(500, "Internal Server Error", "The server encountered an unexpected condition which prevented it from fulfilling the request", {CORS}));
-  const http_request_t::request_exception_t RESPONSE_501(http_response_t(501, "Not Implemented", "The HTTP request method is not supported", {CORS}));
-  const http_request_t::request_exception_t RESPONSE_504(http_response_t(504, "Gateway Time-out", "The server didn't respond in time", {CORS}));
-  const http_request_t::request_exception_t RESPONSE_505(http_response_t(505, "HTTP Version Not Supported", "The HTTP request version is not supported", {CORS}));
-
+  const headers_t::value_type& CORS() {
+    static headers_t::value_type cors{"Access-Control-Allow-Origin", "*"};
+    return cors;
+  }
+  const http_request_t::request_exception_t RESPONSE_400(http_response_t(400, "Bad Request", "Malformed HTTP request", {CORS()}));
+  const http_request_t::request_exception_t RESPONSE_413(http_response_t(413, "Request Entity Too Large", "The HTTP request was too large", {CORS()}));
+  const http_request_t::request_exception_t RESPONSE_500(http_response_t(500, "Internal Server Error", "The server encountered an unexpected condition which prevented it from fulfilling the request", {CORS()}));
+  const http_request_t::request_exception_t RESPONSE_501(http_response_t(501, "Not Implemented", "The HTTP request method is not supported", {CORS()}));
+  const http_request_t::request_exception_t RESPONSE_504(http_response_t(504, "Gateway Time-out", "The server didn't respond in time", {CORS()}));
+  const http_request_t::request_exception_t RESPONSE_505(http_response_t(505, "HTTP Version Not Supported", "The HTTP request version is not supported", {CORS()}));
+  
+  const std::unordered_map<std::string, method_t>& STRING_TO_METHOD() {
+    static std::unordered_map<std::string, method_t> methods{ {"OPTIONS", method_t::OPTIONS}, {"GET", method_t::GET},
+    {"HEAD", method_t::HEAD}, {"POST", method_t::POST}, {"PUT", method_t::PUT}, {"DELETE", method_t::DELETE},
+    {"TRACE", method_t::TRACE}, {"CONNECT", method_t::CONNECT} };
+    return methods;
+  }
+  const std::unordered_map<method_t, std::string, std::hash<int> >& METHOD_TO_STRING() {
+    static std::unordered_map<method_t, std::string, std::hash<int> > methods{ {method_t::OPTIONS, "OPTIONS"},
+    {method_t::GET, "GET"}, {method_t::HEAD, "HEAD"}, {method_t::POST, "POST"}, {method_t::PUT, "PUT"},
+    {method_t::DELETE, "DELETE"}, {method_t::TRACE, "TRACE"}, {method_t::CONNECT, "CONNECT"} };
+    return methods;
+  }
+  const std::unordered_map<std::string, bool>& SUPPORTED_VERSIONS() {
+    static std::unordered_map<std::string, bool> versions { {"HTTP/1.0", true}, {"HTTP/1.1", true} };
+    return versions;
+  }
   template <class T>
   size_t name_max(const std::unordered_map<std::string, T>& methods) {
     size_t i = 0;
@@ -46,8 +65,8 @@ namespace {
       i = std::max(i, kv.first.size());
     return i;
   };
-  const size_t METHOD_MAX_SIZE = name_max(prime_server::STRING_TO_METHOD) + 1;
-  const size_t VERSION_MAX_SIZE = name_max(prime_server::SUPPORTED_VERSIONS) + 2;
+  const size_t METHOD_MAX_SIZE = name_max(STRING_TO_METHOD()) + 1;
+  const size_t VERSION_MAX_SIZE = name_max(SUPPORTED_VERSIONS()) + 2;
 }
 
 namespace prime_server {
@@ -258,8 +277,8 @@ namespace prime_server {
   std::string http_request_t::to_string(const method_t& method, const std::string& path, const std::string& body, const query_t& query,
                                const headers_t& headers, const std::string& version) {
     //get the method on there
-    auto itr = METHOD_TO_STRING.find(method);
-    if(itr == METHOD_TO_STRING.end())
+    auto itr = METHOD_TO_STRING().find(method);
+    if(itr == METHOD_TO_STRING().end())
       throw std::runtime_error("Unsupported http request method");
     std::string request;
     request.reserve(16 + path.size() + headers.size() * 32 + body.size());
@@ -399,8 +418,8 @@ namespace prime_server {
         case CODE:
           throw RESPONSE_500;
         case METHOD: {
-          auto itr = STRING_TO_METHOD.find(partial_buffer);
-          if(itr == STRING_TO_METHOD.end())
+          auto itr = STRING_TO_METHOD().find(partial_buffer);
+          if(itr == STRING_TO_METHOD().end())
             throw RESPONSE_501;
           log_line = partial_buffer + delimiter;
           method = itr->second;
@@ -415,8 +434,8 @@ namespace prime_server {
           break;
         }
         case VERSION: {
-          auto itr = SUPPORTED_VERSIONS.find(partial_buffer);
-          if(itr == SUPPORTED_VERSIONS.end())
+          auto itr = SUPPORTED_VERSIONS().find(partial_buffer);
+          if(itr == SUPPORTED_VERSIONS().end())
             throw RESPONSE_505;
           log_line += partial_buffer;
           version.swap(partial_buffer);
@@ -599,7 +618,7 @@ namespace prime_server {
           break;
         }
         case VERSION: {
-          if(SUPPORTED_VERSIONS.find(partial_buffer) == SUPPORTED_VERSIONS.end())
+          if(SUPPORTED_VERSIONS().find(partial_buffer) == SUPPORTED_VERSIONS().end())
             throw std::runtime_error("Unknown http version");
           //log_line += partial_buffer;
           version.swap(partial_buffer);
