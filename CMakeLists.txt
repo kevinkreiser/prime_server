@@ -25,7 +25,11 @@ endif()
 set(CMAKE_CXX_STANDARD 11)
 
 # Show all warnings and treat as errors
-add_compile_options(-Wall -Wextra -pedantic -Werror)
+if(MSVC)
+  add_compile_options(/W4 /WX)
+else()
+  add_compile_options(-Wall -Wextra -pedantic -Werror)
+endif()
 
 # Handle the dependencies
 pkg_check_modules(CURL REQUIRED libcurl>=7.22.0)
