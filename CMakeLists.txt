@@ -33,13 +33,13 @@ endif()
 
 # Handle the dependencies
 pkg_check_modules(CURL REQUIRED libcurl>=7.22.0)
-include_directories(${CURL_INCLUDE_DIR})
+include_directories(${CURL_INCLUDEDIR})
 
 pkg_check_modules(ZMQ REQUIRED libzmq>=4.1.4)
-include_directories(${ZMQ_INCLUDE_DIR})
+include_directories(${ZMQ_INCLUDEDIR})
 
 pkg_check_modules(CZMQ REQUIRED libczmq>=3.0)
-include_directories(${CZMQ_INCLUDE_DIR})
+include_directories(${CZMQ_INCLUDEDIR})
 
 find_package (Threads REQUIRED)
 
@@ -64,9 +64,11 @@ set(PRIME_LIBRARY_SOURCES
 # Build the library
 add_library(prime_server SHARED ${PRIME_LIBRARY_SOURCES})
 target_link_libraries(prime_server
-	${ZMQ_LIBRARIES}
-	${CZMQ_LIBRARIES}
-	${CURL_LIBRARIES})
+  PUBLIC
+    ${ZMQ_LDFLAGS}
+  PRIVATE
+    ${CZMQ_LDFLAGS}
+    ${CURL_LDFLAGS})
 
 # Build executables
 add_executable(prime_echod ${CMAKE_SOURCE_DIR}/src/prime_echod.cpp)
@@ -136,4 +138,3 @@ add_test(shaping shaping)
 add_executable(zmq ${CMAKE_SOURCE_DIR}/test/zmq.cpp)
 target_link_libraries(zmq prime_server ${CMAKE_THREAD_LIBS_INIT})
 add_test(zmq zmq)
-
