@@ -17,7 +17,7 @@ jobs:
       - name: build
         shell: bash
         run: |
-          cmake . && make all -j$(sysctl -n hw.ncpu)
+          cmake . -DCMAKE_OSX_SYSROOT="/Library/Developer/CommandLineTools/SDKs/MacOSX10.14.sdk" && make all -j$(sysctl -n hw.ncpu)
       - name: test
         shell: bash
         run: |
