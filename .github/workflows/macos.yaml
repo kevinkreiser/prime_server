@@ -1,0 +1,24 @@
+name: prime_server macos
+on: [pull_request]
+
+jobs:
+  build:
+    name: build and test
+    runs-on: macos-11.0
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: dependencies
+        shell: bash
+        run: |
+          brew update
+          brew install zeromq czmq
+      - name: build
+        shell: bash
+        run: |
+          cmake . && make all -j$(sysctl -n hw.ncpu)
+      - name: test
+        shell: bash
+        run: |
+          make test -j$(sysctl -n hw.ncpu)
