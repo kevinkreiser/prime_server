@@ -43,7 +43,7 @@ namespace prime_server {
     }
 
     worker_t::result_t disk_result(const http_request_t& request, http_request_info_t& request_info, const std::string& root, bool allow_listing, size_t size_limit) {
-      worker_t::result_t result{false};
+      worker_t::result_t result{false, {}, {}};
       //get the canonical path
       auto path = request.path;
       for(size_t p = path.size(), i = path.find('.', 0); i != std::string::npos; p = i, i = path.find('.', i + 1))

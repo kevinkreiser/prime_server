@@ -63,6 +63,8 @@ coverage/
 .cproject
 .project
 .settings
+.idea/
+cmake-build-debug/
 
 # CMake out-of-source build directories
 build/

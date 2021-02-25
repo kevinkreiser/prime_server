@@ -45,7 +45,7 @@ namespace {
     for(const auto& kv : methods)
       i = std::max(i, kv.first.size());
     return i;
-  };
+  }
   const size_t METHOD_MAX_SIZE = name_max(prime_server::STRING_TO_METHOD) + 1;
   const size_t VERSION_MAX_SIZE = name_max(prime_server::SUPPORTED_VERSIONS) + 2;
 }
@@ -228,7 +228,7 @@ namespace prime_server {
     body.clear();
   }
 
-  http_request_t::~http_request_t(){};
+  http_request_t::~http_request_t(){}
 
   http_request_t::http_request_t():http_entity_t("", headers_t{}, ""){
     path = "";
@@ -247,7 +247,9 @@ namespace prime_server {
       static_cast<uint32_t>(difftime(time(nullptr), 0) + .5),
       static_cast<uint16_t>(version == "HTTP/1.0" ? 0 : 1),
       static_cast<uint16_t>(connection_header != headers.end() && connection_header->second == "Keep-Alive"),
-      static_cast<uint16_t>(connection_header != headers.end() && connection_header->second == "Close")
+      static_cast<uint16_t>(connection_header != headers.end() && connection_header->second == "Close"),
+      0,
+      0
     };
   }
 
@@ -537,7 +539,7 @@ namespace prime_server {
     logging::log(line);
   }
 
-  http_response_t::~http_response_t(){};
+  http_response_t::~http_response_t(){}
 
   http_response_t::http_response_t():http_entity_t("", headers_t{}, ""){
     message = "";

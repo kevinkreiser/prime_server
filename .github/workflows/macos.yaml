@@ -1,0 +1,25 @@
+name: prime_server macos
+on: [pull_request]
+
+jobs:
+  build:
+    name: build and test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: dependencies
+        shell: bash
+        run: |
+          brew update
+          brew install pkg-config zeromq czmq
+      - name: build
+        shell: bash
+        run: |
+          xcrun --show-sdk-path
+          cmake . -DCMAKE_OSX_SYSROOT="/Library/Developer/CommandLineTools/SDKs/MacOSX10.15.sdk" && make all -j$(sysctl -n hw.ncpu)
+      - name: test
+        shell: bash
+        run: |
+          make test -j$(sysctl -n hw.ncpu)

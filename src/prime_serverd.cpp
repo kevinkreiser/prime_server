@@ -55,7 +55,7 @@ int main(int argc, char** argv) {
   for(size_t i = 0; i < worker_concurrency; ++i) {
     parse_worker_threads.emplace_back(std::bind(&worker_t::work,
       worker_t(context, parse_proxy_endpoint + "_downstream", compute_proxy_endpoint + "_upstream", result_endpoint, request_interrupt,
-      [] (const std::list<zmq::message_t>& job, void* request_info, worker_t::interrupt_function_t& interrupt) {
+      [] (const std::list<zmq::message_t>& job, void* request_info, worker_t::interrupt_function_t&) {
         //request should look like
         ///is_prime?possible_prime=SOME_NUMBER
         try{
@@ -83,12 +83,12 @@ int main(int argc, char** argv) {
             throw std::runtime_error("Only GET and POST requests supported");
           }
 
-          worker_t::result_t result{true};
+          worker_t::result_t result{true, {}, {}};
           result.messages.emplace_back(static_cast<const char*>(static_cast<const void*>(&possible_prime)), sizeof(size_t));
           return result;
         }
         catch(const std::exception& e) {
-          worker_t::result_t result{false};
+          worker_t::result_t result{false, {}, {}};
           http_response_t response(400, "Bad Request", e.what());
           response.from_info(*static_cast<http_request_info_t*>(request_info));
           result.messages.emplace_back(response.to_string());
@@ -125,7 +125,7 @@ int main(int argc, char** argv) {
           prime = 2;
         http_response_t response(200, "OK", std::to_string(prime));
         response.from_info(*static_cast<http_request_info_t*>(request_info));
-        worker_t::result_t result{false};
+        worker_t::result_t result{false, {}, {}};
         result.messages.emplace_back(response.to_string());
         return result;
       }

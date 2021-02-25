@@ -1,0 +1,26 @@
+name: prime_server linux
+on: [pull_request]
+
+jobs:
+  build:
+    name: build and test
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y -qq make cmake gcc g++ libcurl4-openssl-dev libzmq3-dev libczmq-dev
+      - name: build
+        shell: bash
+        run: |
+          export LD_LIBRARY_PATH=.:$(cat /etc/ld.so.conf.d/* | grep -vF "#" | tr "\\n" ":" | sed -e "s/:$//g")
+          cmake . && make all -j$(nproc)
+      - name: test
+        shell: bash
+        run: |
+          export LD_LIBRARY_PATH=.:$(cat /etc/ld.so.conf.d/* | grep -vF "#" | tr "\\n" ":" | sed -e "s/:$//g")
+          make test -j$(nproc)
