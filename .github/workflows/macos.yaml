@@ -13,11 +13,10 @@ jobs:
         shell: bash
         run: |
           brew update
-          brew install zeromq czmq
+          brew install pkg-config zeromq czmq
       - name: build
         shell: bash
         run: |
-          sudo xcode-select -s /Library/Developer/CommandLineTools
           cmake . && make all -j$(sysctl -n hw.ncpu)
       - name: test
         shell: bash
