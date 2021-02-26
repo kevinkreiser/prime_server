@@ -159,10 +159,12 @@ void test_parallel_clients() {
   // server
   std::thread server(
       std::bind(&netstring_server_t::serve,
-                netstring_server_t(context, "ipc:///tmp/test_netstring_server",
-                                   "ipc:///tmp/test_netstring_proxy_upstream",
-                                   "ipc:///tmp/test_netstring_results",
-                                   "ipc:///tmp/test_netstring_interrupt", false, MAX_REQUEST_SIZE)));
+                netstring_server_t(
+                    context, "ipc:///tmp/test_netstring_server",
+                    "ipc:///tmp/test_netstring_proxy_upstream", "ipc:///tmp/test_netstring_results",
+                    "ipc:///tmp/test_netstring_interrupt", false, MAX_REQUEST_SIZE, -1,
+                    [](const netstring_entity_t& r) -> bool { return r.body == "health_check"; },
+                    netstring_entity_t::to_string("foo_bar_baz"))));
   server.detach();
 
   // load balancer for parsing
@@ -193,7 +195,7 @@ void test_parallel_clients() {
   std::thread client2(std::bind(&netstring_client_work, std::ref(context)));
   client1.join();
   client2.join();
-}
+} // namespace
 
 void test_malformed() {
   zmq::context_t context;
@@ -263,6 +265,26 @@ void test_large_request() {
   client.batch();
 }
 
+void test_health_check() {
+  zmq::context_t context;
+  auto request = netstring_entity_t::to_string("health_check");
+  netstring_client_t client(
+      context, "ipc:///tmp/test_netstring_server",
+      [&request]() {
+        return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
+      },
+      [](const void* data, size_t size) {
+        auto response = netstring_entity_t::from_string(static_cast<const char*>(data), size);
+        if (response.body != "foo_bar_baz")
+          throw std::runtime_error("Expected foo_bar_baz response!");
+        return false;
+      },
+      1);
+  client.batch();
+
+  // TODO: check that you're disconnected
+}
+
 } // namespace
 
 int main() {
@@ -285,6 +307,8 @@ int main() {
   suite.test(TEST_CASE(test_too_large));
 
   suite.test(TEST_CASE(test_large_request));
+
+  suite.test(TEST_CASE(test_health_check));
 
   return suite.tear_down();
 }

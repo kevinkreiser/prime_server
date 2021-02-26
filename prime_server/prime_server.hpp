@@ -60,8 +60,11 @@ constexpr uint32_t DEFAULT_REQUEST_TIMEOUT = -1;              // infinity second
 // TODO: bundle both request_containter_t (req, rep) and request_info_t into
 // a single session_t that implements all the guts of the protocol
 
+// TODO: make configuration objects to use as parameter packs because these constructors are large
+
 // server sits between a clients and a load balanced backend
-template <class request_container_t, class request_info_t> class server_t {
+template <class request_container_t, class request_info_t>
+class server_t {
 public:
   server_t(zmq::context_t& context,
            const std::string& client_endpoint,
@@ -70,7 +73,9 @@ public:
            const std::string& interrupt_endpoint,
            bool log = false,
            size_t max_request_size = DEFAULT_MAX_REQUEST_SIZE,
-           uint32_t request_timeout = DEFAULT_REQUEST_TIMEOUT);
+           uint32_t request_timeout = DEFAULT_REQUEST_TIMEOUT,
+           const std::function<bool(const request_container_t&)>& health_check_matcher = {},
+           const std::string& health_check_response = {});
   virtual ~server_t();
   void serve();
 
@@ -115,6 +120,10 @@ protected:
   std::unordered_map<uint64_t, zmq::message_t> requests;
   // order list of requests
   std::list<request_info_t> request_history;
+  // a matcher for determining whether a request is a health check or not
+  std::function<bool(const request_container_t&)> health_check_matcher;
+  // the response bytes to send when a health check request is received
+  zmq::message_t health_check_response;
 };
 
 // proxy messages between layers of a backend load balancing in between

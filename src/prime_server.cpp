@@ -87,17 +87,21 @@ void client_t::batch() {
 }
 
 template <class request_container_t, class request_info_t>
-server_t<request_container_t, request_info_t>::server_t(zmq::context_t& context,
-                                                        const std::string& client_endpoint,
-                                                        const std::string& proxy_endpoint,
-                                                        const std::string& result_endpoint,
-                                                        const std::string& interrupt_endpoint,
-                                                        bool log,
-                                                        size_t max_request_size,
-                                                        uint32_t request_timeout)
+server_t<request_container_t, request_info_t>::server_t(
+    zmq::context_t& context,
+    const std::string& client_endpoint,
+    const std::string& proxy_endpoint,
+    const std::string& result_endpoint,
+    const std::string& interrupt_endpoint,
+    bool log,
+    size_t max_request_size,
+    uint32_t request_timeout,
+    const std::function<bool(const request_container_t&)>& health_check_matcher,
+    const std::string& health_check_response)
     : client(context, ZMQ_STREAM), proxy(context, ZMQ_DEALER), loopback(context, ZMQ_SUB),
       interrupt(context, ZMQ_PUB), log(log), max_request_size(max_request_size),
-      request_timeout(request_timeout), request_id(0) {
+      request_timeout(request_timeout), request_id(0), health_check_matcher(health_check_matcher),
+      health_check_response(health_check_response.size(), health_check_response.data()) {
 
   int disabled = 0;
   client.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
@@ -263,18 +267,28 @@ bool server_t<request_container_t, request_info_t>::enqueue(const zmq::message_t
   for (const auto& parsed_request : parsed_requests) {
     // figure out if we are expecting to close this request or not
     auto info = parsed_request.to_info(request_id++);
-    // send on the request
-    if (!proxy.send(static_cast<const void*>(&info), sizeof(info), ZMQ_DONTWAIT | ZMQ_SNDMORE) ||
-        !proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT)) {
+
+    // if its enabled, see if its a health check
+    bool health_check = health_check_matcher && health_check_matcher(parsed_request);
+
+    // send on the request if its not a health check
+    if (!health_check &&
+        (!proxy.send(static_cast<const void*>(&info), sizeof(info), ZMQ_DONTWAIT | ZMQ_SNDMORE) ||
+         !proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT))) {
       logging::ERROR("Server failed to enqueue request");
       return false;
     }
     if (log)
       parsed_request.log(info.id);
+
     // remember we are working on it
     request.enqueued.emplace_back(static_cast<typename decltype(requests)::key_type>(info));
     requests.emplace(request.enqueued.back(), requester);
     request_history.emplace_back(std::move(info));
+
+    // if it was a health check we reply immediately
+    if (health_check)
+      dequeue(request_history.back(), health_check_response);
   }
   return true;
 }

@@ -25,11 +25,10 @@ struct message_t {
   explicit message_t(
       void* data,
       size_t size,
-      void (*free_function)(void*, void*) = [](void* ptr, void* /*hint*/) {
-        delete[] static_cast<unsigned char*>(ptr);
+      void (*free_function)(void*, void*) = [](void* p, void*) {
+        delete[] static_cast<unsigned char*>(p);
       });
-  explicit message_t(size_t size = 0);
-  void reset(size_t size = 0);
+  explicit message_t(size_t size = 0, const void* data = nullptr);
   operator zmq_msg_t*();
   void* data();
   const void* data() const;
@@ -59,9 +58,11 @@ struct socket_t {
   // send some bytes
   bool send(const void* bytes, size_t count, int flags);
   // send a single message
-  template <class container_t> bool send(const container_t& message, int flags);
+  template <class container_t>
+  bool send(const container_t& message, int flags);
   // send all the messages over this socket
-  template <class container_t> size_t send_all(const std::list<container_t>& messages, int flags);
+  template <class container_t>
+  size_t send_all(const std::list<container_t>& messages, int flags);
   // for polling
   operator void*();
 
@@ -112,7 +113,8 @@ uint16_t random_port();
 } // namespace zmq
 
 namespace std {
-template <> struct hash<zmq::message_t> {
+template <>
+struct hash<zmq::message_t> {
   size_t operator()(const zmq::message_t& m) const noexcept;
 };
 } // namespace std
