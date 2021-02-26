@@ -66,6 +66,8 @@ constexpr uint32_t DEFAULT_REQUEST_TIMEOUT = -1;              // infinity second
 template <class request_container_t, class request_info_t>
 class server_t {
 public:
+  using health_check_matcher_t = std::function<bool(const request_container_t&)>;
+
   server_t(zmq::context_t& context,
            const std::string& client_endpoint,
            const std::string& proxy_endpoint,
@@ -74,7 +76,7 @@ public:
            bool log = false,
            size_t max_request_size = DEFAULT_MAX_REQUEST_SIZE,
            uint32_t request_timeout = DEFAULT_REQUEST_TIMEOUT,
-           const std::function<bool(const request_container_t&)>& health_check_matcher = {},
+           const health_check_matcher_t& health_check_matcher = {},
            const std::string& health_check_response = {});
   virtual ~server_t();
   void serve();

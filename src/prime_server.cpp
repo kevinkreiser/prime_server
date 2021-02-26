@@ -96,7 +96,7 @@ server_t<request_container_t, request_info_t>::server_t(
     bool log,
     size_t max_request_size,
     uint32_t request_timeout,
-    const std::function<bool(const request_container_t&)>& health_check_matcher,
+    const health_check_matcher_t& health_check_matcher,
     const std::string& health_check_response)
     : client(context, ZMQ_STREAM), proxy(context, ZMQ_DEALER), loopback(context, ZMQ_SUB),
       interrupt(context, ZMQ_PUB), log(log), max_request_size(max_request_size),

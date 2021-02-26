@@ -195,7 +195,7 @@ void test_parallel_clients() {
   std::thread client2(std::bind(&netstring_client_work, std::ref(context)));
   client1.join();
   client2.join();
-} // namespace
+}
 
 void test_malformed() {
   zmq::context_t context;
