@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
       request_timeout_seconds = std::stoul(argv[7]);
   } catch (...) {}
 
-  // default to no health check, if you want it, it looks like:
+  // default to no health check, if one is provided its just the path and the canned response is OK
   http_server_t::health_check_matcher_t health_check_matcher{};
   std::string health_check_response;
   if (argc > 8) {
