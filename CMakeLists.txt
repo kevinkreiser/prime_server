@@ -50,11 +50,11 @@ set(PRIME_LIBRARY_HEADERS
 	${CMAKE_SOURCE_DIR}/prime_server/prime_server.hpp
 	${CMAKE_SOURCE_DIR}/prime_server/http_util.hpp
 	${CMAKE_SOURCE_DIR}/prime_server/netstring_protocol.hpp
-	${CMAKE_SOURCE_DIR}/prime_server/logging.hpp
 	${CMAKE_SOURCE_DIR}/prime_server/zmq_helpers.hpp
 	${CMAKE_SOURCE_DIR}/prime_server/http_protocol.hpp)
 
 set(PRIME_LIBRARY_SOURCES
+  ${CMAKE_SOURCE_DIR}/src/logging.hpp
 	${CMAKE_SOURCE_DIR}/src/http_protocol.cpp
 	${CMAKE_SOURCE_DIR}/src/http_util.cpp
 	${CMAKE_SOURCE_DIR}/src/netstring_protocol.cpp
