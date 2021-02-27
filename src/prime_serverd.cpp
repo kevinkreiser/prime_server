@@ -36,6 +36,9 @@ int main(int argc, char** argv) {
   if (argc > 2)
     worker_concurrency = std::stoul(argv[2]);
 
+  // setup the signal handler to gracefully shutdown when requested with sigterm
+  quiescable::get(30, 1).enable();
+
   // change these to tcp://known.ip.address.with:port if you want to do this across machines
   zmq::context_t context;
   std::string result_endpoint = "ipc:///tmp/result_endpoint";

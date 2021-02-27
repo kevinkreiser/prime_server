@@ -73,8 +73,6 @@ int main(int argc, char** argv) {
                     return result;
                   });
 
-  // TODO: catch SIGINT for graceful shutdown
   worker.work();
-
   return EXIT_SUCCESS;
 }

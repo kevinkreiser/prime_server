@@ -4,8 +4,6 @@
 #include "prime_server.hpp"
 #include "zmq_helpers.hpp"
 
-#include <chrono>
-#include <csignal>
 #include <exception>
 #include <functional>
 #include <list>
@@ -59,6 +57,9 @@ int main(int argc, char** argv) {
     health_check_response = http_response_t{200, "OK"}.to_string();
   }
 
+  // setup the signal handler to gracefully shutdown when requested with sigterm
+  quiescable::get(30, 1).enable();
+
   // change these to tcp://known.ip.address.with:port if you want to do this across machines
   zmq::context_t context;
   std::string result_endpoint = "ipc://result_endpoint";
@@ -85,12 +86,7 @@ int main(int argc, char** argv) {
                                                     std::placeholders::_2, std::placeholders::_3))));
   file_worker.detach();
 
-  // listen for SIGINT and terminate if we hear it
-  std::signal(SIGINT, [](int) {
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    exit(1);
-  });
+  // serve forever (or until a signal shuts us down)
   server.join();
-
   return 0;
 }

@@ -1,6 +1,10 @@
+#include <atomic>
+#include <chrono>
+#include <csignal>
 #include <deque>
 #include <queue>
 #include <stdexcept>
+#include <unistd.h>
 #include <unordered_set>
 
 #include "http_protocol.hpp"
@@ -83,7 +87,7 @@ void client_t::batch() {
         break;
     }
     // keep going while we expect more results
-  } while (more);
+  } while (more && !quiescable::get().shutting_down());
 }
 
 template <class request_container_t, class request_info_t>
@@ -131,7 +135,7 @@ server_t<request_container_t, request_info_t>::~server_t() {
 template <class request_container_t, class request_info_t>
 void server_t<request_container_t, request_info_t>::serve() {
   int poll_timeout = request_timeout * 1000;
-  while (true) {
+  while (!quiescable::get().shutting_down()) {
     // check for activity on the client socket and the result socket
     // TODO: set a timeout based on session inactivity timeout or request timeout
     zmq::pollitem_t items[] = {{loopback, 0, ZMQ_POLLIN, 0}, {client, 0, ZMQ_POLLIN, 0}};
@@ -348,7 +352,7 @@ int proxy_t::expire() {
 }
 void proxy_t::forward() {
   // keep forwarding messages
-  while (true) {
+  while (!quiescable::get().shutting_down()) {
     // check for activity on either of the sockets, but if we have no workers just let requests sit on
     // the upstream socket
     zmq::pollitem_t items[] = {{downstream, 0, ZMQ_POLLIN, 0}, {upstream, 0, ZMQ_POLLIN, 0}};
@@ -452,7 +456,7 @@ void worker_t::work() {
   interrupt_function_t bail = std::bind(&worker_t::handle_interrupt, this, false);
 
   // keep forwarding messages
-  while (true) {
+  while (!quiescable::get().shutting_down()) {
     // check for activity on the in bound socket, timeout after heart_beat interval
     zmq::pollitem_t items[] = {{upstream_proxy, 0, ZMQ_POLLIN, 0}, {interrupt, 0, ZMQ_POLLIN, 0}};
     zmq::poll(items, 2, heart_beat_interval);
@@ -549,6 +553,30 @@ void worker_t::handle_interrupt(bool force_check) {
   // either we just got more or we need to check the backlog
   if ((force_check || messages.size()) && interrupts.find(job) != interrupts.cend())
     throw interrupt_t(job & 0xFFFFFFFF);
+}
+
+// this implementation is somewhat regrettable. the thing about signal handlers is that they must be
+// function pointers. because of that we cant use a lambda with a capture or an std::function,
+// basically anything that carries actual state. to get around it we make a static handler function
+// that relies on getting the singleton to handle the signal and have access to the configured values
+const quiescable& quiescable::get(unsigned int drain_seconds, unsigned int shutdown_seconds) {
+  static quiescable instance(drain_seconds, shutdown_seconds);
+  return instance;
+}
+void quiescable::enable() const {
+  std::signal(SIGTERM, quiescable::handler);
+}
+quiescable::quiescable(unsigned int drain_seconds, unsigned int shutdown_seconds)
+    : drain_seconds(drain_seconds), shutdown_seconds(shutdown_seconds), drain(false),
+      shutdown(false) {
+}
+void quiescable::handler(int) {
+  auto& instance = const_cast<quiescable&>(get());
+  instance.drain = true;
+  sleep(instance.drain_seconds);
+  instance.shutdown = true;
+  sleep(instance.shutdown_seconds);
+  exit(0);
 }
 
 // explicit instantiation for netstring and http

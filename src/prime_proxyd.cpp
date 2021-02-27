@@ -20,6 +20,9 @@ int main(int argc, char** argv) {
   if (downstream_endpoint.find("://") != 3)
     logging::ERROR("bad downstream endpoint");
 
+  // setup the signal handler to gracefully shutdown when requested with sigterm
+  quiescable::get(30, 1).enable();
+
   // start it up
   zmq::context_t context;
   proxy_t proxy(context, upstream_endpoint, downstream_endpoint);

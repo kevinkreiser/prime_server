@@ -55,6 +55,9 @@ int main(int argc, char** argv) {
     health_check_response = http_response_t{200, "OK"}.to_string();
   }
 
+  // setup the signal handler to gracefully shutdown when requested with sigterm
+  quiescable::get(30, 1).enable();
+
   // start it up
   zmq::context_t context;
   http_server_t server(context, server_endpoint, proxy_endpoint, server_result_loopback,
