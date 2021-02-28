@@ -1,6 +1,7 @@
 #include "http_protocol.hpp"
 #include "http_util.hpp"
-#include "logging.hpp"
+#include "logging/logging.hpp"
+#include "prime_helpers.hpp"
 #include "prime_server.hpp"
 #include "zmq_helpers.hpp"
 
@@ -48,17 +49,21 @@ int main(int argc, char** argv) {
   if (argc > 2)
     root = argv[2];
 
+  // setup the signal handler to gracefully shutdown when requested with sigterm
+  if (argc > 3) {
+    unsigned int drain_seconds, shutdown_seconds;
+    std::tie(drain_seconds, shutdown_seconds) = parse_quiesce_config(argv[3]);
+    quiescable::get(drain_seconds, shutdown_seconds).enable();
+  }
+
   // default to no health check, if one is provided its just the path and the canned response is OK
   http_server_t::health_check_matcher_t health_check_matcher{};
   std::string health_check_response;
-  if (argc > 3) {
-    health_check_matcher = [&argv](const http_request_t& r) -> bool { return r.path == argv[3]; };
+  if (argc > 4) {
+    health_check_matcher = [&argv](const http_request_t& r) -> bool { return r.path == argv[4]; };
     // TODO: make this configurable
     health_check_response = http_response_t{200, "OK"}.to_string();
   }
-
-  // setup the signal handler to gracefully shutdown when requested with sigterm
-  quiescable::get(30, 1).enable();
 
   // change these to tcp://known.ip.address.with:port if you want to do this across machines
   zmq::context_t context;

@@ -1,5 +1,4 @@
-#ifndef __HTTP_PROTOCOL_HPP__
-#define __HTTP_PROTOCOL_HPP__
+#pragma once
 
 #include <prime_server/prime_server.hpp>
 #include <prime_server/zmq_helpers.hpp>
@@ -192,5 +191,3 @@ protected:
 using http_server_t = server_t<http_request_t, http_request_info_t>;
 
 } // namespace prime_server
-
-#endif //__HTTP_PROTOCOL_HPP__

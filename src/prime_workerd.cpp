@@ -3,9 +3,10 @@
 #include <string>
 
 #include "http_protocol.hpp"
+#include "prime_helpers.hpp"
 #include "prime_server.hpp"
 using namespace prime_server;
-#include "logging.hpp"
+#include "logging/logging.hpp"
 
 int main(int argc, char** argv) {
 
@@ -29,6 +30,13 @@ int main(int argc, char** argv) {
     logging::ERROR("bad server result loopback");
   if (server_request_interrupt.find("://") != 3)
     logging::ERROR("bad server request interrupt");
+
+  // setup the signal handler to gracefully shutdown when requested with sigterm
+  if (argc > 5) {
+    unsigned int drain_seconds, shutdown_seconds;
+    std::tie(drain_seconds, shutdown_seconds) = parse_quiesce_config(argv[5]);
+    quiescable::get(drain_seconds, shutdown_seconds).enable();
+  }
 
   // start it up
   zmq::context_t context;

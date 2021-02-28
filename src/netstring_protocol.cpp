@@ -1,5 +1,5 @@
 #include "netstring_protocol.hpp"
-#include "logging.hpp"
+#include "logging/logging.hpp"
 
 #include <cctype>
 #include <cstdlib>

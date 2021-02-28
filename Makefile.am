@@ -44,9 +44,10 @@ nobase_include_HEADERS = \
 	prime_server/zmq_helpers.hpp \
 	prime_server/netstring_protocol.hpp \
 	prime_server/http_protocol.hpp \
-	prime_server/http_util.hpp \
-	prime_server/logging.hpp 
+	prime_server/http_util.hpp 
 libprime_server_la_SOURCES = \
+  src/logging/logging.hpp \
+  src/prime_helpers.hpp \
 	src/prime_server.cpp \
 	src/zmq_helpers.cpp \
 	src/netstring_protocol.cpp \

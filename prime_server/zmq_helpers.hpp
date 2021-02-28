@@ -1,5 +1,4 @@
-#ifndef __ZMQ_HELPERS_HPP__
-#define __ZMQ_HELPERS_HPP__
+#pragma once
 
 #include <cassert>
 #include <cstring>
@@ -118,5 +117,3 @@ struct hash<zmq::message_t> {
   size_t operator()(const zmq::message_t& m) const noexcept;
 };
 } // namespace std
-
-#endif //__ZMQ_HELPERS_HPP__

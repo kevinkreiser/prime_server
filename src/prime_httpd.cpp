@@ -1,7 +1,8 @@
 #include "http_protocol.hpp"
+#include "prime_helpers.hpp"
 #include "prime_server.hpp"
 using namespace prime_server;
-#include "logging.hpp"
+#include "logging/logging.hpp"
 
 #include <cstring>
 #include <string>
@@ -46,17 +47,21 @@ int main(int argc, char** argv) {
       request_timeout_seconds = std::stoul(argv[7]);
   } catch (...) {}
 
+  // setup the signal handler to gracefully shutdown when requested with sigterm
+  if (argc > 8) {
+    unsigned int drain_seconds, shutdown_seconds;
+    std::tie(drain_seconds, shutdown_seconds) = parse_quiesce_config(argv[8]);
+    quiescable::get(drain_seconds, shutdown_seconds).enable();
+  }
+
   // default to no health check, if one is provided its just the path and the canned response is OK
   http_server_t::health_check_matcher_t health_check_matcher{};
   std::string health_check_response;
-  if (argc > 8) {
-    health_check_matcher = [&argv](const http_request_t& r) -> bool { return r.path == argv[8]; };
+  if (argc > 9) {
+    health_check_matcher = [&argv](const http_request_t& r) -> bool { return r.path == argv[9]; };
     // TODO: make this configurable
     health_check_response = http_response_t{200, "OK"}.to_string();
   }
-
-  // setup the signal handler to gracefully shutdown when requested with sigterm
-  quiescable::get(30, 1).enable();
 
   // start it up
   zmq::context_t context;

@@ -1,5 +1,5 @@
 #include "http_protocol.hpp"
-#include "logging.hpp"
+#include "logging/logging.hpp"
 
 #include <ctime>
 #include <curl/curl.h>

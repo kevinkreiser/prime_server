@@ -1,5 +1,4 @@
-#ifndef __PRIME_SERVER_HPP__
-#define __PRIME_SERVER_HPP__
+#pragma once
 
 // some version info
 #define PRIME_SERVER_VERSION_MAJOR 0
@@ -233,5 +232,3 @@ private:
 };
 
 } // namespace prime_server
-
-#endif //__PRIME_SERVER_HPP__

@@ -1,7 +1,8 @@
 #include "http_protocol.hpp"
+#include "prime_helpers.hpp"
 #include "prime_server.hpp"
 using namespace prime_server;
-#include "logging.hpp"
+#include "logging/logging.hpp"
 
 int main(int argc, char** argv) {
 
@@ -21,7 +22,11 @@ int main(int argc, char** argv) {
     logging::ERROR("bad downstream endpoint");
 
   // setup the signal handler to gracefully shutdown when requested with sigterm
-  quiescable::get(30, 1).enable();
+  if (argc > 3) {
+    unsigned int drain_seconds, shutdown_seconds;
+    std::tie(drain_seconds, shutdown_seconds) = parse_quiesce_config(argv[3]);
+    quiescable::get(drain_seconds, shutdown_seconds).enable();
+  }
 
   // start it up
   zmq::context_t context;

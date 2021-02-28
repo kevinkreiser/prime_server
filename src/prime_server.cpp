@@ -8,7 +8,7 @@
 #include <unordered_set>
 
 #include "http_protocol.hpp"
-#include "logging.hpp"
+#include "logging/logging.hpp"
 #include "netstring_protocol.hpp"
 #include "prime_server.hpp"
 

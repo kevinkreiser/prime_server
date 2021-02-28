@@ -1,5 +1,4 @@
-#ifndef __HTTP_UTIL_HPP__
-#define __HTTP_UTIL_HPP__
+#pragma once
 
 #include <prime_server/http_protocol.hpp>
 #include <prime_server/prime_server.hpp>
@@ -33,5 +32,3 @@ worker_t::result_t disk_result(const http_request_t& path,
 
 } // namespace http
 } // namespace prime_server
-
-#endif //__HTTP_UTIL_HPP__
