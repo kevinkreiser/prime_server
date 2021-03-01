@@ -33,15 +33,18 @@ disk_work(const std::list<zmq::message_t>& job, void* request_info, worker_t::in
 
 int main(int argc, char** argv) {
   if (argc < 2) {
-    logging::ERROR("Usage: " + std::string(argv[0]) +
-                   " server_listen_endpoint [root_dir] [/health_check_endpoint]");
+    logging::ERROR(
+        "Usage: " + std::string(argv[0]) +
+        " server_listen_endpoint [root_dir] [drain_seconds,shutdown_seconds] [/health_check_endpoint]");
     return 1;
   }
 
   // server endpoint
   std::string server_endpoint = argv[1];
   if (server_endpoint.find("://") == std::string::npos) {
-    logging::ERROR("Usage: " + std::string(argv[0]) + " server_listen_endpoint");
+    logging::ERROR(
+        "Usage: " + std::string(argv[0]) +
+        " server_listen_endpoint [root_dir] [drain_seconds,shutdown_seconds] [/health_check_endpoint]");
     return 1;
   }
 
@@ -91,5 +94,5 @@ int main(int argc, char** argv) {
 
   // serve forever (or until a signal shuts us down)
   server.join();
-  return 0;
+  return EXIT_SUCCESS;
 }

@@ -19,14 +19,16 @@ using namespace prime_server;
 int main(int argc, char** argv) {
 
   if (argc < 2) {
-    logging::ERROR("Usage: " + std::string(argv[0]) + " server_listen_endpoint concurrency");
+    logging::ERROR("Usage: " + std::string(argv[0]) +
+                   " server_listen_endpoint [concurrency] [drain_seconds,shutdown_seconds]");
     return 1;
   }
 
   // server endpoint
   std::string server_endpoint = argv[1];
   if (server_endpoint.find("://") == std::string::npos)
-    logging::ERROR("Usage: " + std::string(argv[0]) + " server_listen_endpoint concurrency");
+    logging::ERROR("Usage: " + std::string(argv[0]) +
+                   " server_listen_endpoint [concurrency] [drain_seconds,shutdown_seconds]");
 
   // number of workers to use at each stage
   size_t worker_concurrency = 1;
@@ -85,7 +87,5 @@ int main(int argc, char** argv) {
   }
 
   server_thread.join();
-  // TODO: should we listen for SIGINT and terminate gracefully/exit(0)?
-
-  return 0;
+  return EXIT_SUCCESS;
 }

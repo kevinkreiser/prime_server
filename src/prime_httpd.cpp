@@ -12,7 +12,7 @@ int main(int argc, char** argv) {
   if (argc < 5) {
     logging::ERROR(
         "Usage: " + std::string(argv[0]) +
-        " [tcp|ipc]://server_listen_endpoint[:tcp_port] [tcp|ipc]://downstream_proxy_endpoint[:tcp_port] [tcp|ipc]://server_result_loopback[:tcp_port] [tcp|ipc]://server_request_interrupt[:tcp_port] [enable_logging] [max_request_size_bytes] [request_timeout_seconds] [/health_check_endpoint]");
+        " [tcp|ipc]://server_listen_endpoint[:tcp_port] [tcp|ipc]://downstream_proxy_endpoint[:tcp_port] [tcp|ipc]://server_result_loopback[:tcp_port] [tcp|ipc]://server_request_interrupt[:tcp_port] [enable_logging] [max_request_size_bytes] [request_timeout_seconds] [drain_seconds,shutdown_seconds] [/health_check_endpoint]");
     return EXIT_FAILURE;
   }
 
@@ -67,8 +67,6 @@ int main(int argc, char** argv) {
                        server_request_interrupt, log, max_request_size_bytes, request_timeout_seconds,
                        health_check_matcher, health_check_response);
 
-  // TODO: catch SIGINT for graceful shutdown
   server.serve();
-
   return EXIT_SUCCESS;
 }

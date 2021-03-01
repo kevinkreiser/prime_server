@@ -19,8 +19,9 @@ using namespace prime_server;
 int main(int argc, char** argv) {
 
   if (argc < 2) {
-    logging::ERROR("Usage: " + std::string(argv[0]) +
-                   " num_requests|server_listen_endpoint concurrency [drain_time[,shutdown_time]]");
+    logging::ERROR(
+        "Usage: " + std::string(argv[0]) +
+        " num_requests|server_listen_endpoint concurrency [drain_time,shutdown_time] [/health_check_endpoint]");
     return 1;
   }
 
@@ -42,6 +43,15 @@ int main(int argc, char** argv) {
   std::tie(drain_seconds, shutdown_seconds) = parse_quiesce_config(argc > 3 ? argv[3] : "");
   quiesce(drain_seconds, shutdown_seconds);
 
+  // default to no health check, if one is provided its just the path and the canned response is OK
+  http_server_t::health_check_matcher_t health_check_matcher{};
+  std::string health_check_response;
+  if (argc > 4) {
+    health_check_matcher = [&argv](const http_request_t& r) -> bool { return r.path == argv[4]; };
+    // TODO: make this configurable
+    health_check_response = http_response_t{200, "OK"}.to_string();
+  }
+
   // change these to tcp://known.ip.address.with:port if you want to do this across machines
   zmq::context_t context;
   std::string result_endpoint = "ipc:///tmp/result_endpoint";
@@ -53,7 +63,9 @@ int main(int argc, char** argv) {
   std::thread server_thread = std::thread(
       std::bind(&http_server_t::serve,
                 http_server_t(context, server_endpoint, parse_proxy_endpoint + "_upstream",
-                              result_endpoint, request_interrupt, requests == 0)));
+                              result_endpoint, request_interrupt, requests == 0,
+                              DEFAULT_MAX_REQUEST_SIZE, DEFAULT_REQUEST_TIMEOUT, health_check_matcher,
+                              health_check_response)));
 
   // load balancer for parsing
   std::thread parse_proxy(
@@ -201,8 +213,7 @@ int main(int argc, char** argv) {
   } // or listen for requests from some other client indefinitely
   else {
     server_thread.join();
-    // TODO: should we listen for SIGINT and terminate gracefully/exit(0)?
   }
 
-  return 0;
+  return EXIT_SUCCESS;
 }

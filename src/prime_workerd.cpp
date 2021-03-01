@@ -13,7 +13,7 @@ int main(int argc, char** argv) {
   if (argc < 5) {
     logging::ERROR(
         "Usage: " + std::string(argv[0]) +
-        " [tcp|ipc]://upstream_proxy_endpoint[:tcp_port] [tcp|ipc]://downstream_proxy_endpoint[:tcp_port] [tcp|ipc]://server_result_loopback[:tcp_port] [tcp|ipc]://server_request_interrupt[:tcp_port]");
+        " [tcp|ipc]://upstream_proxy_endpoint[:tcp_port] [tcp|ipc]://downstream_proxy_endpoint[:tcp_port] [tcp|ipc]://server_result_loopback[:tcp_port] [tcp|ipc]://server_request_interrupt[:tcp_port] [drain_seconds,shutdown_seconds]");
     return EXIT_FAILURE;
   }
 

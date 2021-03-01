@@ -9,7 +9,7 @@ int main(int argc, char** argv) {
   if (argc < 3) {
     logging::ERROR(
         "Usage: " + std::string(argv[0]) +
-        " [tcp|ipc]://upstream_endpoint[:tcp_port] [tcp|ipc]://downstream_endpoint[:tcp_port]");
+        " [tcp|ipc]://upstream_endpoint[:tcp_port] [tcp|ipc]://downstream_endpoint[:tcp_port] [drain_seconds,shutdown_seconds]");
     return EXIT_FAILURE;
   }
 
@@ -30,8 +30,6 @@ int main(int argc, char** argv) {
   zmq::context_t context;
   proxy_t proxy(context, upstream_endpoint, downstream_endpoint);
 
-  // TODO: catch SIGINT for graceful shutdown
   proxy.forward();
-
   return EXIT_SUCCESS;
 }
