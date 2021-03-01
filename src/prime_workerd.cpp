@@ -32,11 +32,9 @@ int main(int argc, char** argv) {
     logging::ERROR("bad server request interrupt");
 
   // setup the signal handler to gracefully shutdown when requested with sigterm
-  if (argc > 5) {
-    unsigned int drain_seconds, shutdown_seconds;
-    std::tie(drain_seconds, shutdown_seconds) = parse_quiesce_config(argv[5]);
-    quiescable::get(drain_seconds, shutdown_seconds).enable();
-  }
+  unsigned int drain_seconds, shutdown_seconds;
+  std::tie(drain_seconds, shutdown_seconds) = parse_quiesce_config(argc > 5 ? argv[5] : "");
+  quiesce(drain_seconds, shutdown_seconds);
 
   // start it up
   zmq::context_t context;

@@ -22,11 +22,9 @@ int main(int argc, char** argv) {
     logging::ERROR("bad downstream endpoint");
 
   // setup the signal handler to gracefully shutdown when requested with sigterm
-  if (argc > 3) {
-    unsigned int drain_seconds, shutdown_seconds;
-    std::tie(drain_seconds, shutdown_seconds) = parse_quiesce_config(argv[3]);
-    quiescable::get(drain_seconds, shutdown_seconds).enable();
-  }
+  unsigned int drain_seconds, shutdown_seconds;
+  std::tie(drain_seconds, shutdown_seconds) = parse_quiesce_config(argc > 3 ? argv[3] : "");
+  quiesce(drain_seconds, shutdown_seconds);
 
   // start it up
   zmq::context_t context;

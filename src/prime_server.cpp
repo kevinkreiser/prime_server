@@ -2,8 +2,10 @@
 #include <chrono>
 #include <csignal>
 #include <deque>
+#include <future>
 #include <queue>
 #include <stdexcept>
+#include <thread>
 #include <unistd.h>
 #include <unordered_set>
 
@@ -19,6 +21,46 @@ struct interrupt_t : public std::runtime_error {
   }
 };
 constexpr uint32_t INTERRUPT_AGE_CUTOFF = 600; // request age in seconds
+
+struct quiescable final {
+  static const quiescable& get(unsigned int drain_seconds = 0, unsigned int shutdown_seconds = 0) {
+    static quiescable instance(drain_seconds, shutdown_seconds);
+    return instance;
+  }
+  quiescable(unsigned int drain_seconds, unsigned int shutdown_seconds)
+      : draining(false), shutting_down(false) {
+    // if both are unset we disable this functionality
+    if (drain_seconds == 0 && shutdown_seconds == 0)
+      return;
+    // first we block SIGTERM in the main thread (its children will inherit this)
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, SIGTERM);
+    auto s = pthread_sigmask(SIG_BLOCK, &set, NULL);
+    if (s != 0) {
+      logging::ERROR("Could not mask SIGTERM, graceful shutdown disabled");
+      return;
+    }
+    // then we make daemon thread just to handle SIGTERM
+    std::thread([set, drain_seconds, shutdown_seconds, this]() {
+      // wait for SIGTERM to trigger
+      int sig = 0;
+      if (sigwait(&set, &sig) == 0) {
+        draining = true;
+        sleep(drain_seconds);
+        shutting_down = true;
+        sleep(shutdown_seconds);
+        exit(0);
+      } else {
+        logging::ERROR("Could not wait for SIGTERM, graceful shutdown disabled");
+      }
+    }).detach();
+  }
+
+  bool draining;
+  bool shutting_down;
+};
+
 } // namespace
 
 namespace prime_server {
@@ -87,7 +129,7 @@ void client_t::batch() {
         break;
     }
     // keep going while we expect more results
-  } while (more && !quiescable::get().shutting_down());
+  } while (more && !shutting_down());
 }
 
 template <class request_container_t, class request_info_t>
@@ -135,7 +177,7 @@ server_t<request_container_t, request_info_t>::~server_t() {
 template <class request_container_t, class request_info_t>
 void server_t<request_container_t, request_info_t>::serve() {
   int poll_timeout = request_timeout * 1000;
-  while (!quiescable::get().shutting_down()) {
+  while (!shutting_down()) {
     // check for activity on the client socket and the result socket
     // TODO: set a timeout based on session inactivity timeout or request timeout
     zmq::pollitem_t items[] = {{loopback, 0, ZMQ_POLLIN, 0}, {client, 0, ZMQ_POLLIN, 0}};
@@ -352,7 +394,7 @@ int proxy_t::expire() {
 }
 void proxy_t::forward() {
   // keep forwarding messages
-  while (!quiescable::get().shutting_down()) {
+  while (!shutting_down()) {
     // check for activity on either of the sockets, but if we have no workers just let requests sit on
     // the upstream socket
     zmq::pollitem_t items[] = {{downstream, 0, ZMQ_POLLIN, 0}, {upstream, 0, ZMQ_POLLIN, 0}};
@@ -456,7 +498,7 @@ void worker_t::work() {
   interrupt_function_t bail = std::bind(&worker_t::handle_interrupt, this, false);
 
   // keep forwarding messages
-  while (!quiescable::get().shutting_down()) {
+  while (!shutting_down()) {
     // check for activity on the in bound socket, timeout after heart_beat interval
     zmq::pollitem_t items[] = {{upstream_proxy, 0, ZMQ_POLLIN, 0}, {interrupt, 0, ZMQ_POLLIN, 0}};
     zmq::poll(items, 2, heart_beat_interval);
@@ -555,28 +597,14 @@ void worker_t::handle_interrupt(bool force_check) {
     throw interrupt_t(job & 0xFFFFFFFF);
 }
 
-// this implementation is somewhat regrettable. the thing about signal handlers is that they must be
-// function pointers. because of that we cant use a lambda with a capture or an std::function,
-// basically anything that carries actual state. to get around it we make a static handler function
-// that relies on getting the singleton to handle the signal and have access to the configured values
-const quiescable& quiescable::get(unsigned int drain_seconds, unsigned int shutdown_seconds) {
-  static quiescable instance(drain_seconds, shutdown_seconds);
-  return instance;
+void quiesce(unsigned int drain_seconds, unsigned int shutdown_seconds) {
+  quiescable::get(drain_seconds, shutdown_seconds);
 }
-void quiescable::enable() const {
-  std::signal(SIGTERM, quiescable::handler);
+bool draining() {
+  return quiescable::get().draining;
 }
-quiescable::quiescable(unsigned int drain_seconds, unsigned int shutdown_seconds)
-    : drain_seconds(drain_seconds), shutdown_seconds(shutdown_seconds), drain(false),
-      shutdown(false) {
-}
-void quiescable::handler(int) {
-  auto& instance = const_cast<quiescable&>(get());
-  instance.drain = true;
-  sleep(instance.drain_seconds);
-  instance.shutdown = true;
-  sleep(instance.shutdown_seconds);
-  exit(0);
+bool shutting_down() {
+  return quiescable::get().shutting_down;
 }
 
 // explicit instantiation for netstring and http

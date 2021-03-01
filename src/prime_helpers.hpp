@@ -18,7 +18,9 @@ std::vector<T> split(
       parts.emplace_back(transform(part));
     previous = current;
   }
-  parts.emplace_back(transform(s.substr(previous, current - previous)));
+  auto part = s.substr(previous, current - previous);
+  if (!part.empty() || !skip_empty)
+    parts.emplace_back(transform(part));
   return parts;
 }
 

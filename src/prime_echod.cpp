@@ -34,11 +34,9 @@ int main(int argc, char** argv) {
     worker_concurrency = std::stoul(argv[2]);
 
   // setup the signal handler to gracefully shutdown when requested with sigterm
-  if (argc > 3) {
-    unsigned int drain_seconds, shutdown_seconds;
-    std::tie(drain_seconds, shutdown_seconds) = parse_quiesce_config(argv[3]);
-    quiescable::get(drain_seconds, shutdown_seconds).enable();
-  }
+  unsigned int drain_seconds, shutdown_seconds;
+  std::tie(drain_seconds, shutdown_seconds) = parse_quiesce_config(argc > 3 ? argv[3] : "");
+  quiesce(drain_seconds, shutdown_seconds);
 
   // change these to tcp://known.ip.address.with:port if you want to do this across machines
   zmq::context_t context;

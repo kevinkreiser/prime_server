@@ -50,11 +50,9 @@ int main(int argc, char** argv) {
     root = argv[2];
 
   // setup the signal handler to gracefully shutdown when requested with sigterm
-  if (argc > 3) {
-    unsigned int drain_seconds, shutdown_seconds;
-    std::tie(drain_seconds, shutdown_seconds) = parse_quiesce_config(argv[3]);
-    quiescable::get(drain_seconds, shutdown_seconds).enable();
-  }
+  unsigned int drain_seconds, shutdown_seconds;
+  std::tie(drain_seconds, shutdown_seconds) = parse_quiesce_config(argc > 3 ? argv[3] : "");
+  quiesce(drain_seconds, shutdown_seconds);
 
   // default to no health check, if one is provided its just the path and the canned response is OK
   http_server_t::health_check_matcher_t health_check_matcher{};

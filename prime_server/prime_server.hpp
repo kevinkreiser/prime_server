@@ -204,31 +204,18 @@ protected:
   std::list<uint64_t> interrupt_history;
 };
 
-// upon receiving SIGTERM, this thread will wait for drain_seconds for the killer to drain traffic.
-// after the initial wait is up, the thread will wait an additional shutdown_seconds, to allow any
-// other threads to cleanup and shut themselves down gracefully, after which the the thread will exit.
-// this is useful if the runner of your process, ie the one who sent the signal to your process,
-// expects you to continue doing work, ie finish up the last requests you were working on, while it
-// redirects request traffic away from your process to some other handler
-struct quiescable final {
-public:
-  static const quiescable& get(unsigned int drain_seconds = 0, unsigned int shutdown_seconds = 0);
-  void enable() const;
-  inline bool draining() const {
-    return drain;
-  }
-  inline bool shutting_down() const {
-    return shutdown;
-  }
-
-private:
-  quiescable(unsigned int drain_seconds, unsigned int shutdown_seconds);
-  static void handler(int);
-
-  unsigned int drain_seconds;
-  unsigned int shutdown_seconds;
-  bool drain;
-  bool shutdown;
-};
+// configures a daemon thread to listen for SIGTERM. upon receiving SIGTERM, this thread will wait for
+// drain_seconds for the killer to drain traffic. after the initial wait is up, the thread will wait
+// an additional shutdown_seconds, to allow any other threads to cleanup and shut themselves down
+// gracefully, after which the the thread will exit the process. this is useful if the runner of your
+// process, ie the one who sent SIGTERM to your process, expects you to continue doing work, ie finish
+// up the last requests you were working on, while it redirects request traffic away from your process
+// to some other handler
+// NOTE: this is only meant to be called in the main thread at the beginning of your program
+void quiesce(unsigned int drain_seconds = 0, unsigned int shutdown_seconds = 0);
+// whether or not the daemon thread is waiting for traffic to drain
+bool draining();
+// whether or not the daemon thread is waiting for other threads to exit
+bool shutting_down();
 
 } // namespace prime_server
