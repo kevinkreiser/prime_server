@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
-project(prime_server LANGUAGES CXX C)
+project(prime_server LANGUAGES CXX C VERSION 0.6.7)
 INCLUDE(FindPkgConfig)
 
 ## Get version
@@ -90,7 +90,10 @@ target_link_libraries(prime_proxyd prime_server ${CMAKE_THREAD_LIBS_INIT})
 add_executable(prime_workerd ${CMAKE_SOURCE_DIR}/src/prime_workerd.cpp)
 target_link_libraries(prime_workerd prime_server ${CMAKE_THREAD_LIBS_INIT})
 
-set_target_properties(prime_server PROPERTIES PUBLIC_HEADER "${PRIME_LIBRARY_HEADERS}")
+set_target_properties(prime_server PROPERTIES
+	PUBLIC_HEADER "${PRIME_LIBRARY_HEADERS}"
+	SOVERSION ${PROJECT_VERSION_MAJOR}
+	VERSION ${PROJECT_VERSION})
 
 # Install paths
 set(prefix "${CMAKE_INSTALL_PREFIX}")
