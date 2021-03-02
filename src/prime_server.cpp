@@ -1,10 +1,16 @@
+#include <atomic>
+#include <chrono>
+#include <csignal>
 #include <deque>
+#include <future>
 #include <queue>
 #include <stdexcept>
+#include <thread>
+#include <unistd.h>
 #include <unordered_set>
 
 #include "http_protocol.hpp"
-#include "logging.hpp"
+#include "logging/logging.hpp"
 #include "netstring_protocol.hpp"
 #include "prime_server.hpp"
 
@@ -15,6 +21,46 @@ struct interrupt_t : public std::runtime_error {
   }
 };
 constexpr uint32_t INTERRUPT_AGE_CUTOFF = 600; // request age in seconds
+
+struct quiescable final {
+  static const quiescable& get(unsigned int drain_seconds = 0, unsigned int shutdown_seconds = 0) {
+    static quiescable instance(drain_seconds, shutdown_seconds);
+    return instance;
+  }
+  quiescable(unsigned int drain_seconds, unsigned int shutdown_seconds)
+      : draining(false), shutting_down(false) {
+    // if both are unset we disable this functionality
+    if (drain_seconds == 0 && shutdown_seconds == 0)
+      return;
+    // first we block SIGTERM in the main thread (its children will inherit this)
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, SIGTERM);
+    auto s = pthread_sigmask(SIG_BLOCK, &set, NULL);
+    if (s != 0) {
+      logging::ERROR("Could not mask SIGTERM, graceful shutdown disabled");
+      return;
+    }
+    // then we make daemon thread just to handle SIGTERM
+    std::thread([set, drain_seconds, shutdown_seconds, this]() {
+      // wait for SIGTERM to trigger
+      int sig = 0;
+      if (sigwait(&set, &sig) == 0) {
+        draining = true;
+        sleep(drain_seconds);
+        shutting_down = true;
+        sleep(shutdown_seconds);
+        exit(0);
+      } else {
+        logging::ERROR("Could not wait for SIGTERM, graceful shutdown disabled");
+      }
+    }).detach();
+  }
+
+  std::atomic<bool> draining;
+  std::atomic<bool> shutting_down;
+};
+
 } // namespace
 
 namespace prime_server {
@@ -83,21 +129,25 @@ void client_t::batch() {
         break;
     }
     // keep going while we expect more results
-  } while (more);
+  } while (more && !shutting_down());
 }
 
 template <class request_container_t, class request_info_t>
-server_t<request_container_t, request_info_t>::server_t(zmq::context_t& context,
-                                                        const std::string& client_endpoint,
-                                                        const std::string& proxy_endpoint,
-                                                        const std::string& result_endpoint,
-                                                        const std::string& interrupt_endpoint,
-                                                        bool log,
-                                                        size_t max_request_size,
-                                                        uint32_t request_timeout)
+server_t<request_container_t, request_info_t>::server_t(
+    zmq::context_t& context,
+    const std::string& client_endpoint,
+    const std::string& proxy_endpoint,
+    const std::string& result_endpoint,
+    const std::string& interrupt_endpoint,
+    bool log,
+    size_t max_request_size,
+    uint32_t request_timeout,
+    const health_check_matcher_t& health_check_matcher,
+    const std::string& health_check_response)
     : client(context, ZMQ_STREAM), proxy(context, ZMQ_DEALER), loopback(context, ZMQ_SUB),
       interrupt(context, ZMQ_PUB), log(log), max_request_size(max_request_size),
-      request_timeout(request_timeout), request_id(0) {
+      request_timeout(request_timeout), request_id(0), health_check_matcher(health_check_matcher),
+      health_check_response(health_check_response.size(), health_check_response.data()) {
 
   int disabled = 0;
   client.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
@@ -127,7 +177,7 @@ server_t<request_container_t, request_info_t>::~server_t() {
 template <class request_container_t, class request_info_t>
 void server_t<request_container_t, request_info_t>::serve() {
   int poll_timeout = request_timeout * 1000;
-  while (true) {
+  while (!shutting_down()) {
     // check for activity on the client socket and the result socket
     // TODO: set a timeout based on session inactivity timeout or request timeout
     zmq::pollitem_t items[] = {{loopback, 0, ZMQ_POLLIN, 0}, {client, 0, ZMQ_POLLIN, 0}};
@@ -263,18 +313,28 @@ bool server_t<request_container_t, request_info_t>::enqueue(const zmq::message_t
   for (const auto& parsed_request : parsed_requests) {
     // figure out if we are expecting to close this request or not
     auto info = parsed_request.to_info(request_id++);
-    // send on the request
-    if (!proxy.send(static_cast<const void*>(&info), sizeof(info), ZMQ_DONTWAIT | ZMQ_SNDMORE) ||
-        !proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT)) {
+
+    // if its enabled, see if its a health check
+    bool health_check = health_check_matcher && health_check_matcher(parsed_request);
+
+    // send on the request if its not a health check
+    if (!health_check &&
+        (!proxy.send(static_cast<const void*>(&info), sizeof(info), ZMQ_DONTWAIT | ZMQ_SNDMORE) ||
+         !proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT))) {
       logging::ERROR("Server failed to enqueue request");
       return false;
     }
     if (log)
       parsed_request.log(info.id);
+
     // remember we are working on it
     request.enqueued.emplace_back(static_cast<typename decltype(requests)::key_type>(info));
     requests.emplace(request.enqueued.back(), requester);
     request_history.emplace_back(std::move(info));
+
+    // if it was a health check we reply immediately
+    if (health_check)
+      dequeue(request_history.back(), health_check_response);
   }
   return true;
 }
@@ -334,7 +394,7 @@ int proxy_t::expire() {
 }
 void proxy_t::forward() {
   // keep forwarding messages
-  while (true) {
+  while (!shutting_down()) {
     // check for activity on either of the sockets, but if we have no workers just let requests sit on
     // the upstream socket
     zmq::pollitem_t items[] = {{downstream, 0, ZMQ_POLLIN, 0}, {upstream, 0, ZMQ_POLLIN, 0}};
@@ -438,7 +498,7 @@ void worker_t::work() {
   interrupt_function_t bail = std::bind(&worker_t::handle_interrupt, this, false);
 
   // keep forwarding messages
-  while (true) {
+  while (!shutting_down()) {
     // check for activity on the in bound socket, timeout after heart_beat interval
     zmq::pollitem_t items[] = {{upstream_proxy, 0, ZMQ_POLLIN, 0}, {interrupt, 0, ZMQ_POLLIN, 0}};
     zmq::poll(items, 2, heart_beat_interval);
@@ -535,6 +595,16 @@ void worker_t::handle_interrupt(bool force_check) {
   // either we just got more or we need to check the backlog
   if ((force_check || messages.size()) && interrupts.find(job) != interrupts.cend())
     throw interrupt_t(job & 0xFFFFFFFF);
+}
+
+void quiesce(unsigned int drain_seconds, unsigned int shutdown_seconds) {
+  quiescable::get(drain_seconds, shutdown_seconds);
+}
+bool draining() {
+  return quiescable::get().draining;
+}
+bool shutting_down() {
+  return quiescable::get().shutting_down;
 }
 
 // explicit instantiation for netstring and http

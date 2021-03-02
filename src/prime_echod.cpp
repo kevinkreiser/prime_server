@@ -11,26 +11,34 @@
 // netstrings are far easier to work with but http is a more interesting use-case
 // so we just do everthing using the http protocol here
 #include "http_protocol.hpp"
+#include "prime_helpers.hpp"
 #include "prime_server.hpp"
 using namespace prime_server;
-#include "logging.hpp"
+#include "logging/logging.hpp"
 
 int main(int argc, char** argv) {
 
   if (argc < 2) {
-    logging::ERROR("Usage: " + std::string(argv[0]) + " server_listen_endpoint concurrency");
+    logging::ERROR("Usage: " + std::string(argv[0]) +
+                   " server_listen_endpoint [concurrency] [drain_seconds,shutdown_seconds]");
     return 1;
   }
 
   // server endpoint
   std::string server_endpoint = argv[1];
   if (server_endpoint.find("://") == std::string::npos)
-    logging::ERROR("Usage: " + std::string(argv[0]) + " server_listen_endpoint concurrency");
+    logging::ERROR("Usage: " + std::string(argv[0]) +
+                   " server_listen_endpoint [concurrency] [drain_seconds,shutdown_seconds]");
 
   // number of workers to use at each stage
   size_t worker_concurrency = 1;
   if (argc > 2)
     worker_concurrency = std::stoul(argv[2]);
+
+  // setup the signal handler to gracefully shutdown when requested with sigterm
+  unsigned int drain_seconds, shutdown_seconds;
+  std::tie(drain_seconds, shutdown_seconds) = parse_quiesce_config(argc > 3 ? argv[3] : "");
+  quiesce(drain_seconds, shutdown_seconds);
 
   // change these to tcp://known.ip.address.with:port if you want to do this across machines
   zmq::context_t context;
@@ -79,7 +87,5 @@ int main(int argc, char** argv) {
   }
 
   server_thread.join();
-  // TODO: should we listen for SIGINT and terminate gracefully/exit(0)?
-
-  return 0;
+  return EXIT_SUCCESS;
 }

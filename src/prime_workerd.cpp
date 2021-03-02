@@ -3,16 +3,17 @@
 #include <string>
 
 #include "http_protocol.hpp"
+#include "prime_helpers.hpp"
 #include "prime_server.hpp"
 using namespace prime_server;
-#include "logging.hpp"
+#include "logging/logging.hpp"
 
 int main(int argc, char** argv) {
 
   if (argc < 5) {
     logging::ERROR(
         "Usage: " + std::string(argv[0]) +
-        " [tcp|ipc]://upstream_proxy_endpoint[:tcp_port] [tcp|ipc]://downstream_proxy_endpoint[:tcp_port] [tcp|ipc]://server_result_loopback[:tcp_port] [tcp|ipc]://server_request_interrupt[:tcp_port]");
+        " [tcp|ipc]://upstream_proxy_endpoint[:tcp_port] [tcp|ipc]://downstream_proxy_endpoint[:tcp_port] [tcp|ipc]://server_result_loopback[:tcp_port] [tcp|ipc]://server_request_interrupt[:tcp_port] [drain_seconds,shutdown_seconds]");
     return EXIT_FAILURE;
   }
 
@@ -29,6 +30,11 @@ int main(int argc, char** argv) {
     logging::ERROR("bad server result loopback");
   if (server_request_interrupt.find("://") != 3)
     logging::ERROR("bad server request interrupt");
+
+  // setup the signal handler to gracefully shutdown when requested with sigterm
+  unsigned int drain_seconds, shutdown_seconds;
+  std::tie(drain_seconds, shutdown_seconds) = parse_quiesce_config(argc > 5 ? argv[5] : "");
+  quiesce(drain_seconds, shutdown_seconds);
 
   // start it up
   zmq::context_t context;
@@ -73,8 +79,6 @@ int main(int argc, char** argv) {
                     return result;
                   });
 
-  // TODO: catch SIGINT for graceful shutdown
   worker.work();
-
   return EXIT_SUCCESS;
 }

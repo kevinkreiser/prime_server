@@ -42,11 +42,14 @@ message_t::message_t(void* data, size_t size, void (*free_function)(void*, void*
     delete message;
   });
 }
-message_t::message_t(size_t size) {
+message_t::message_t(size_t size, const void* data) {
   // make the c message
   zmq_msg_t* message = new zmq_msg_t();
   if (zmq_msg_init_size(message, size) != 0)
     throw std::runtime_error(zmq_strerror(zmq_errno()));
+  // copy the data into it
+  if (size && data)
+    memcpy(zmq_msg_data(message), data, size);
 
   // wrap it in RAII goodness
   ptr.reset(message, [](zmq_msg_t* message) {
@@ -54,13 +57,6 @@ message_t::message_t(size_t size) {
     assert(ret == 0);
     delete message;
   });
-}
-void message_t::reset(size_t size) {
-  auto ret = zmq_msg_close(ptr.get());
-  assert(ret == 0);
-
-  if (zmq_msg_init_size(ptr.get(), size) != 0)
-    throw std::runtime_error(zmq_strerror(zmq_errno()));
 }
 message_t::operator zmq_msg_t*() {
   return ptr.get();
@@ -151,7 +147,8 @@ bool socket_t::send(const void* bytes, size_t count, int flags) {
   return byte_count >= 0;
 }
 // send a single message
-template <class container_t> bool socket_t::send(const container_t& message, int flags) {
+template <class container_t>
+bool socket_t::send(const container_t& message, int flags) {
   return send(static_cast<const void*>(message.data()), message.size(), flags);
 }
 // send all the messages over this socket
@@ -524,11 +521,14 @@ uint64_t murmur_hash3_x64_128(const void* key, const int len, const uint32_t see
 }
 
 // let the compiler pick which hash makes sense for your architecture
-template <int> inline size_t specialized_hash_bytes(const void*, size_t);
-template <> inline size_t specialized_hash_bytes<4>(const void* bytes, size_t length) {
+template <int>
+inline size_t specialized_hash_bytes(const void*, size_t);
+template <>
+inline size_t specialized_hash_bytes<4>(const void* bytes, size_t length) {
   return murmur_hash3_x86_32(bytes, length, 1);
 }
-template <> inline size_t specialized_hash_bytes<8>(const void* bytes, size_t length) {
+template <>
+inline size_t specialized_hash_bytes<8>(const void* bytes, size_t length) {
   return murmur_hash3_x64_128(bytes, length, 1);
 }
 inline size_t hash_bytes(const void* bytes, size_t length) {

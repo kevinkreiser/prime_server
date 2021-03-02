@@ -1,11 +1,10 @@
 #include "http_protocol.hpp"
 #include "http_util.hpp"
-#include "logging.hpp"
+#include "logging/logging.hpp"
+#include "prime_helpers.hpp"
 #include "prime_server.hpp"
 #include "zmq_helpers.hpp"
 
-#include <chrono>
-#include <csignal>
 #include <exception>
 #include <functional>
 #include <list>
@@ -34,20 +33,38 @@ disk_work(const std::list<zmq::message_t>& job, void* request_info, worker_t::in
 
 int main(int argc, char** argv) {
   if (argc < 2) {
-    logging::ERROR("Usage: " + std::string(argv[0]) + " server_listen_endpoint [root_dir]");
+    logging::ERROR(
+        "Usage: " + std::string(argv[0]) +
+        " server_listen_endpoint [root_dir] [drain_seconds,shutdown_seconds] [/health_check_endpoint]");
     return 1;
   }
 
   // server endpoint
   std::string server_endpoint = argv[1];
   if (server_endpoint.find("://") == std::string::npos) {
-    logging::ERROR("Usage: " + std::string(argv[0]) + " server_listen_endpoint");
+    logging::ERROR(
+        "Usage: " + std::string(argv[0]) +
+        " server_listen_endpoint [root_dir] [drain_seconds,shutdown_seconds] [/health_check_endpoint]");
     return 1;
   }
 
   // root dir
   if (argc > 2)
     root = argv[2];
+
+  // setup the signal handler to gracefully shutdown when requested with sigterm
+  unsigned int drain_seconds, shutdown_seconds;
+  std::tie(drain_seconds, shutdown_seconds) = parse_quiesce_config(argc > 3 ? argv[3] : "");
+  quiesce(drain_seconds, shutdown_seconds);
+
+  // default to no health check, if one is provided its just the path and the canned response is OK
+  http_server_t::health_check_matcher_t health_check_matcher{};
+  std::string health_check_response;
+  if (argc > 4) {
+    health_check_matcher = [&argv](const http_request_t& r) -> bool { return r.path == argv[4]; };
+    // TODO: make this configurable
+    health_check_response = http_response_t{200, "OK"}.to_string();
+  }
 
   // change these to tcp://known.ip.address.with:port if you want to do this across machines
   zmq::context_t context;
@@ -56,10 +73,11 @@ int main(int argc, char** argv) {
   std::string proxy_endpoint = "ipc://proxy_endpoint";
 
   // server
-  std::thread server =
-      std::thread(std::bind(&http_server_t::serve,
-                            http_server_t(context, server_endpoint, proxy_endpoint + "_upstream",
-                                          result_endpoint, request_interrupt, true)));
+  std::thread server = std::thread(
+      std::bind(&http_server_t::serve,
+                http_server_t(context, server_endpoint, proxy_endpoint + "_upstream", result_endpoint,
+                              request_interrupt, true, DEFAULT_MAX_REQUEST_SIZE,
+                              DEFAULT_REQUEST_TIMEOUT, health_check_matcher, health_check_response)));
 
   // load balancer for file serving
   std::thread file_proxy(std::bind(&proxy_t::forward, proxy_t(context, proxy_endpoint + "_upstream",
@@ -74,12 +92,7 @@ int main(int argc, char** argv) {
                                                     std::placeholders::_2, std::placeholders::_3))));
   file_worker.detach();
 
-  // listen for SIGINT and terminate if we hear it
-  std::signal(SIGINT, [](int) {
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    exit(1);
-  });
+  // serve forever (or until a signal shuts us down)
   server.join();
-
-  return 0;
+  return EXIT_SUCCESS;
 }

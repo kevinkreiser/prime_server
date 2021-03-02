@@ -246,6 +246,9 @@ We basically just have to define a `work` function/object/lambda whose signature
 
 ```c++
 int main(void) {
+  //when we hear SIGTERM, wait 28 seconds to drain traffic then wait a second for the threads to stop
+  quiesce(28, 1);
+
   zmq::context_t context;
 
   //http server, false turns off request/response logging
@@ -269,15 +272,13 @@ int main(void) {
     workers.back().detach();
   }
 
-  //listen for SIGINT and terminate if we hear it
-  std::signal(SIGINT, [](int s){ std::this_thread::sleep_for(std::chrono::seconds(1)); exit(1); });
+  //wait for a signal to kill us
   server.join();
-
   return 0;
 }
 ```
 
-First things first, all `zmq` communication requires a `context`. So we get one of those and pass it around to all the bits. Our setup is really simple, we run an `http_server_t` in one thread. The server keeps track of and forwards requests on to a load balancing `proxy_t` in another thread. The proxy keeps a queue of requests and shuttles them FIFO style to the first non-busy `worker_t` that it has in its inventory. We spawn a bunch of `worker_t`s which are constantly handshaking with the proxy. "I'm here" and "I'm done" messages let the proxy know which workers are bored and which are busy. This should minimize latency in so far as a greedy scheduler can. You'll notice the program is pretty much meant to be run as a daemon which is why it waits for `SIGINT`. `ctl-c` it away when you are done with it.
+The first thing we do is hook up a signal handler in a daemon thread that will listen for `SIGTERM` and quit gracefully after giving the workers time to drain traffic and shutdown. Then we get down to the business of connecting stuff together. All `zmq` communication requires a `context`. So we get one of those and pass it around to all the bits. Our setup is really simple, we run an `http_server_t` in one thread. The server keeps track of and forwards requests on to a load balancing `proxy_t` in another thread. The proxy keeps a queue of requests and shuttles them FIFO style to the first non-busy `worker_t` that it has in its inventory. We spawn a bunch of `worker_t`s which are constantly handshaking with the proxy. "I'm here" and "I'm done" messages let the proxy know which workers are bored and which are busy. This should minimize latency in so far as a greedy scheduler can. You'll notice the program is pretty much meant to be run as a daemon which is why it `join`s on the `serve` method. The program will run until you `ctl-c` it away or gracefully kill it with `SIGTERM`.
 
 Now we'll get your **R**esponsive **U**nicode **M**essages **P**ortal shaking.. err.. cracking.. err.. running.. with this:
 

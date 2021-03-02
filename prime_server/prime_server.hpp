@@ -1,5 +1,4 @@
-#ifndef __PRIME_SERVER_HPP__
-#define __PRIME_SERVER_HPP__
+#pragma once
 
 // some version info
 #define PRIME_SERVER_VERSION_MAJOR 0
@@ -60,9 +59,14 @@ constexpr uint32_t DEFAULT_REQUEST_TIMEOUT = -1;              // infinity second
 // TODO: bundle both request_containter_t (req, rep) and request_info_t into
 // a single session_t that implements all the guts of the protocol
 
+// TODO: make configuration objects to use as parameter packs because these constructors are large
+
 // server sits between a clients and a load balanced backend
-template <class request_container_t, class request_info_t> class server_t {
+template <class request_container_t, class request_info_t>
+class server_t {
 public:
+  using health_check_matcher_t = std::function<bool(const request_container_t&)>;
+
   server_t(zmq::context_t& context,
            const std::string& client_endpoint,
            const std::string& proxy_endpoint,
@@ -70,7 +74,9 @@ public:
            const std::string& interrupt_endpoint,
            bool log = false,
            size_t max_request_size = DEFAULT_MAX_REQUEST_SIZE,
-           uint32_t request_timeout = DEFAULT_REQUEST_TIMEOUT);
+           uint32_t request_timeout = DEFAULT_REQUEST_TIMEOUT,
+           const health_check_matcher_t& health_check_matcher = {},
+           const std::string& health_check_response = {});
   virtual ~server_t();
   void serve();
 
@@ -115,6 +121,10 @@ protected:
   std::unordered_map<uint64_t, zmq::message_t> requests;
   // order list of requests
   std::list<request_info_t> request_history;
+  // a matcher for determining whether a request is a health check or not
+  std::function<bool(const request_container_t&)> health_check_matcher;
+  // the response bytes to send when a health check request is received
+  zmq::message_t health_check_response;
 };
 
 // proxy messages between layers of a backend load balancing in between
@@ -194,6 +204,18 @@ protected:
   std::list<uint64_t> interrupt_history;
 };
 
-} // namespace prime_server
+// configures a daemon thread to listen for SIGTERM. upon receiving SIGTERM, this thread will wait for
+// drain_seconds for the killer to drain traffic. after the initial wait is up, the thread will wait
+// an additional shutdown_seconds, to allow any other threads to cleanup and shut themselves down
+// gracefully, after which the the thread will exit the process. this is useful if the runner of your
+// process, ie the one who sent SIGTERM to your process, expects you to continue doing work, ie finish
+// up the last requests you were working on, while it redirects request traffic away from your process
+// to some other handler
+// NOTE: this is only meant to be called in the main thread at the beginning of your program
+void quiesce(unsigned int drain_seconds = 0, unsigned int shutdown_seconds = 0);
+// whether or not the daemon thread is waiting for traffic to drain
+bool draining();
+// whether or not the daemon thread is waiting for other threads to exit
+bool shutting_down();
 
-#endif //__PRIME_SERVER_HPP__
+} // namespace prime_server

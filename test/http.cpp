@@ -300,9 +300,12 @@ void test_parallel_clients() {
   // server
   std::thread server(
       std::bind(&http_server_t::serve,
-                http_server_t(context, "ipc:///tmp/test_http_server",
-                              "ipc:///tmp/test_http_proxy_upstream", "ipc:///tmp/test_http_results",
-                              "ipc:///tmp/test_http_interrupt", false, MAX_REQUEST_SIZE)));
+                http_server_t(
+                    context, "ipc:///tmp/test_http_server", "ipc:///tmp/test_http_proxy_upstream",
+                    "ipc:///tmp/test_http_results", "ipc:///tmp/test_http_interrupt", false,
+                    MAX_REQUEST_SIZE, -1,
+                    [](const http_request_t& r) -> bool { return r.path == "/health_check"; },
+                    http_response_t{200, "OK", "foo_bar_baz"}.to_string())));
   server.detach();
 
   // load balancer for parsing
@@ -415,6 +418,30 @@ void test_large_request() {
   client.batch();
 }
 
+void test_health_check() {
+  zmq::context_t context;
+  auto request = http_request_t{GET, "/health_check"}.to_string();
+  http_client_t client(
+      context, "ipc:///tmp/test_http_server",
+      [&request]() {
+        return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
+      },
+      [](const void* data, size_t size) {
+        auto response = http_response_t::from_string(static_cast<const char*>(data), size);
+        if (response.code != 200)
+          throw std::runtime_error("Expected 200 response code!");
+        if (response.message != "OK")
+          throw std::runtime_error("Expected OK message!");
+        if (response.body != "foo_bar_baz")
+          throw std::runtime_error("Expected foo_bar_baz body!");
+        return false;
+      },
+      1);
+  client.batch();
+
+  // TODO: check that you're disconnected
+}
+
 void test_chunked_encoding() {
   http_request_t req;
 
@@ -508,6 +535,8 @@ int main() {
   suite.test(TEST_CASE(test_too_large));
 
   suite.test(TEST_CASE(test_large_request));
+
+  suite.test(TEST_CASE(test_health_check));
 
   return suite.tear_down();
 }

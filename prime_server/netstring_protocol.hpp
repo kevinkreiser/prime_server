@@ -1,5 +1,4 @@
-#ifndef __NETSTRING_PROTOCOL_HPP__
-#define __NETSTRING_PROTOCOL_HPP__
+#pragma once
 
 #include <prime_server/prime_server.hpp>
 #include <prime_server/zmq_helpers.hpp>
@@ -60,5 +59,3 @@ protected:
 using netstring_server_t = server_t<netstring_entity_t, netstring_request_info_t>;
 
 } // namespace prime_server
-
-#endif //__NETSTRING_PROTOCOL_HPP__
