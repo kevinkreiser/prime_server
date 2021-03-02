@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
-project(prime_server LANGUAGES CXX C VERSION 0.6.7)
+project(prime_server LANGUAGES CXX C VERSION 0)
 INCLUDE(FindPkgConfig)
 
 ## Get version
@@ -9,16 +9,10 @@ foreach(line ${version_lines})
     set(${CMAKE_MATCH_1} ${CMAKE_MATCH_3})
   endif()
 endforeach()
-if(DEFINED PRIME_SERVER_VERSION_MAJOR)
-  set(VERSION "${PRIME_SERVER_VERSION_MAJOR}")
-  if(DEFINED PRIME_SERVER_VERSION_MINOR)
-    set(VERSION "${VERSION}.${PRIME_SERVER_VERSION_MINOR}")
-    if(DEFINED PRIME_SERVER_VERSION_PATCH)
-      set(VERSION "${VERSION}.${PRIME_SERVER_VERSION_PATCH}")
-    endif()
-  endif()
+if(DEFINED PRIME_SERVER_VERSION_MAJOR AND DEFINED PRIME_SERVER_VERSION_MINOR AND DEFINED PRIME_SERVER_VERSION_PATCH)
+  set(PROJECT_VERSION ${PRIME_SERVER_VERSION_MAJOR}.${PRIME_SERVER_VERSION_MINOR}.${PRIME_SERVER_VERSION_PATCH})
 else()
-  message(FATAL_ERROR "No prime_server major version")
+  message(FATAL_ERROR "No prime_server version")
 endif()
 
 # Use a C++11 enabled compiler
@@ -41,7 +35,7 @@ include_directories(${ZMQ_INCLUDEDIR})
 pkg_check_modules(CZMQ REQUIRED libczmq>=3.0)
 include_directories(${CZMQ_INCLUDEDIR})
 
-find_package (Threads REQUIRED)
+find_package(Threads REQUIRED)
 
 # Include the hpp files
 include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/prime_server)
@@ -114,7 +108,8 @@ install(TARGETS prime_echod
 	prime_proxyd
 	prime_workerd DESTINATION ${bindir})
 
-CONFIGURE_FILE(
+set(VERSION ${PROJECT_VERSION})
+configure_file(
 	"${CMAKE_CURRENT_SOURCE_DIR}/libprime_server.pc.in"
 	"${CMAKE_CURRENT_BINARY_DIR}/libprime_server.pc"
 	@ONLY)
