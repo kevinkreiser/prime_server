@@ -57,8 +57,8 @@ struct quiescable final {
     }).detach();
   }
 
-  bool draining;
-  bool shutting_down;
+  std::atomic<bool> draining;
+  std::atomic<bool> shutting_down;
 };
 
 } // namespace
