@@ -1,25 +1,8 @@
 cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
-project(prime_server LANGUAGES CXX C VERSION 0.6.7)
+include(cmake/version.cmake)
+get_version(${CMAKE_SOURCE_DIR}/prime_server/prime_server.hpp "PRIME_SERVER_")
+project(prime_server LANGUAGES CXX C VERSION ${PRIME_SERVER_VERSION_MAJOR}.${PRIME_SERVER_VERSION_MINOR}.${PRIME_SERVER_VERSION_PATCH})
 INCLUDE(FindPkgConfig)
-
-## Get version
-file(STRINGS "${CMAKE_SOURCE_DIR}/prime_server/prime_server.hpp" version_lines REGEX "PRIME_SERVER_VERSION_(MAJOR|MINOR|PATCH)")
-foreach(line ${version_lines})
-  if("${line}" MATCHES "(PRIME_SERVER_VERSION_(MAJOR|MINOR|PATCH))[\t ]+([0-9]+)")
-    set(${CMAKE_MATCH_1} ${CMAKE_MATCH_3})
-  endif()
-endforeach()
-if(DEFINED PRIME_SERVER_VERSION_MAJOR)
-  set(VERSION "${PRIME_SERVER_VERSION_MAJOR}")
-  if(DEFINED PRIME_SERVER_VERSION_MINOR)
-    set(VERSION "${VERSION}.${PRIME_SERVER_VERSION_MINOR}")
-    if(DEFINED PRIME_SERVER_VERSION_PATCH)
-      set(VERSION "${VERSION}.${PRIME_SERVER_VERSION_PATCH}")
-    endif()
-  endif()
-else()
-  message(FATAL_ERROR "No prime_server major version")
-endif()
 
 # Use a C++11 enabled compiler
 set(CMAKE_CXX_STANDARD 11)
