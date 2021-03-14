@@ -1,5 +1,6 @@
 #include "zmq_helpers.hpp"
 #include <arpa/inet.h>
+#include <cerrno>
 #include <ctime>
 #include <czmq.h>
 #include <random>
@@ -22,7 +23,8 @@ context_t::context_t(/*TODO: add options*/) {
   // wrap it in RAII goodness
   ptr.reset(context, [](void* context) {
     auto ret = zmq_ctx_term(context);
-    assert(ret == 0);
+    if (ret != 0)
+      throw std::runtime_error("zmq_ctx_term error: " + std::to_string(errno));
   });
 }
 context_t::operator void*() {
@@ -38,7 +40,8 @@ message_t::message_t(void* data, size_t size, void (*free_function)(void*, void*
   // wrap it in RAII goodness
   ptr.reset(message, [](zmq_msg_t* message) {
     auto ret = zmq_msg_close(message);
-    assert(ret == 0);
+    if (ret != 0)
+      throw std::runtime_error("zmq_msg_close error: " + std::to_string(errno));
     delete message;
   });
 }
@@ -54,7 +57,8 @@ message_t::message_t(size_t size, const void* data) {
   // wrap it in RAII goodness
   ptr.reset(message, [](zmq_msg_t* message) {
     auto ret = zmq_msg_close(message);
-    assert(ret == 0);
+    if (ret != 0)
+      throw std::runtime_error("zmq_msg_close error: " + std::to_string(errno));
     delete message;
   });
 }
@@ -93,7 +97,8 @@ socket_t::socket_t(const context_t& context, int socket_type) : context(context)
   // wrap it in RAII goodness
   ptr.reset(socket, [](void* socket) {
     auto ret = zmq_close(socket);
-    assert(ret == 0);
+    if (ret != 0)
+      throw std::runtime_error("zmq_close error: " + std::to_string(errno));
   });
 }
 // set an option on this socket

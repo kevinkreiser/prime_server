@@ -7,6 +7,26 @@ INCLUDE(FindPkgConfig)
 # Use a C++11 enabled compiler
 set(CMAKE_CXX_STANDARD 11)
 
+# What type of build
+if(NOT MSVC_IDE) # TODO: May need to be extended for Xcode, CLion, etc.
+  if(NOT CMAKE_BUILD_TYPE)
+    message(STATUS "No build type specified, defaulting to Release")
+    set(CMAKE_BUILD_TYPE Release)
+  endif()
+endif()
+if(CMAKE_BUILD_TYPE MATCHES Debug)
+  message(STATUS "Configuring in debug mode")
+elseif(CMAKE_BUILD_TYPE MATCHES Release)
+  message(STATUS "Configuring in release mode")
+elseif(CMAKE_BUILD_TYPE MATCHES RelWithDebInfo)
+  message(STATUS "Configuring in release mode with debug flags")
+elseif(CMAKE_BUILD_TYPE MATCHES MinRelSize)
+  message(STATUS "Configuring in release mode with minimized size")
+else()
+  set(CMAKE_BUILD_TYPE Release)
+  message(STATUS "Unrecognized build type defaulting to release")
+endif()
+
 # Show all warnings and treat as errors
 if(MSVC)
   add_compile_options(/W4 /WX)
