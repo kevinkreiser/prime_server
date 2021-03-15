@@ -432,7 +432,7 @@ void proxy_t::forward() {
         // figure out what worker you want, ignore the request info
         auto info = std::move(messages.front());
         messages.pop_front();
-        const auto* heart_beat = choose_function(fifo, messages);
+        const auto* heart_beat = choose_function ? choose_function(fifo, messages) : nullptr;
         messages.emplace_front(std::move(info));
         // either you didnt want to choose or you sent back garbage
         auto hb_itr = heart_beats.find(heart_beat);
@@ -552,7 +552,8 @@ void worker_t::work() {
 
       // do some cleanup
       try {
-        cleanup_function();
+        if (cleanup_function)
+          cleanup_function();
       } catch (const std::exception& e) {
         logging::ERROR(std::string(__FILE__) + ":" + std::to_string(__LINE__) +
                        " worker_t: " + e.what());

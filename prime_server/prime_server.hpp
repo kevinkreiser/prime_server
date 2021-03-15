@@ -133,12 +133,10 @@ public:
   // allows you to favor a certain heartbeat/worker for a given job
   using choose_function_t = std::function<const zmq::message_t*(const std::list<zmq::message_t>&,
                                                                 const std::list<zmq::message_t>&)>;
-  proxy_t(
-      zmq::context_t& context,
-      const std::string& upstream_endpoint,
-      const std::string& downstream_endpoint,
-      const choose_function_t& choose_function =
-          [](const std::list<zmq::message_t>&, const std::list<zmq::message_t>&) { return nullptr; });
+  proxy_t(zmq::context_t& context,
+          const std::string& upstream_endpoint,
+          const std::string& downstream_endpoint,
+          const choose_function_t& choose_function = {});
   virtual ~proxy_t();
   void forward();
 
@@ -174,15 +172,14 @@ public:
       std::function<result_t(const std::list<zmq::message_t>&, void*, interrupt_function_t&)>;
   using cleanup_function_t = std::function<void()>;
 
-  worker_t(
-      zmq::context_t& context,
-      const std::string& upstream_proxy_endpoint,
-      const std::string& downstream_proxy_endpoint,
-      const std::string& result_endpoint,
-      const std::string& interrupt_endpoint,
-      const work_function_t& work_function,
-      const cleanup_function_t& cleanup_function = []() {},
-      const std::string& heart_beat = "");
+  worker_t(zmq::context_t& context,
+           const std::string& upstream_proxy_endpoint,
+           const std::string& downstream_proxy_endpoint,
+           const std::string& result_endpoint,
+           const std::string& interrupt_endpoint,
+           const work_function_t& work_function,
+           const cleanup_function_t& cleanup_function = {},
+           const std::string& heart_beat = "");
   virtual ~worker_t();
   void work();
 
