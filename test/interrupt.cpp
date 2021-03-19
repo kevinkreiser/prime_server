@@ -45,7 +45,7 @@ protected:
 };
 
 worker_t::result_t
-busy_work(const std::list<zmq::message_t>&, void*, const worker_t::interrupt_function_t&) {
+busy_work(const std::list<zmq::message_t>&, void*, worker_t::interrupt_function_t&) {
   while (true) {}
 }
 
@@ -135,7 +135,7 @@ void test_loop() {
                 worker_t(context, "ipc:///tmp/test_loop_proxy_downstream", "ipc:///dev/null",
                          "ipc:///tmp/test_loop_results", "ipc:///tmp/test_loop_interrupt",
                          [](const std::list<zmq::message_t>&, void*,
-                            const worker_t::interrupt_function_t& interrupt) -> worker_t::result_t {
+                            worker_t::interrupt_function_t& interrupt) -> worker_t::result_t {
                            condition.notify_one();
                            while (true) {
                              try {

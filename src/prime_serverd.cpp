@@ -82,7 +82,7 @@ int main(int argc, char** argv) {
             context, parse_proxy_endpoint + "_downstream", compute_proxy_endpoint + "_upstream",
             result_endpoint, request_interrupt,
             [](const std::list<zmq::message_t>& job, void* request_info,
-               const worker_t::interrupt_function_t&) {
+               worker_t::interrupt_function_t&) {
               // request should look like
               /// is_prime?possible_prime=SOME_NUMBER
               try {
@@ -145,7 +145,7 @@ int main(int argc, char** argv) {
                   worker_t(context, compute_proxy_endpoint + "_downstream", "ipc:///dev/null",
                            result_endpoint, request_interrupt,
                            [](const std::list<zmq::message_t>& job, void* request_info,
-                              const worker_t::interrupt_function_t&) {
+                              worker_t::interrupt_function_t&) {
                              // check if its prime
                              size_t prime = *static_cast<const size_t*>(job.front().data());
                              size_t divisor = 2;

@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
                   worker_t(context, proxy_endpoint + "_downstream", "ipc:///dev/null",
                            result_endpoint, request_interrupt,
                            [](const std::list<zmq::message_t>& job, void* request_info,
-                              const worker_t::interrupt_function_t&) {
+                              worker_t::interrupt_function_t&) {
                              worker_t::result_t result{false, {}, {}};
                              try {
                                // echo

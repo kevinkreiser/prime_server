@@ -169,7 +169,7 @@ public:
   };
   using interrupt_function_t = std::function<void()>;
   using work_function_t =
-      std::function<result_t(const std::list<zmq::message_t>&, void*, const interrupt_function_t&)>;
+      std::function<result_t(const std::list<zmq::message_t>&, void*, interrupt_function_t&)>;
   using cleanup_function_t = std::function<void()>;
 
   worker_t(zmq::context_t& context,

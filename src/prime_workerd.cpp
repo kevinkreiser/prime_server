@@ -41,7 +41,7 @@ int main(int argc, char** argv) {
   worker_t worker(context, upstream_proxy_endpoint, downstream_proxy_endpoint, server_result_loopback,
                   server_request_interrupt,
                   [](const std::list<zmq::message_t>& messages, void* request_info,
-                     const worker_t::interrupt_function_t&) {
+                     worker_t::interrupt_function_t&) {
                     auto request =
                         http_request_t::from_string(static_cast<const char*>(messages.front().data()),
                                                     messages.front().size());
