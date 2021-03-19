@@ -18,7 +18,7 @@ jobs:
         shell: bash
         run: |
           xcrun --show-sdk-path
-          cmake . -DCMAKE_BUILD_TYPE=Debug -DCMAKE_OSX_SYSROOT="/Library/Developer/CommandLineTools/SDKs/MacOSX10.15.sdk" && make all -j$(sysctl -n hw.ncpu)
+          cmake . -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_SANITIZERS=On -DCMAKE_OSX_SYSROOT="/Library/Developer/CommandLineTools/SDKs/MacOSX10.15.sdk" && make all -j$(sysctl -n hw.ncpu)
       - name: test
         shell: bash
         run: |

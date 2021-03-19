@@ -34,6 +34,11 @@ else()
   add_compile_options(-Wall -Wextra -pedantic -Werror)
 endif()
 
+option(ENABLE_SANITIZERS "Use all the integrated sanitizers for Debug build" OFF)
+option(ENABLE_ADDRESS_SANITIZER "Use memory sanitizer for Debug build" OFF)
+option(ENABLE_UNDEFINED_SANITIZER "Use UB sanitizer for Debug build" OFF)
+include(cmake/sanitizer.cmake)
+
 # Handle the dependencies
 pkg_check_modules(CURL REQUIRED libcurl>=7.22.0)
 include_directories(${CURL_INCLUDEDIR})

@@ -44,6 +44,11 @@ protected:
   }
 };
 
+worker_t::result_t
+busy_work(const std::list<zmq::message_t>&, void*, worker_t::interrupt_function_t&) {
+  while (true) {}
+}
+
 void test_early() {
   zmq::context_t context;
 
@@ -62,20 +67,10 @@ void test_early() {
   proxy.detach();
 
   // busy worker
-  std::thread worker(
-      std::bind(&testable_worker_t::work,
-                testable_worker_t(context, "ipc:///tmp/test_early_proxy_downstream",
-                                  "ipc:///dev/null", "ipc:///tmp/test_early_results",
-                                  "ipc:///tmp/test_early_interrupt",
-                                  [](const std::list<zmq::message_t>&, void*,
-                                     worker_t::interrupt_function_t&) {
-                                    while (true)
-                                      ;
-                                    return worker_t::result_t{false,
-                                                              {netstring_entity_t::to_string(
-                                                                  "i schteck fescht")},
-                                                              {}};
-                                  })));
+  std::thread worker(std::bind(&testable_worker_t::work,
+                               testable_worker_t(context, "ipc:///tmp/test_early_proxy_downstream",
+                                                 "ipc:///dev/null", "ipc:///tmp/test_early_results",
+                                                 "ipc:///tmp/test_early_interrupt", busy_work)));
   worker.detach();
 
   // we want a client that is very fickle, we need the client to send a request and then bail right
@@ -140,17 +135,13 @@ void test_loop() {
                 worker_t(context, "ipc:///tmp/test_loop_proxy_downstream", "ipc:///dev/null",
                          "ipc:///tmp/test_loop_results", "ipc:///tmp/test_loop_interrupt",
                          [](const std::list<zmq::message_t>&, void*,
-                            worker_t::interrupt_function_t& interrupt) {
+                            worker_t::interrupt_function_t& interrupt) -> worker_t::result_t {
                            condition.notify_one();
                            while (true) {
                              try {
                                interrupt();
                              } catch (...) { condition.notify_one(); }
                            }
-                           return worker_t::result_t{false,
-                                                     {netstring_entity_t::to_string(
-                                                         "i schteck fescht")},
-                                                     {}};
                          })));
   worker.detach();
 
@@ -181,15 +172,9 @@ void test_timeout() {
 
   // busy worker
   std::thread worker(
-      std::bind(&worker_t::work,
-                worker_t(context, "ipc:///tmp/test_timeout_proxy_downstream", "ipc:///dev/null",
-                         "ipc:///tmp/test_timeout_results", "ipc:///tmp/test_timeout_interrupt",
-                         [](const std::list<zmq::message_t>&, void*,
-                            worker_t::interrupt_function_t&) {
-                           while (true)
-                             ;
-                           return worker_t::result_t{};
-                         })));
+      std::bind(&worker_t::work, worker_t(context, "ipc:///tmp/test_timeout_proxy_downstream",
+                                          "ipc:///dev/null", "ipc:///tmp/test_timeout_results",
+                                          "ipc:///tmp/test_timeout_interrupt", busy_work)));
   worker.detach();
 
   std::string request = netstring_entity_t::to_string("wart uf mi");
