@@ -15,8 +15,9 @@ using namespace prime_server;
 
 std::string root = "./";
 
-worker_t::result_t
-disk_work(const std::list<zmq::message_t>& job, void* request_info, worker_t::interrupt_function_t&) {
+worker_t::result_t disk_work(const std::list<zmq::message_t>& job,
+                             void* request_info,
+                             const worker_t::interrupt_function_t&) {
   worker_t::result_t result{false, {}, {}};
   try {
     // check the disk

@@ -81,7 +81,7 @@ void test_unshaped() {
                       context, "ipc:///tmp/test_unshaped_proxy_downstream", "ipc:///dev/null",
                       "ipc:///tmp/test_unshaped_results", "ipc:///tmp/test_unshaped_interrupt",
                       [response](const std::list<zmq::message_t>&, void*,
-                                 worker_t::interrupt_function_t&) {
+                                 const worker_t::interrupt_function_t&) {
                         worker_t::result_t result{false,
                                                   {netstring_entity_t::to_string(response)},
                                                   response};
@@ -152,7 +152,7 @@ void test_shaped() {
                       context, "ipc:///tmp/test_shaped_proxy_downstream", "ipc:///dev/null",
                       "ipc:///tmp/test_shaped_results", "ipc:///tmp/test_shaped_interrupt",
                       [response](const std::list<zmq::message_t>&, void*,
-                                 worker_t::interrupt_function_t&) {
+                                 const worker_t::interrupt_function_t&) {
                         worker_t::result_t result{false,
                                                   {netstring_entity_t::to_string(response)},
                                                   response};

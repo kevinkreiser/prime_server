@@ -320,7 +320,7 @@ void test_parallel_clients() {
                 worker_t(context, "ipc:///tmp/test_http_proxy_downstream", "ipc:///dev/null",
                          "ipc:///tmp/test_http_results", "ipc:///tmp/test_http_interrupt",
                          [](const std::list<zmq::message_t>& job, void* request_info,
-                            worker_t::interrupt_function_t&) {
+                            const worker_t::interrupt_function_t&) {
                            // could be a get or a post
                            auto request = http_request_t::from_string(static_cast<const char*>(
                                                                           job.front().data()),

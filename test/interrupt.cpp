@@ -68,13 +68,8 @@ void test_early() {
                                   "ipc:///dev/null", "ipc:///tmp/test_early_results",
                                   "ipc:///tmp/test_early_interrupt",
                                   [](const std::list<zmq::message_t>&, void*,
-                                     worker_t::interrupt_function_t&) {
-                                    while (true)
-                                      ;
-                                    return worker_t::result_t{false,
-                                                              {netstring_entity_t::to_string(
-                                                                  "i schteck fescht")},
-                                                              {}};
+                                     const worker_t::interrupt_function_t&) -> worker_t::result_t {
+                                    while (true) {}
                                   })));
   worker.detach();
 
@@ -140,17 +135,13 @@ void test_loop() {
                 worker_t(context, "ipc:///tmp/test_loop_proxy_downstream", "ipc:///dev/null",
                          "ipc:///tmp/test_loop_results", "ipc:///tmp/test_loop_interrupt",
                          [](const std::list<zmq::message_t>&, void*,
-                            worker_t::interrupt_function_t& interrupt) {
+                            const worker_t::interrupt_function_t& interrupt) -> worker_t::result_t {
                            condition.notify_one();
                            while (true) {
                              try {
                                interrupt();
                              } catch (...) { condition.notify_one(); }
                            }
-                           return worker_t::result_t{false,
-                                                     {netstring_entity_t::to_string(
-                                                         "i schteck fescht")},
-                                                     {}};
                          })));
   worker.detach();
 
@@ -185,10 +176,8 @@ void test_timeout() {
                 worker_t(context, "ipc:///tmp/test_timeout_proxy_downstream", "ipc:///dev/null",
                          "ipc:///tmp/test_timeout_results", "ipc:///tmp/test_timeout_interrupt",
                          [](const std::list<zmq::message_t>&, void*,
-                            worker_t::interrupt_function_t&) {
-                           while (true)
-                             ;
-                           return worker_t::result_t{};
+                            const worker_t::interrupt_function_t&) -> worker_t::result_t {
+                           while (true) {}
                          })));
   worker.detach();
 
