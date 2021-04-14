@@ -50,6 +50,17 @@ make test -j8
 sudo make install
 ```
 
+In case autotools is failing for some reason, you can try CMake:
+
+```
+cd prime_server
+cmake -B build .
+cmake --build build
+# if you want build the test:
+make -C build test
+sudo make -C build install
+```
+
 ## Run it
 
 The library comes with a standalone binary which is essentially just a server or a simulated one that tells you whether or not a given input number is prime. The aim isn't really to do any type of novel large prime computation but rather to contrive a system whose units of work are highly non-uniform in terms of their time to completion (and yes random sleeps are boring). This is a common problem in many other workflows and primes seemed like a simple way to illustrate this.
