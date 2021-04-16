@@ -56,6 +56,10 @@ In case autotools is failing for some reason, you can try CMake:
 cd prime_server
 cmake -B build .
 cmake --build build
+# if this failed it may be necessary to specify SYSROOT (on Big Sur for example)
+if [ $? -ne 0 ]; then
+  cmake --build build -DCMAKE_OSX_SYSROOT="/Library/Developer/CommandLineTools/SDKs/MacOSX10.15.sdk"
+fi
 # if you want build the test:
 make -C build test
 sudo make -C build install
