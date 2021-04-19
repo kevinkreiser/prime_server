@@ -110,6 +110,7 @@ set(bindir "${CMAKE_INSTALL_PREFIX}/bin")
 set(libdir "${CMAKE_INSTALL_PREFIX}/lib")
 set(includedir "${CMAKE_INSTALL_PREFIX}/include/prime_server")
 set(pkgconfigdir "${CMAKE_INSTALL_PREFIX}/lib/pkgconfig")
+set(VERSION ${PROJECT_VERSION})
 
 install(TARGETS prime_server
 	LIBRARY DESTINATION ${libdir}
