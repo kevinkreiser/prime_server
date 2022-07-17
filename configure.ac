@@ -1,8 +1,8 @@
 AC_INIT([prime_server],
-	[m4_esyscmd([./version.sh])],
-	[https://github.com/kevinkreiser/prime_server/issues],
-	[prime_server-[m4_esyscmd([./version.sh])]],
-	[https://github.com/kevinkreiser/prime_server])
+        [m4_esyscmd([./version.sh])],
+        [https://github.com/kevinkreiser/prime_server/issues],
+        [prime_server-m4_esyscmd([./version.sh])],
+        [https://github.com/kevinkreiser/prime_server])
 AC_CONFIG_AUX_DIR([.])
 AM_INIT_AUTOMAKE([-Wall -Werror subdir-objects parallel-tests])
 m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
@@ -24,14 +24,16 @@ AC_PROG_CXX
 AC_PROG_INSTALL
 AC_PROG_MAKE_SET
 
-AC_HEADER_STDC
-AC_LANG_CPLUSPLUS
+AC_CHECK_INCLUDES_DEFAULT
+AC_PROG_EGREP
+
+AC_LANG([C++])
 
 # require c++11
 AX_CXX_COMPILE_STDCXX_11([noext],[mandatory])
 
 # check zmq version
-PKG_CHECK_MODULES([DEPS], [libzmq >= 4.1.4 libczmq >= 3.0 libcurl >= 7.22.0])
+PKG_CHECK_MODULES(DEPS, [libzmq >= 4.1.4 libczmq >= 3.0 libcurl >= 7.22.0])
 
 # require pthread as a regular dep because we need it everywhere
 AX_PTHREAD(, [AC_MSG_ERROR([cannot find libpthread])])
