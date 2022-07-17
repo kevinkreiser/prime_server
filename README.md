@@ -17,14 +17,6 @@
 On Linux:
 
 ```bash
-# trusty didn't have czmq or newer zmq in the repositories so its repackaged here
-if [[ $(grep -cF trusty /etc/lsb-release) > 0 ]]; then
-  sudo add-apt-repository -y ppa:kevinkreiser/libsodium
-  sudo add-apt-repository -y ppa:kevinkreiser/libpgm
-  sudo add-apt-repository -y ppa:kevinkreiser/zeromq3
-  sudo add-apt-repository -y ppa:kevinkreiser/czmq
-  sudo apt-get update
-fi
 # grab some standard autotools stuff
 sudo apt-get install autoconf automake libtool make gcc g++ lcov
 # grab curl (for url de/encode) and zmq for the awesomeness

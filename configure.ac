@@ -1,9 +1,8 @@
-AC_INIT(
-    [prime_server],
-    [m4_esyscmd([./version.sh])],
-    [https://github.com/kevinkreiser/prime_server/issues],
-    [prime_server-m4_esyscmd([./version.sh])],
-    [https://github.com/kevinkreiser/prime_server])
+AC_INIT([prime_server],
+        [m4_esyscmd([./version.sh])],
+        [https://github.com/kevinkreiser/prime_server/issues],
+        [prime_server-m4_esyscmd([./version.sh])],
+        [https://github.com/kevinkreiser/prime_server])
 AC_CONFIG_AUX_DIR([.])
 AM_INIT_AUTOMAKE([-Wall -Werror subdir-objects parallel-tests])
 m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
