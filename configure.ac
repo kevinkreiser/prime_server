@@ -1,9 +1,8 @@
-CODE_VERSION=`./version.sh`
 AC_INIT(
     [prime_server],
-    [$(CODE_VERSION)],
+    [m4_esyscmd([./version.sh])],
     [https://github.com/kevinkreiser/prime_server/issues],
-    [prime_server-$(CODE_VERSION)],
+    [prime_server-m4_esyscmd([./version.sh])],
     [https://github.com/kevinkreiser/prime_server])
 AC_CONFIG_AUX_DIR([.])
 AM_INIT_AUTOMAKE([-Wall -Werror subdir-objects parallel-tests])
