@@ -18,7 +18,7 @@ On Linux:
 
 ```bash
 # grab some standard autotools stuff
-sudo apt-get install autoconf automake libtool make gcc g++ lcov
+sudo apt-get install autoconf automake pkg-config libtool make gcc g++ lcov
 # grab curl (for url de/encode) and zmq for the awesomeness
 sudo apt-get install libcurl4-openssl-dev libzmq3-dev libczmq-dev
 ```
