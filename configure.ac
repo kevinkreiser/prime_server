@@ -1,8 +1,10 @@
-AC_INIT([prime_server],
-	[m4_esyscmd([./version.sh])],
-	[https://github.com/kevinkreiser/prime_server/issues],
-	[prime_server-[m4_esyscmd([./version.sh])]],
-	[https://github.com/kevinkreiser/prime_server])
+CODE_VERSION=`./version.sh`
+AC_INIT(
+    [prime_server],
+    [$(CODE_VERSION)],
+    [https://github.com/kevinkreiser/prime_server/issues],
+    [prime_server-$(CODE_VERSION)],
+    [https://github.com/kevinkreiser/prime_server])
 AC_CONFIG_AUX_DIR([.])
 AM_INIT_AUTOMAKE([-Wall -Werror subdir-objects parallel-tests])
 m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
@@ -24,8 +26,10 @@ AC_PROG_CXX
 AC_PROG_INSTALL
 AC_PROG_MAKE_SET
 
-AC_HEADER_STDC
-AC_LANG_CPLUSPLUS
+AC_CHECK_INCLUDES_DEFAULT
+AC_PROG_EGREP
+
+AC_LANG([C++])
 
 # require c++11
 AX_CXX_COMPILE_STDCXX_11([noext],[mandatory])
