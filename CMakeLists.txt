@@ -3,6 +3,7 @@ include(cmake/version.cmake)
 get_version(${CMAKE_SOURCE_DIR}/prime_server/prime_server.hpp "PRIME_SERVER_")
 project(prime_server LANGUAGES CXX C VERSION ${PRIME_SERVER_VERSION_MAJOR}.${PRIME_SERVER_VERSION_MINOR}.${PRIME_SERVER_VERSION_PATCH})
 INCLUDE(FindPkgConfig)
+INCLUDE(GNUInstallDirs)
 
 # Use a C++11 enabled compiler
 set(CMAKE_CXX_STANDARD 11)
@@ -104,24 +105,19 @@ set_target_properties(prime_server PROPERTIES
 	VERSION ${PROJECT_VERSION})
 
 # Install paths
-set(prefix "${CMAKE_INSTALL_PREFIX}")
-set(exec_prefix "${CMAKE_INSTALL_PREFIX}")
-set(bindir "${CMAKE_INSTALL_PREFIX}/bin")
-set(libdir "${CMAKE_INSTALL_PREFIX}/lib")
-set(includedir "${CMAKE_INSTALL_PREFIX}/include/prime_server")
-set(pkgconfigdir "${CMAKE_INSTALL_PREFIX}/lib/pkgconfig")
+set(pkgconfigdir "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
 set(VERSION ${PROJECT_VERSION})
 
 install(TARGETS prime_server
-	LIBRARY DESTINATION ${libdir}
-	PUBLIC_HEADER DESTINATION ${includedir})
+	LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+	PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 install(TARGETS prime_echod
 	prime_filed
 	prime_httpd
 	prime_serverd
 	prime_proxyd
-	prime_workerd DESTINATION ${bindir})
+	prime_workerd DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 CONFIGURE_FILE(
 	"${CMAKE_CURRENT_SOURCE_DIR}/libprime_server.pc.in"
