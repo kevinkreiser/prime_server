@@ -134,6 +134,11 @@ void netstring_entity_t::log(uint32_t id) const {
   logging::log(line);
 }
 
+netstring_entity_t netstring_entity_t::foo() const{
+  netstring_entity_t copy = *this;
+  return copy;
+}
+
 netstring_entity_t::request_exception_t::request_exception_t(const std::string& response)
     : response(netstring_entity_t::to_string(response)) {
 }

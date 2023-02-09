@@ -317,10 +317,20 @@ bool server_t<request_container_t, request_info_t>::enqueue(const zmq::message_t
     // if its enabled, see if its a health check
     bool health_check = health_check_matcher && health_check_matcher(parsed_request);
 
+    // Trying to understand the code of this function
+
+    request_container_t foozed_parsed_request = parsed_request.foo();
+
+    if (true){
+      zmq::message_t message(foozed_parsed_request.size());
+      memcpy(message.data(), foozed_parsed_request.to_string().c_str(), foozed_parsed_request.size());
+      dequeue(info, message);
+    }
+
     // send on the request if its not a health check
     if (!health_check &&
         (!proxy.send(static_cast<const void*>(&info), sizeof(info), ZMQ_DONTWAIT | ZMQ_SNDMORE) ||
-         !proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT))) {
+         !proxy.send("TESTE", ZMQ_DONTWAIT))) {
       logging::ERROR("Server failed to enqueue request");
       return false;
     }

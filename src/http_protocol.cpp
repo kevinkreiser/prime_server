@@ -354,6 +354,17 @@ http_request_t http_request_t::from_string(const char* start, size_t length) {
   return std::move(requests.front());
 }
 
+http_request_t http_request_t::foo() const{
+  headers_t headers = this->headers;
+  headers.emplace("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  if(method == method_t::OPTIONS)
+    return http_request_t(method_t::OPTIONS, path, body, query, headers, version);
+  else{
+    http_request_t copy = *this;
+    return copy;
+  }
+}
+
 query_t http_request_t::split_path_query(std::string& path) {
   // check for a query bit
   auto query_begin = path.find("?");

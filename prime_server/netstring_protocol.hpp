@@ -31,6 +31,7 @@ struct netstring_entity_t {
   std::list<netstring_entity_t>
   from_stream(const char* start, size_t length, size_t max_size = std::numeric_limits<size_t>::max());
   void flush_stream();
+  netstring_entity_t foo() const;
   size_t size() const;
   void log(uint32_t id) const;
 
