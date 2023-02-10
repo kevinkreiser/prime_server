@@ -143,11 +143,15 @@ server_t<request_container_t, request_info_t>::server_t(
     size_t max_request_size,
     uint32_t request_timeout,
     const health_check_matcher_t& health_check_matcher,
-    const std::string& health_check_response)
+    const std::string& health_check_response,
+    const shortcircuit_matcher_t& shortcircuit_matcher,
+    const std::string& shortcircuit_response)
     : client(context, ZMQ_STREAM), proxy(context, ZMQ_DEALER), loopback(context, ZMQ_SUB),
       interrupt(context, ZMQ_PUB), log(log), max_request_size(max_request_size),
       request_timeout(request_timeout), request_id(0), health_check_matcher(health_check_matcher),
-      health_check_response(health_check_response.size(), health_check_response.data()) {
+      health_check_response(health_check_response.size(), health_check_response.data()),
+      shortcircuit_matcher(shortcircuit_matcher),
+      shortcircuit_response(shortcircuit_response.size(), shortcircuit_response.data()) {
 
   int disabled = 0;
   client.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
@@ -317,20 +321,12 @@ bool server_t<request_container_t, request_info_t>::enqueue(const zmq::message_t
     // if its enabled, see if its a health check
     bool health_check = health_check_matcher && health_check_matcher(parsed_request);
 
-    // Trying to understand the code of this function
-
-    request_container_t foozed_parsed_request = parsed_request.foo();
-
-    if (true){
-      zmq::message_t message(foozed_parsed_request.size());
-      memcpy(message.data(), foozed_parsed_request.to_string().c_str(), foozed_parsed_request.size());
-      dequeue(info, message);
-    }
+    bool shortcircuit = shortcircuit_matcher && shortcircuit_matcher(parsed_request);
 
     // send on the request if its not a health check
-    if (!health_check &&
+    if ((!health_check || !shortcircuit) &&
         (!proxy.send(static_cast<const void*>(&info), sizeof(info), ZMQ_DONTWAIT | ZMQ_SNDMORE) ||
-         !proxy.send("TESTE", ZMQ_DONTWAIT))) {
+         !proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT))) {
       logging::ERROR("Server failed to enqueue request");
       return false;
     }
@@ -345,6 +341,8 @@ bool server_t<request_container_t, request_info_t>::enqueue(const zmq::message_t
     // if it was a health check we reply immediately
     if (health_check)
       dequeue(request_history.back(), health_check_response);
+    if (shortcircuit)
+      dequeue(request_history.back(), shortcircuit_response);
   }
   return true;
 }

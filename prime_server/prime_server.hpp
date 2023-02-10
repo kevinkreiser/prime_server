@@ -66,6 +66,7 @@ template <class request_container_t, class request_info_t>
 class server_t {
 public:
   using health_check_matcher_t = std::function<bool(const request_container_t&)>;
+  using shortcircuit_matcher_t = std::function<bool(const request_container_t&)>;
 
   server_t(zmq::context_t& context,
            const std::string& client_endpoint,
@@ -76,7 +77,9 @@ public:
            size_t max_request_size = DEFAULT_MAX_REQUEST_SIZE,
            uint32_t request_timeout = DEFAULT_REQUEST_TIMEOUT,
            const health_check_matcher_t& health_check_matcher = {},
-           const std::string& health_check_response = {});
+           const std::string& health_check_response = {},
+           const shortcircuit_matcher_t& shortcircuit_matcher = {},
+           const std::string& shortcircuit_response = {});
   virtual ~server_t();
   void serve();
 
@@ -125,6 +128,11 @@ protected:
   std::function<bool(const request_container_t&)> health_check_matcher;
   // the response bytes to send when a health check request is received
   zmq::message_t health_check_response;
+  // a matcher for determining whether a request should be short circuited
+  std::function<bool(const request_container_t&)> shortcircuit_matcher;
+  // the response bytes to send when a short circuit request is received
+  zmq::message_t shortcircuit_response;
+
 };
 
 // proxy messages between layers of a backend load balancing in between

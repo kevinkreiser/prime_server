@@ -46,11 +46,18 @@ int main(int argc, char** argv) {
   std::string request_interrupt = "ipc://request_interrupt";
   std::string proxy_endpoint = "ipc:///tmp/proxy_endpoint";
 
+  http_server_t::shortcircuit_matcher_t shortcircuit_matcher{};
+  std::string shortcircuit_response;
+  shortcircuit_matcher = [&argv](const http_request_t& r) -> bool { return r.method == method_t::OPTIONS; };
+  shortcircuit_response = http_response_t{200, "OK", "Testing Short Circuit"}.to_string();
+
+
   // server
   std::thread server_thread =
       std::thread(std::bind(&http_server_t::serve,
                             http_server_t(context, server_endpoint, proxy_endpoint + "_upstream",
-                                          result_endpoint, request_interrupt, true)));
+                                          result_endpoint, request_interrupt, true,1024 * 1024 * 10,
+                                          -1, {}, {}, shortcircuit_matcher, shortcircuit_response)));
 
   // load balancer for parsing
   std::thread echo_proxy(std::bind(&proxy_t::forward, proxy_t(context, proxy_endpoint + "_upstream",
