@@ -742,4 +742,25 @@ std::string http_response_t::generic(unsigned code,
   return response;
 }
 
-} // namespace prime_server
+std::unique_ptr<zmq::message_t> http_options_shortcircuiter_t::operator() (const http_request_t& request) const{
+  if(request.method == method_t::OPTIONS) {
+    http_response_t response(200, "OK", "", headers_t{{"Access-Control-Allow-Origin", "*"},
+                                                      {"Access-Control-Allow-Methods", "GET, POST, OPTIONS"},
+                                                      {"Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization"},
+                                                      {"Access-Control-Allow-Credentials", "true"}});
+                                                      
+    std::unique_ptr<zmq::message_t> response_msg(std::make_unique<zmq::message_t>(response.to_string().length(), response.to_string().c_str()));
+    return response_msg;
+  }
+  std::unique_ptr<zmq::message_t> response_msg;
+  return response_msg;
+}
+
+http_options_shortcircuiter_t::http_options_shortcircuiter_t(uint8_t verb_mask ) : verb_mask(verb_mask){
+
+  } // namespace prime_server
+
+bool http_options_shortcircuiter_t::need_shortcircuit(const http_request_t& request) const {
+  return request.method == method_t::OPTIONS;
+}
+}

@@ -144,14 +144,12 @@ server_t<request_container_t, request_info_t>::server_t(
     uint32_t request_timeout,
     const health_check_matcher_t& health_check_matcher,
     const std::string& health_check_response,
-    const shortcircuit_matcher_t& shortcircuit_matcher,
-    const std::string& shortcircuit_response)
+    const shortcircuiter_t& shortcircuiter)
     : client(context, ZMQ_STREAM), proxy(context, ZMQ_DEALER), loopback(context, ZMQ_SUB),
       interrupt(context, ZMQ_PUB), log(log), max_request_size(max_request_size),
       request_timeout(request_timeout), request_id(0), health_check_matcher(health_check_matcher),
       health_check_response(health_check_response.size(), health_check_response.data()),
-      shortcircuit_matcher(shortcircuit_matcher),
-      shortcircuit_response(shortcircuit_response.size(), shortcircuit_response.data()) {
+      shortcircuiter(shortcircuiter) {
 
   int disabled = 0;
   client.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
@@ -321,7 +319,12 @@ bool server_t<request_container_t, request_info_t>::enqueue(const zmq::message_t
     // if its enabled, see if its a health check
     bool health_check = health_check_matcher && health_check_matcher(parsed_request);
 
-    bool shortcircuit = shortcircuit_matcher && shortcircuit_matcher(parsed_request);
+    bool shortcircuit = false;
+    std::unique_ptr<zmq::message_t> shortcircuited_request;
+    if(shortcircuiter.target_type() != typeid(std::nullptr_t)){
+      shortcircuited_request = shortcircuiter(parsed_request);
+      shortcircuit = shortcircuiter(parsed_request).get() != nullptr;
+    }
 
     // send on the request if its not a health check
     if ((!health_check || !shortcircuit) &&
@@ -341,8 +344,9 @@ bool server_t<request_container_t, request_info_t>::enqueue(const zmq::message_t
     // if it was a health check we reply immediately
     if (health_check)
       dequeue(request_history.back(), health_check_response);
-    if (shortcircuit)
-      dequeue(request_history.back(), shortcircuit_response);
+    if (shortcircuit){
+      dequeue(request_history.back(), *shortcircuited_request);
+    }
   }
   return true;
 }

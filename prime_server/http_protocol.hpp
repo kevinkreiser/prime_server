@@ -69,6 +69,7 @@ const std::unordered_map<method_t, std::string, std::hash<int>>
 const std::unordered_map<std::string, bool> SUPPORTED_VERSIONS{{"HTTP/1.0", true},
                                                                {"HTTP/1.1", true}};
 
+
 struct http_entity_t {
   std::string version;
   headers_t headers;
@@ -187,6 +188,13 @@ public:
 
 protected:
   std::string log_line;
+};
+
+struct http_options_shortcircuiter_t {
+  http_options_shortcircuiter_t(uint8_t verb_mask = std::numeric_limits<uint8_t>::max());
+  uint8_t verb_mask;
+  std::unique_ptr<zmq::message_t> operator()(const http_request_t& request) const;
+  bool need_shortcircuit(const http_request_t& request) const;
 };
 
 using http_server_t = server_t<http_request_t, http_request_info_t>;
