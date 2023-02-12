@@ -193,7 +193,7 @@ protected:
 struct http_options_shortcircuiter_t {
   http_options_shortcircuiter_t(uint8_t verb_mask = std::numeric_limits<uint8_t>::max());
   uint8_t verb_mask;
-  std::pair<std::unique_ptr<zmq::message_t>, bool> operator()(const http_request_t& request) const;
+  std::unique_ptr<zmq::message_t> operator()(const http_request_t& request) const;
 };
 
 using http_server_t = server_t<http_request_t, http_request_info_t>;

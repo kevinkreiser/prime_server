@@ -742,7 +742,7 @@ std::string http_response_t::generic(unsigned code,
   return response;
 }
 
-std::pair<std::unique_ptr<zmq::message_t>, bool>http_options_shortcircuiter_t::operator() (const http_request_t& request) const{
+std::unique_ptr<zmq::message_t>http_options_shortcircuiter_t::operator() (const http_request_t& request) const{
   if(request.method == method_t::OPTIONS) {
     http_response_t response(200, "OK", "", headers_t{{"Access-Control-Allow-Origin", "*"},
                                                       {"Access-Control-Allow-Methods", "GET, POST, OPTIONS"},
@@ -750,10 +750,10 @@ std::pair<std::unique_ptr<zmq::message_t>, bool>http_options_shortcircuiter_t::o
                                                       {"Access-Control-Allow-Credentials", "true"}});
                                                       
     std::unique_ptr<zmq::message_t> response_msg(std::make_unique<zmq::message_t>(response.to_string().length(), response.to_string().c_str()));
-    return std::make_pair(std::move(response_msg), true);
+    return response_msg;
   }
-  std::unique_ptr<zmq::message_t> response_msg;
-  return std::make_pair(std::move(response_msg), false);
+
+  return nullptr;
 }
 
 http_options_shortcircuiter_t::http_options_shortcircuiter_t(uint8_t verb_mask ) : verb_mask(verb_mask){

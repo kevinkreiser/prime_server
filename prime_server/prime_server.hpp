@@ -68,7 +68,7 @@ template <class request_container_t, class request_info_t>
 class server_t {
 public:
   using health_check_matcher_t = std::function<bool(const request_container_t&)>;
-  using shortcircuiter_t = std::function<std::pair<std::unique_ptr<zmq::message_t>, bool>(const request_container_t&)>;
+  using shortcircuiter_t = std::function<std::unique_ptr<zmq::message_t>(const request_container_t&)>;
 
   server_t(zmq::context_t& context,
            const std::string& client_endpoint,
