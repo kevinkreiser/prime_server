@@ -46,12 +46,7 @@ int main(int argc, char** argv) {
   std::string request_interrupt = "ipc://request_interrupt";
   std::string proxy_endpoint = "ipc:///tmp/proxy_endpoint";
 
-  // http_server_t::shortcircuit_matcher_t shortcircuit_matcher{};
-  // std::string shortcircuit_response;
-  // shortcircuit_matcher = [&argv](const http_request_t& r) -> bool { return r.method == method_t::OPTIONS; };
-  // shortcircuit_response = http_response_t{200, "OK", "Testing Short Circuit"}.to_string();
   http_options_shortcircuiter_t shortcircuiter(10);
-  std::cout << "shortcircuit: " << shortcircuiter.verb_mask << std::endl;
   auto shortcircuit = std::bind(&http_options_shortcircuiter_t::operator(), shortcircuiter, std::placeholders::_1);
 
   http_response_t shortcircuit_response(200, "OK", "Testing Short Circuit");
@@ -79,14 +74,6 @@ int main(int argc, char** argv) {
                               worker_t::interrupt_function_t&) {
                              worker_t::result_t result{false, {}, {}};
                              try {
-
-                                  // headers_t headers { 
-                                  // {"Content-Type", "text/plain"},
-                                  // {"Accept-Encoding", "gzip"},
-                                  // {"User-Agent", "MyCustomAgent"},
-                                  // {"Access-Control-Allow-Origin", "*"}
-                                  // };
-                               // echo
                                http_response_t response(200, 
                                                         "OK",
                                                         std::string(static_cast<const char*>(job.front().data()),

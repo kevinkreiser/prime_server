@@ -319,15 +319,18 @@ bool server_t<request_container_t, request_info_t>::enqueue(const zmq::message_t
     // if its enabled, see if its a health check
     bool health_check = health_check_matcher && health_check_matcher(parsed_request);
 
-    bool shortcircuit = false;
-    std::unique_ptr<zmq::message_t> shortcircuited_request;
-    if(shortcircuiter.target_type() != typeid(std::nullptr_t)){
+    std::pair<std::unique_ptr<zmq::message_t>, bool> shortcircuited_request;
+
+    if(shortcircuiter){
       shortcircuited_request = shortcircuiter(parsed_request);
-      shortcircuit = shortcircuiter(parsed_request).get() != nullptr;
+    }else{
+      shortcircuited_request = std::make_pair(nullptr, false);
     }
 
+    bool need_shortcircuit = shortcircuited_request.second;
+
     // send on the request if its not a health check
-    if ((!health_check || !shortcircuit) &&
+    if ((!health_check || !need_shortcircuit) &&
         (!proxy.send(static_cast<const void*>(&info), sizeof(info), ZMQ_DONTWAIT | ZMQ_SNDMORE) ||
          !proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT))) {
       logging::ERROR("Server failed to enqueue request");
@@ -344,8 +347,8 @@ bool server_t<request_container_t, request_info_t>::enqueue(const zmq::message_t
     // if it was a health check we reply immediately
     if (health_check)
       dequeue(request_history.back(), health_check_response);
-    if (shortcircuit){
-      dequeue(request_history.back(), *shortcircuited_request);
+    if (need_shortcircuit){
+      dequeue(request_history.back(), *(shortcircuited_request.first));
     }
   }
   return true;
