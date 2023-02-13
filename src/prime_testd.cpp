@@ -47,7 +47,7 @@ int main(int argc, char** argv) {
   std::string proxy_endpoint = "ipc:///tmp/proxy_endpoint";
 
   http_options_shortcircuiter_t shortcircuiter(10);
-  std::function<std::unique_ptr<zmq::message_t>(const http_request_t&)> shortcircuit = std::bind(&http_options_shortcircuiter_t::operator(), shortcircuiter, std::placeholders::_1);
+  http_shortcircuiter_function_t shortcircuit = std::bind(&http_options_shortcircuiter_t::operator(), shortcircuiter, std::placeholders::_1);
 
   http_shortcircuiters_t shortcircuiters;
   shortcircuiters.insert(shortcircuit);

@@ -198,5 +198,6 @@ struct http_options_shortcircuiter_t {
 
 using http_server_t = server_t<http_request_t, http_request_info_t>;
 using http_shortcircuiters_t = shortcircuiters_t<http_request_t>;
+using http_shortcircuiter_function_t = shortcircuit_function_t<http_request_t>;
 
 } // namespace prime_server

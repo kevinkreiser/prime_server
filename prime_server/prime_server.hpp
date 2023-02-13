@@ -75,6 +75,9 @@ struct shortcircuiters_t {
     virtual std::unique_ptr<zmq::message_t> shortcircuit(const request_container_t& request) const;
 };
 
+template <class request_container_t>
+using shortcircuit_function_t = std::function<std::unique_ptr<zmq::message_t>(const request_container_t&)>;
+
 // TODO: make configuration objects to use as parameter packs because these constructors are large
 
 
