@@ -68,10 +68,11 @@ struct shortcircuiters_t {
     std::vector<shortcircuiter_t> shortcircuiters = {};
 
     // Method that inserts a shortcircuiter function into the vector of shortcircuiters
-    void insert(shortcircuiter_t& shortcircuiter);
-    size_t size() const;
+    virtual void insert(shortcircuiter_t& shortcircuiter);
 
-    std::unique_ptr<zmq::message_t> shortcircuit(const request_container_t&) const;
+    virtual size_t size() const;
+
+    virtual std::unique_ptr<zmq::message_t> shortcircuit(const request_container_t& request) const;
 };
 
 // TODO: make configuration objects to use as parameter packs because these constructors are large

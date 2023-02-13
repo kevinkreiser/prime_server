@@ -50,8 +50,9 @@ int main(int argc, char** argv) {
   std::function<std::unique_ptr<zmq::message_t>(const http_request_t&)> shortcircuit = std::bind(&http_options_shortcircuiter_t::operator(), shortcircuiter, std::placeholders::_1);
 
   http_shortcircuiters_t shortcircuiters;
-  shortcircuiters.size();
   shortcircuiters.insert(shortcircuit);
+  shortcircuiters.size();
+  std::cout << shortcircuiters.size() << std::endl;
 
   http_response_t shortcircuit_response(200, "OK", "Testing Short Circuit");
   // server

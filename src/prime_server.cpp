@@ -132,6 +132,28 @@ void client_t::batch() {
   } while (more && !shutting_down());
 }
 
+// Insert a shortcircuiter into the list of shortcircuiters
+template <class request_container_t>
+void shortcircuiters_t<request_container_t>::insert(shortcircuiter_t& shortcircuiter) {
+    shortcircuiters.push_back(shortcircuiter);
+}
+
+template <class request_container_t>
+size_t shortcircuiters_t<request_container_t>::size() const{
+    return shortcircuiters.size();
+}
+
+template <class request_container_t>
+std::unique_ptr<zmq::message_t> shortcircuiters_t<request_container_t>::shortcircuit(
+    const request_container_t& request) const {
+  for (const auto& shortcircuiter : shortcircuiters) {
+    auto result = shortcircuiter(request);
+    if (result)
+      return result;
+  }
+  return nullptr;
+}
+
 template <class request_container_t, class request_info_t>
 server_t<request_container_t, request_info_t>::server_t(
     zmq::context_t& context,
@@ -321,6 +343,7 @@ bool server_t<request_container_t, request_info_t>::enqueue(const zmq::message_t
 
     std::unique_ptr<zmq::message_t> shortcircuit;
     if(shortcircuiters.size() > 0){
+      std::cout << "shortcircuiters.size() > 0" << std::endl;
       shortcircuit = shortcircuiters.shortcircuit(parsed_request);
     }
     
@@ -403,6 +426,7 @@ int proxy_t::expire() {
   // just get the time and iterate from the beginning popping off stale ones
   return static_cast<bool>(fifo.size()) + 1;
 }
+
 void proxy_t::forward() {
   // keep forwarding messages
   while (!shutting_down()) {
@@ -619,27 +643,6 @@ bool shutting_down() {
   return quiescable::get().shutting_down;
 }
 
-// Insert a shortcircuiter into the list of shortcircuiters
-template <class request_container_t>
-void shortcircuiters_t<request_container_t>::insert(shortcircuiter_t& shortcircuiter) {
-    shortcircuiters.push_back(shortcircuiter);
-}
-
-template <class request_container_t>
-size_t shortcircuiters_t<request_container_t>::size() const{
-    return shortcircuiters.size();
-}
-
-template <class request_container_t>
-std::unique_ptr<zmq::message_t> shortcircuiters_t<request_container_t>::shortcircuit(
-    const request_container_t& request) const {
-  for (const auto& shortcircuiter : shortcircuiters) {
-    auto result = shortcircuiter(request);
-    if (result)
-      return result;
-  }
-  return nullptr;
-}
 
 // explicit instantiation for netstring and http
 template class server_t<netstring_entity_t, netstring_request_info_t>;
