@@ -144,12 +144,12 @@ server_t<request_container_t, request_info_t>::server_t(
     uint32_t request_timeout,
     const health_check_matcher_t& health_check_matcher,
     const std::string& health_check_response,
-    const shortcircuiter_t& shortcircuiter)
+    const shortcircuiters_t<request_container_t>& shortcircuiters)
     : client(context, ZMQ_STREAM), proxy(context, ZMQ_DEALER), loopback(context, ZMQ_SUB),
       interrupt(context, ZMQ_PUB), log(log), max_request_size(max_request_size),
       request_timeout(request_timeout), request_id(0), health_check_matcher(health_check_matcher),
       health_check_response(health_check_response.size(), health_check_response.data()),
-      shortcircuiter(shortcircuiter) {
+      shortcircuiters(shortcircuiters) {
 
   int disabled = 0;
   client.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
@@ -319,10 +319,14 @@ bool server_t<request_container_t, request_info_t>::enqueue(const zmq::message_t
     // if its enabled, see if its a health check
     bool health_check = health_check_matcher && health_check_matcher(parsed_request);
 
-    auto shortcircuited = shortcircuiter ? shortcircuiter(parsed_request) : nullptr;
+    std::unique_ptr<zmq::message_t> shortcircuit;
+    if(shortcircuiters.size() > 0){
+      shortcircuit = shortcircuiters.shortcircuit(parsed_request);
+    }
+    
 
     // send on the request if its not a health check
-    if ((!health_check || !shortcircuited) &&
+    if ((!health_check || !shortcircuit) &&
         (!proxy.send(static_cast<const void*>(&info), sizeof(info), ZMQ_DONTWAIT | ZMQ_SNDMORE) ||
          !proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT))) {
       logging::ERROR("Server failed to enqueue request");
@@ -339,8 +343,8 @@ bool server_t<request_container_t, request_info_t>::enqueue(const zmq::message_t
     // if it was a health check we reply immediately
     if (health_check)
       dequeue(request_history.back(), health_check_response);
-    if (shortcircuited){
-      dequeue(request_history.back(), *shortcircuited);
+    if (shortcircuit){
+      dequeue(request_history.back(), *shortcircuit);
     }
   }
   return true;
@@ -613,6 +617,28 @@ bool draining() {
 }
 bool shutting_down() {
   return quiescable::get().shutting_down;
+}
+
+// Insert a shortcircuiter into the list of shortcircuiters
+template <class request_container_t>
+void shortcircuiters_t<request_container_t>::insert(shortcircuiter_t& shortcircuiter) {
+    shortcircuiters.push_back(shortcircuiter);
+}
+
+template <class request_container_t>
+size_t shortcircuiters_t<request_container_t>::size() const{
+    return shortcircuiters.size();
+}
+
+template <class request_container_t>
+std::unique_ptr<zmq::message_t> shortcircuiters_t<request_container_t>::shortcircuit(
+    const request_container_t& request) const {
+  for (const auto& shortcircuiter : shortcircuiters) {
+    auto result = shortcircuiter(request);
+    if (result)
+      return result;
+  }
+  return nullptr;
 }
 
 // explicit instantiation for netstring and http

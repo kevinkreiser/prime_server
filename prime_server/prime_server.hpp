@@ -13,6 +13,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 #include <prime_server/zmq_helpers.hpp>
 
@@ -59,16 +60,28 @@ constexpr uint32_t DEFAULT_REQUEST_TIMEOUT = -1;              // infinity second
 // TODO: bundle both request_containter_t (req, rep) and request_info_t into
 // a single session_t that implements all the guts of the protocol
 
+// Struct that stores the a vector of shortcircuiter functions and its priorities
+template <class request_container_t>
+struct shortcircuiters_t {
+    using shortcircuiter_t = std::function<std::unique_ptr<zmq::message_t>(const request_container_t&)>;
+    shortcircuiters_t() = default;
+    std::vector<shortcircuiter_t> shortcircuiters = {};
+
+    // Method that inserts a shortcircuiter function into the vector of shortcircuiters
+    void insert(shortcircuiter_t& shortcircuiter);
+    size_t size() const;
+
+    std::unique_ptr<zmq::message_t> shortcircuit(const request_container_t&) const;
+};
+
 // TODO: make configuration objects to use as parameter packs because these constructors are large
 
-// Function that returns a nullptr to a message_t that is used to short circuit the request
 
 // server sits between a clients and a load balanced backend
 template <class request_container_t, class request_info_t>
 class server_t {
 public:
   using health_check_matcher_t = std::function<bool(const request_container_t&)>;
-  using shortcircuiter_t = std::function<std::unique_ptr<zmq::message_t>(const request_container_t&)>;
 
   server_t(zmq::context_t& context,
            const std::string& client_endpoint,
@@ -80,7 +93,7 @@ public:
            uint32_t request_timeout = DEFAULT_REQUEST_TIMEOUT,
            const health_check_matcher_t& health_check_matcher = {},
            const std::string& health_check_response = {},
-           const shortcircuiter_t& shortcircuiter = nullptr);
+           const shortcircuiters_t<request_container_t>& shortcircuiters = {});
   virtual ~server_t();
   void serve();
 
@@ -130,7 +143,9 @@ protected:
   // the response bytes to send when a health check request is received
   zmq::message_t health_check_response;
   // a function that can short circuit a request and return a response
-  shortcircuiter_t shortcircuiter;
+  shortcircuiters_t<request_container_t> shortcircuiters;
+  // a vector of shortcircuiter functions and its priorities
+  // shortcircuiters_t shortcircuiters;
 };
 
 // proxy messages between layers of a backend load balancing in between

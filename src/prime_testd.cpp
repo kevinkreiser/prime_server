@@ -47,7 +47,11 @@ int main(int argc, char** argv) {
   std::string proxy_endpoint = "ipc:///tmp/proxy_endpoint";
 
   http_options_shortcircuiter_t shortcircuiter(10);
-  auto shortcircuit = std::bind(&http_options_shortcircuiter_t::operator(), shortcircuiter, std::placeholders::_1);
+  std::function<std::unique_ptr<zmq::message_t>(const http_request_t&)> shortcircuit = std::bind(&http_options_shortcircuiter_t::operator(), shortcircuiter, std::placeholders::_1);
+
+  http_shortcircuiters_t shortcircuiters;
+  shortcircuiters.size();
+  shortcircuiters.insert(shortcircuit);
 
   http_response_t shortcircuit_response(200, "OK", "Testing Short Circuit");
   // server
@@ -55,7 +59,7 @@ int main(int argc, char** argv) {
       std::thread(std::bind(&http_server_t::serve,
                             http_server_t(context, server_endpoint, proxy_endpoint + "_upstream",
                                           result_endpoint, request_interrupt, true,1024 * 1024 * 10,
-                                          -1, {}, {}, shortcircuit)));
+                                          -1, {}, {}, shortcircuiters)));
 
   // load balancer for parsing
   std::thread echo_proxy(std::bind(&proxy_t::forward, proxy_t(context, proxy_endpoint + "_upstream",
