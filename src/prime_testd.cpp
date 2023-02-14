@@ -47,10 +47,14 @@ int main(int argc, char** argv) {
   std::string proxy_endpoint = "ipc:///tmp/proxy_endpoint";
 
   http_options_shortcircuiter_t shortcircuiter(10);
-  http_shortcircuiter_function_t shortcircuit = std::bind(&http_options_shortcircuiter_t::operator(), shortcircuiter, std::placeholders::_1);
+  http_shortcircuiter_function_t options_shortcircuit = std::bind(&http_options_shortcircuiter_t::operator(), shortcircuiter, std::placeholders::_1);
+
+  http_healthcheck_shortcircuiter_t healthcheck_shortcircuiter("/test_healthcheck");
+  http_shortcircuiter_function_t healthcheck_shortcircuit = std::bind(&http_healthcheck_shortcircuiter_t::operator(), healthcheck_shortcircuiter, std::placeholders::_1);
 
   http_shortcircuiters_t shortcircuiters;
-  shortcircuiters.insert(shortcircuit);
+  shortcircuiters.insert(options_shortcircuit);
+  shortcircuiters.insert(healthcheck_shortcircuit);
   shortcircuiters.size();
   std::cout << shortcircuiters.size() << std::endl;
 

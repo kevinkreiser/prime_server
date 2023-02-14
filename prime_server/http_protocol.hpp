@@ -190,9 +190,21 @@ protected:
   std::string log_line;
 };
 
+// Http OPTIONS short circuiter
 struct http_options_shortcircuiter_t {
   http_options_shortcircuiter_t(uint8_t verb_mask = std::numeric_limits<uint8_t>::max());
   uint8_t verb_mask;
+  std::unique_ptr<zmq::message_t> operator()(const http_request_t& request) const;
+};
+
+// Http health check short circuiter
+struct http_healthcheck_shortcircuiter_t {
+  http_healthcheck_shortcircuiter_t(std::string path = "/healthcheck");
+  http_healthcheck_shortcircuiter_t(std::string path, const http_response_t& response);
+
+  std::string path = "/healthcheck";
+  http_response_t response = http_response_t(200, "OK", "", headers_t{}); // default response
+
   std::unique_ptr<zmq::message_t> operator()(const http_request_t& request) const;
 };
 
