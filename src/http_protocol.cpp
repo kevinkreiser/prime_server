@@ -31,6 +31,45 @@ std::string url_decode(const std::string& encoded) {
   return decoded_str;
 }
 
+bool is_method_allowed(uint8_t mask, method_t method) {
+  switch (method) {
+    case method_t::OPTIONS:
+      return (mask & OPTIONS_BITMASK) != 0;
+    case method_t::GET:
+      return (mask & GET_BITMASK) != 0;
+    case method_t::HEAD:
+      return (mask & HEAD_BITMASK) != 0;
+    case method_t::POST:
+      return (mask & POST_BITMASK) != 0;
+    case method_t::PUT:
+      return (mask & PUT_BITMASK) != 0;
+    case method_t::DELETE:
+      return (mask & DELETE_BITMASK) != 0;
+    case method_t::TRACE:
+      return (mask & TRACE_BITMASK) != 0;
+    case method_t::CONNECT:
+      return (mask & CONNECT_BITMASK) != 0;
+    default:
+      return false;
+  }
+}
+
+std::string get_allowed_methods_string(uint8_t verb_mask) {
+  std::string methods;
+  bool first = true;
+  for (int i = 0; i < 8; ++i) {
+    method_t method = static_cast<method_t>(i);
+    if (is_method_allowed(verb_mask, method)) {
+      if (!first) {
+        methods += ", ";
+      }
+      methods += prime_server::METHOD_TO_STRING.find(method)->second;
+      first = false;
+    }
+  }
+  return methods;
+}
+
 const headers_t::value_type CORS{"Access-Control-Allow-Origin", "*"};
 const http_request_t::request_exception_t
     RESPONSE_400(http_response_t(400, "Bad Request", "Malformed HTTP request", {CORS}));
@@ -746,13 +785,27 @@ http_options_shortcircuiter_t::http_options_shortcircuiter_t(uint8_t verb_mask )
 }
 
 // TODO: change it to meet requirement needs. Referene https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/OPTIONS
-std::unique_ptr<zmq::message_t>http_options_shortcircuiter_t::operator() (const http_request_t& request) const{
-  if(request.method == method_t::OPTIONS) {
-    http_response_t response(200, "OK", "", headers_t{{"Access-Control-Allow-Origin", "*"},
-                                                      {"Access-Control-Allow-Methods", "GET, POST, OPTIONS"},
-                                                      {"Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization"},
-                                                      {"Access-Control-Allow-Credentials", "true"}});
-                                                      
+std::unique_ptr<zmq::message_t> http_options_shortcircuiter_t::operator()(const http_request_t& request) const {
+  if (request.method == method_t::OPTIONS) {
+
+    // Need to come from verb_mask
+    std::string allowed_methods = get_allowed_methods_string(verb_mask);
+    std::string allowed_headers;
+
+    headers_t response_headers{};
+
+    // Handle preflight request
+    const auto& request_headers = request.headers;
+    if (request_headers.find("Access-Control-Request-Method") != request_headers.end()) {
+      response_headers.emplace("Access-Control-Allow-Methods", allowed_methods);
+      response_headers.emplace("Access-Control-Allow-Headers", allowed_headers);
+      response_headers.emplace("Access-Control-Max-Age", "86400"); // 24 hours
+    }else {
+      response_headers.emplace("Allow", allowed_methods);
+    }
+
+    http_response_t response(200, "OK", "", response_headers);
+    // This is not a preflight request
     std::unique_ptr<zmq::message_t> response_msg(std::make_unique<zmq::message_t>(response.to_string().length(), response.to_string().c_str()));
     return response_msg;
   }

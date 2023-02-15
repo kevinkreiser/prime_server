@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
   std::string request_interrupt = "ipc://request_interrupt";
   std::string proxy_endpoint = "ipc:///tmp/proxy_endpoint";
 
-  http_options_shortcircuiter_t shortcircuiter(10);
+  http_options_shortcircuiter_t shortcircuiter;
   http_shortcircuiter_function_t options_shortcircuit = std::bind(&http_options_shortcircuiter_t::operator(), shortcircuiter, std::placeholders::_1);
 
   http_healthcheck_shortcircuiter_t healthcheck_shortcircuiter("/test_healthcheck");
