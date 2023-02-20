@@ -31,7 +31,6 @@ struct netstring_entity_t {
   std::list<netstring_entity_t>
   from_stream(const char* start, size_t length, size_t max_size = std::numeric_limits<size_t>::max());
   void flush_stream();
-  netstring_entity_t foo() const;
   size_t size() const;
   void log(uint32_t id) const;
 
@@ -48,6 +47,17 @@ struct netstring_entity_t {
   std::list<uint64_t> enqueued;
 };
 
+// netstring health check short circuiter
+struct netstring_healthcheck_shortcircuiter_t {
+  netstring_healthcheck_shortcircuiter_t(std::string body = "health_check");
+  netstring_healthcheck_shortcircuiter_t(std::string path, const std::string& response);
+
+  std::string body = "health_check";
+  std::string response = ""; // default response
+
+  std::unique_ptr<zmq::message_t> operator()(const netstring_entity_t& request) const;
+};
+
 class netstring_client_t : public client_t {
 public:
   using client_t::client_t;
@@ -58,5 +68,7 @@ protected:
 };
 
 using netstring_server_t = server_t<netstring_entity_t, netstring_request_info_t>;
+using netstring_shortcircuiters_t = shortcircuiters_t<netstring_entity_t>;
+using netstring_shortcircuiter_function_t = shortcircuit_function_t<netstring_entity_t>;
 
 } // namespace prime_server

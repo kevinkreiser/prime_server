@@ -141,7 +141,6 @@ public:
 
   http_request_info_t to_info(uint32_t id) const;
   void flush_stream();
-  http_request_t foo() const;
   virtual std::string to_string() const override;
   static std::string to_string(const method_t& method,
                                const std::string& path,

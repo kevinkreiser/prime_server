@@ -118,6 +118,24 @@ void netstring_entity_t::flush_stream() {
   body_length = 0;
 }
 
+// netstring health check short circuiter
+netstring_healthcheck_shortcircuiter_t::netstring_healthcheck_shortcircuiter_t(std::string body){
+  this->body = body;
+  this->response = netstring_entity_t::to_string("OK");
+}
+
+netstring_healthcheck_shortcircuiter_t::netstring_healthcheck_shortcircuiter_t(std::string path, const std::string& response){
+  this->body = path;
+  this->response = netstring_entity_t::to_string(response);
+}
+
+std::unique_ptr<zmq::message_t> netstring_healthcheck_shortcircuiter_t::operator()(const netstring_entity_t& request) const {
+  if (request.body == body) {
+    return std::unique_ptr<zmq::message_t>(new zmq::message_t(response.size(), response.c_str()));
+  }
+  return nullptr;
+}
+
 size_t netstring_entity_t::size() const {
   // TODO: pedantic, comma, colon and length are part of the request
   return body.size();
@@ -132,11 +150,6 @@ void netstring_entity_t::log(uint32_t id) const {
   line.append(body);
   line.push_back('\n');
   logging::log(line);
-}
-
-netstring_entity_t netstring_entity_t::foo() const{
-  netstring_entity_t copy = *this;
-  return copy;
 }
 
 netstring_entity_t::request_exception_t::request_exception_t(const std::string& response)

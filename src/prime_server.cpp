@@ -164,13 +164,10 @@ server_t<request_container_t, request_info_t>::server_t(
     bool log,
     size_t max_request_size,
     uint32_t request_timeout,
-    const health_check_matcher_t& health_check_matcher,
-    const std::string& health_check_response,
     const shortcircuiters_t<request_container_t>& shortcircuiters)
     : client(context, ZMQ_STREAM), proxy(context, ZMQ_DEALER), loopback(context, ZMQ_SUB),
       interrupt(context, ZMQ_PUB), log(log), max_request_size(max_request_size),
-      request_timeout(request_timeout), request_id(0), health_check_matcher(health_check_matcher),
-      health_check_response(health_check_response.size(), health_check_response.data()),
+      request_timeout(request_timeout), request_id(0),
       shortcircuiters(shortcircuiters) {
 
   int disabled = 0;
@@ -343,7 +340,6 @@ bool server_t<request_container_t, request_info_t>::enqueue(const zmq::message_t
 
     std::unique_ptr<zmq::message_t> shortcircuit;
     if(shortcircuiters.size() > 0){
-      std::cout << "shortcircuiters.size() > 0" << std::endl;
       shortcircuit = shortcircuiters.shortcircuit(parsed_request);
     }
     

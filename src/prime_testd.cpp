@@ -55,16 +55,13 @@ int main(int argc, char** argv) {
   http_shortcircuiters_t shortcircuiters;
   shortcircuiters.insert(options_shortcircuit);
   shortcircuiters.insert(healthcheck_shortcircuit);
-  shortcircuiters.size();
-  std::cout << shortcircuiters.size() << std::endl;
 
-  http_response_t shortcircuit_response(200, "OK", "Testing Short Circuit");
   // server
   std::thread server_thread =
       std::thread(std::bind(&http_server_t::serve,
                             http_server_t(context, server_endpoint, proxy_endpoint + "_upstream",
-                                          result_endpoint, request_interrupt, true,1024 * 1024 * 10,
-                                          -1, {}, {}, shortcircuiters)));
+                                          result_endpoint, request_interrupt, true, 1024 * 1024 * 10,
+                                          -1, shortcircuiters)));
 
   // load balancer for parsing
   std::thread echo_proxy(std::bind(&proxy_t::forward, proxy_t(context, proxy_endpoint + "_upstream",

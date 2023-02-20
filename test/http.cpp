@@ -297,6 +297,13 @@ void test_parallel_clients() {
 
   zmq::context_t context;
 
+  http_shortcircuiters_t shortcircuiters;
+
+  http_healthcheck_shortcircuiter_t healthcheck_shortcircuiter("/health_check", http_response_t{200, "OK", "foo_bar_baz"});
+  http_shortcircuiter_function_t healthcheck_shortcircuit = std::bind(&http_healthcheck_shortcircuiter_t::operator(), healthcheck_shortcircuiter, std::placeholders::_1);
+
+  shortcircuiters.insert(healthcheck_shortcircuit);
+
   // server
   std::thread server(
       std::bind(&http_server_t::serve,
@@ -304,8 +311,7 @@ void test_parallel_clients() {
                     context, "ipc:///tmp/test_http_server", "ipc:///tmp/test_http_proxy_upstream",
                     "ipc:///tmp/test_http_results", "ipc:///tmp/test_http_interrupt", false,
                     MAX_REQUEST_SIZE, -1,
-                    [](const http_request_t& r) -> bool { return r.path == "/health_check"; },
-                    http_response_t{200, "OK", "foo_bar_baz"}.to_string())));
+                    shortcircuiters)));
   server.detach();
 
   // load balancer for parsing

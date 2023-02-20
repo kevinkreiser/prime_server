@@ -95,8 +95,6 @@ public:
            bool log = false,
            size_t max_request_size = DEFAULT_MAX_REQUEST_SIZE,
            uint32_t request_timeout = DEFAULT_REQUEST_TIMEOUT,
-           const health_check_matcher_t& health_check_matcher = {},
-           const std::string& health_check_response = {},
            const shortcircuiters_t<request_container_t>& shortcircuiters = {});
   virtual ~server_t();
   void serve();

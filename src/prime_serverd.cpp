@@ -43,13 +43,13 @@ int main(int argc, char** argv) {
   std::tie(drain_seconds, shutdown_seconds) = parse_quiesce_config(argc > 3 ? argv[3] : "");
   quiesce(drain_seconds, shutdown_seconds);
 
-  // default to no health check, if one is provided its just the path and the canned response is OK
-  http_server_t::health_check_matcher_t health_check_matcher{};
+  http_shortcircuiters_t shortcircuiters;
+
   std::string health_check_response;
   if (argc > 4) {
-    health_check_matcher = [&argv](const http_request_t& r) -> bool { return r.path == argv[4]; };
-    // TODO: make this configurable
-    health_check_response = http_response_t{200, "OK"}.to_string();
+    http_healthcheck_shortcircuiter_t healthcheck_shortcircuiter(argv[4]);
+    http_shortcircuiter_function_t healthcheck_shortcircuit = std::bind(&http_healthcheck_shortcircuiter_t::operator(), healthcheck_shortcircuiter, std::placeholders::_1);
+    shortcircuiters.insert(healthcheck_shortcircuit);
   }
 
   // change these to tcp://known.ip.address.with:port if you want to do this across machines
@@ -64,8 +64,7 @@ int main(int argc, char** argv) {
       std::bind(&http_server_t::serve,
                 http_server_t(context, server_endpoint, parse_proxy_endpoint + "_upstream",
                               result_endpoint, request_interrupt, requests == 0,
-                              DEFAULT_MAX_REQUEST_SIZE, DEFAULT_REQUEST_TIMEOUT, health_check_matcher,
-                              health_check_response)));
+                              DEFAULT_MAX_REQUEST_SIZE, DEFAULT_REQUEST_TIMEOUT, shortcircuiters)));
 
   // load balancer for parsing
   std::thread parse_proxy(
