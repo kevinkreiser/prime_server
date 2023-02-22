@@ -52,7 +52,7 @@ struct caseless_predicates_t : public std::hash<std::string> {
 using headers_t =
     std::unordered_map<std::string, std::string, caseless_predicates_t, caseless_predicates_t>;
 using query_t = std::unordered_map<std::string, std::list<std::string>>;
-enum method_t { OPTIONS, GET, HEAD, POST, PUT, DELETE, TRACE, CONNECT };
+enum class method_t : uint8_t { OPTIONS = 1, GET = 2, HEAD = 4, POST = 8, PUT = 16, DELETE = 32, TRACE = 64, CONNECT = 128};
 
 // Method bitmasks
 constexpr uint8_t OPTIONS_BITMASK = 0b00000001;
