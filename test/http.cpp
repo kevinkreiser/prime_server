@@ -297,21 +297,13 @@ void test_parallel_clients() {
 
   zmq::context_t context;
 
-  http_shortcircuiters_t shortcircuiters;
-
-  http_healthcheck_shortcircuiter_t healthcheck_shortcircuiter("/health_check", http_response_t{200, "OK", "foo_bar_baz"});
-  http_shortcircuiter_function_t healthcheck_shortcircuit = std::bind(&http_healthcheck_shortcircuiter_t::operator(), healthcheck_shortcircuiter, std::placeholders::_1);
-
-  shortcircuiters.insert(healthcheck_shortcircuit);
-
   // server
   std::thread server(
       std::bind(&http_server_t::serve,
                 http_server_t(
                     context, "ipc:///tmp/test_http_server", "ipc:///tmp/test_http_proxy_upstream",
                     "ipc:///tmp/test_http_results", "ipc:///tmp/test_http_interrupt", false,
-                    MAX_REQUEST_SIZE, -1,
-                    shortcircuiters)));
+                    MAX_REQUEST_SIZE, -1)));
   server.detach();
 
   // load balancer for parsing
@@ -375,9 +367,10 @@ void test_malformed() {
 }
 
 void test_too_large() {
+
   zmq::context_t context;
   std::string request =
-      http_request_t(POST, "/", std::string(MAX_REQUEST_SIZE + 10, '!')).to_string();
+      http_request_t(prime_server::method_t::POST, "/", std::string(MAX_REQUEST_SIZE + 10, '!')).to_string();
   http_client_t client(
       context, "ipc:///tmp/test_http_server",
       [&request]() {
@@ -402,7 +395,7 @@ void test_large_request() {
   std::string request_body(MAX_REQUEST_SIZE - 100, ' ');
   for (size_t i = 0; i < request_body.size(); ++i)
     request_body[i] = (i % 95) + 32;
-  auto request = http_request_t::to_string(POST, "", request_body);
+  auto request = http_request_t::to_string(prime_server::method_t::POST, "", request_body);
 
   // see if we get it back
   http_client_t client(
@@ -426,7 +419,7 @@ void test_large_request() {
 
 void test_health_check() {
   zmq::context_t context;
-  auto request = http_request_t{GET, "/health_check"}.to_string();
+  auto request = http_request_t{prime_server::method_t::GET, "/health_check"}.to_string();
   http_client_t client(
       context, "ipc:///tmp/test_http_server",
       [&request]() {

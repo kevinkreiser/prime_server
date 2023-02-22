@@ -52,21 +52,17 @@ int main(int argc, char** argv) {
   std::tie(drain_seconds, shutdown_seconds) = parse_quiesce_config(argc > 8 ? argv[8] : "");
   quiesce(drain_seconds, shutdown_seconds);
 
-  http_shortcircuiters_t shortcircuiters;
-
-  std::string health_check_response;
+  // http_shortcircuiters_t shortcircuiters;
+  shortcircuiter_t<http_request_t> shortcircuiter;
   if (argc > 9) {
-    // TODO: make this configurable
-    http_healthcheck_shortcircuiter_t healthcheck_shortcircuiter(argv[9]);
-    http_shortcircuiter_function_t healthcheck_shortcircuit = std::bind(&http_healthcheck_shortcircuiter_t::operator(), healthcheck_shortcircuiter, std::placeholders::_1);
-    shortcircuiters.insert(healthcheck_shortcircuit);
+    shortcircuiter = make_http_shortcircuiter(255, argv[4]);
   }
 
   // start it up
   zmq::context_t context;
   http_server_t server(context, server_endpoint, proxy_endpoint, server_result_loopback,
                        server_request_interrupt, log, max_request_size_bytes, request_timeout_seconds,
-                       shortcircuiters);
+                       shortcircuiter);
 
   server.serve();
   return EXIT_SUCCESS;

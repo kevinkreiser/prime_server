@@ -32,8 +32,9 @@ std::string url_decode(const std::string& encoded) {
 }
 
 bool is_method_allowed(uint8_t mask, method_t method) {
-  return mask & method;
+  return mask & static_cast<uint8_t>(method);
 }
+
 
 std::string get_allowed_methods_string(uint8_t verb_mask) {
   std::string methods;
@@ -751,53 +752,42 @@ std::string http_response_t::generic(unsigned code,
   return response;
 }
 
-http_options_shortcircuiter_t::http_options_shortcircuiter_t(uint8_t verb_mask ) : verb_mask(verb_mask){
-}
-
-// TODO: change it to meet requirement needs. Referene https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/OPTIONS
-std::unique_ptr<zmq::message_t> http_options_shortcircuiter_t::operator()(const http_request_t& request) const {
-  if (request.method == method_t::OPTIONS) {
-
-    // Need to come from verb_mask
-    std::string allowed_methods = get_allowed_methods_string(verb_mask);
-    std::string allowed_headers;
-
-    headers_t response_headers{};
-
-    // Handle preflight request
-    const auto& request_headers = request.headers;
-    if (request_headers.find("Access-Control-Request-Method") != request_headers.end()) {
-      response_headers.emplace("Access-Control-Allow-Methods", allowed_methods);
-      response_headers.emplace("Access-Control-Allow-Headers", allowed_headers);
-      response_headers.emplace("Access-Control-Max-Age", "86400"); // 24 hours
-    }else {
-      response_headers.emplace("Allow", allowed_methods);
-    }
-
-    http_response_t response(200, "OK", "", response_headers);
-    // This is not a preflight request
-    std::unique_ptr<zmq::message_t> response_msg(std::make_unique<zmq::message_t>(response.to_string().length(), response.to_string().c_str()));
-    return response_msg;
-  }
-
-  return nullptr;
-}
-
-http_healthcheck_shortcircuiter_t::http_healthcheck_shortcircuiter_t(const std::string path) : path(path){
-}
-
-http_healthcheck_shortcircuiter_t::http_healthcheck_shortcircuiter_t(const std::string path, const http_response_t& response) : path(path), response(response){
-}
-
-// Shortircuit a GET request to a path with a default response
-std::unique_ptr<zmq::message_t>http_healthcheck_shortcircuiter_t::operator() (const http_request_t& request) const{
-  if(request.method == method_t::GET && request.path == path) {
-    std::unique_ptr<zmq::message_t> response_msg(std::make_unique<zmq::message_t>(response.to_string().length(), response.to_string().c_str()));
-    return response_msg;
-  }
-
-  return nullptr;
-}
-
 // namespace prime_server
+}
+
+// make a short circuiter that will respond to health checks and OPTIONS request
+// Ref: https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/OPTIONS
+prime_server::shortcircuiter_t<prime_server::http_request_t> make_http_shortcircuiter(const uint8_t& verb_mask = std::numeric_limits<uint8_t>::max(),
+                                                                                      const std::string& health_check_path = "/health_check") {
+
+  std::string allowed_verbs = get_allowed_methods_string(verb_mask);
+
+// TODO: Answer to preflight requests in a more robust way 
+  return [verb_mask, allowed_verbs, health_check_path](const prime_server::http_request_t& request) {
+    if(request.path == health_check_path){
+
+      prime_server::http_response_t response(200, "OK");
+      std::string response_content = response.to_string();
+      zmq::message_t message(response_content.size() ,response_content.c_str());
+      return std::unique_ptr<zmq::message_t>(new zmq::message_t(std::move(message)));
+
+    }else if(!is_method_allowed(verb_mask, request.method)){
+
+      prime_server::http_response_t response(405, "Method Not Allowed");
+      std::string response_content = response.to_string();
+      zmq::message_t message(response_content.size() ,response_content.c_str());
+      return std::unique_ptr<zmq::message_t>(new zmq::message_t(std::move(message)));
+      
+    }else	if(request.method == method_t::OPTIONS){
+
+      prime_server::http_response_t response(200, "OK","", request.headers);
+      response.headers.insert({"Allow", allowed_verbs});
+      std::string response_content = response.to_string();
+      zmq::message_t message(response_content.size() ,response_content.c_str());
+      return std::unique_ptr<zmq::message_t>(new zmq::message_t(std::move(message)));
+  }else {
+      return std::unique_ptr<zmq::message_t>{};
+    }
+  };
+                                                                                  
 }

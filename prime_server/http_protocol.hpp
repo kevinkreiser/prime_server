@@ -54,6 +54,13 @@ using headers_t =
 using query_t = std::unordered_map<std::string, std::list<std::string>>;
 enum class method_t : uint8_t { OPTIONS = 1, GET = 2, HEAD = 4, POST = 8, PUT = 16, DELETE = 32, TRACE = 64, CONNECT = 128};
 
+// Define custom hash function for method_t enum class
+struct MethodHash {
+  uint8_t operator()(const method_t& m) const {
+    return static_cast<uint8_t>(m);
+  }
+};
+
 const std::unordered_map<std::string, method_t> STRING_TO_METHOD{{"OPTIONS", method_t::OPTIONS},
                                                                  {"GET", method_t::GET},
                                                                  {"HEAD", method_t::HEAD},
@@ -62,7 +69,8 @@ const std::unordered_map<std::string, method_t> STRING_TO_METHOD{{"OPTIONS", met
                                                                  {"DELETE", method_t::DELETE},
                                                                  {"TRACE", method_t::TRACE},
                                                                  {"CONNECT", method_t::CONNECT}};
-const std::unordered_map<method_t, std::string, std::hash<int>>
+
+const std::unordered_map<method_t, std::string, MethodHash>
     METHOD_TO_STRING{{method_t::OPTIONS, "OPTIONS"}, {method_t::GET, "GET"},
                      {method_t::HEAD, "HEAD"},       {method_t::POST, "POST"},
                      {method_t::PUT, "PUT"},         {method_t::DELETE, "DELETE"},
@@ -190,26 +198,9 @@ protected:
   std::string log_line;
 };
 
-// Http OPTIONS short circuiter
-struct http_options_shortcircuiter_t {
-  http_options_shortcircuiter_t(uint8_t verb_mask = std::numeric_limits<uint8_t>::max());
-  uint8_t verb_mask;
-  std::unique_ptr<zmq::message_t> operator()(const http_request_t& request) const;
-};
-
-// Http health check short circuiter
-struct http_healthcheck_shortcircuiter_t {
-  http_healthcheck_shortcircuiter_t(std::string path = "/healthcheck");
-  http_healthcheck_shortcircuiter_t(std::string path, const http_response_t& response);
-
-  std::string path = "/healthcheck";
-  http_response_t response = http_response_t(200, "OK", "", headers_t{}); // default response
-
-  std::unique_ptr<zmq::message_t> operator()(const http_request_t& request) const;
-};
-
 using http_server_t = server_t<http_request_t, http_request_info_t>;
-using http_shortcircuiters_t = shortcircuiters_t<http_request_t>;
-using http_shortcircuiter_function_t = shortcircuit_function_t<http_request_t>;
 
 } // namespace prime_server
+
+prime_server::shortcircuiter_t<prime_server::http_request_t> make_http_shortcircuiter(const uint8_t& verb_mask,
+                                                                                      const std::string& health_check_path);

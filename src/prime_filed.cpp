@@ -57,12 +57,9 @@ int main(int argc, char** argv) {
   std::tie(drain_seconds, shutdown_seconds) = parse_quiesce_config(argc > 3 ? argv[3] : "");
   quiesce(drain_seconds, shutdown_seconds);
 
-  http_shortcircuiters_t shortcircuiters;
-
+  shortcircuiter_t<http_request_t> shortcircuiter;
   if (argc > 4) {
-    http_healthcheck_shortcircuiter_t healthcheck_shortcircuiter(argv[4]);
-    http_shortcircuiter_function_t healthcheck_shortcircuit = std::bind(&http_healthcheck_shortcircuiter_t::operator(), healthcheck_shortcircuiter, std::placeholders::_1);
-    shortcircuiters.insert(healthcheck_shortcircuit);
+    shortcircuiter = make_http_shortcircuiter(255, argv[4]);
   }
 
   // change these to tcp://known.ip.address.with:port if you want to do this across machines
@@ -76,7 +73,7 @@ int main(int argc, char** argv) {
       std::bind(&http_server_t::serve,
                 http_server_t(context, server_endpoint, proxy_endpoint + "_upstream", result_endpoint,
                               request_interrupt, true, DEFAULT_MAX_REQUEST_SIZE,
-                              DEFAULT_REQUEST_TIMEOUT, shortcircuiters)));
+                              DEFAULT_REQUEST_TIMEOUT, shortcircuiter)));
 
   // load balancer for file serving
   std::thread file_proxy(std::bind(&proxy_t::forward, proxy_t(context, proxy_endpoint + "_upstream",
