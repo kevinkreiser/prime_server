@@ -68,3 +68,6 @@ cmake-build-debug/
 
 # CMake out-of-source build directories
 build/
+
+# VSCode settings
+.vscode/
