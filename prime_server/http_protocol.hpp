@@ -54,16 +54,6 @@ using headers_t =
 using query_t = std::unordered_map<std::string, std::list<std::string>>;
 enum class method_t : uint8_t { OPTIONS = 1, GET = 2, HEAD = 4, POST = 8, PUT = 16, DELETE = 32, TRACE = 64, CONNECT = 128};
 
-// Method bitmasks
-constexpr uint8_t OPTIONS_BITMASK = 0b00000001;
-constexpr uint8_t GET_BITMASK = 0b00000010;
-constexpr uint8_t HEAD_BITMASK = 0b00000100;
-constexpr uint8_t POST_BITMASK = 0b00001000;
-constexpr uint8_t PUT_BITMASK = 0b00010000;
-constexpr uint8_t DELETE_BITMASK = 0b00100000;
-constexpr uint8_t TRACE_BITMASK = 0b01000000;
-constexpr uint8_t CONNECT_BITMASK = 0b10000000;
-
 const std::unordered_map<std::string, method_t> STRING_TO_METHOD{{"OPTIONS", method_t::OPTIONS},
                                                                  {"GET", method_t::GET},
                                                                  {"HEAD", method_t::HEAD},
