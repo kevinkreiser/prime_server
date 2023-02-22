@@ -55,7 +55,7 @@ int main(int argc, char** argv) {
   // http_shortcircuiters_t shortcircuiters;
   shortcircuiter_t<http_request_t> shortcircuiter;
   if (argc > 9) {
-    shortcircuiter = make_http_shortcircuiter(255, argv[4]);
+    shortcircuiter = make_shortcircuiter(255, argv[4]);
   }
 
   // start it up
