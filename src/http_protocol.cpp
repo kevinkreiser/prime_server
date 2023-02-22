@@ -32,26 +32,7 @@ std::string url_decode(const std::string& encoded) {
 }
 
 bool is_method_allowed(uint8_t mask, method_t method) {
-  switch (method) {
-    case method_t::OPTIONS:
-      return (mask & OPTIONS_BITMASK) != 0;
-    case method_t::GET:
-      return (mask & GET_BITMASK) != 0;
-    case method_t::HEAD:
-      return (mask & HEAD_BITMASK) != 0;
-    case method_t::POST:
-      return (mask & POST_BITMASK) != 0;
-    case method_t::PUT:
-      return (mask & PUT_BITMASK) != 0;
-    case method_t::DELETE:
-      return (mask & DELETE_BITMASK) != 0;
-    case method_t::TRACE:
-      return (mask & TRACE_BITMASK) != 0;
-    case method_t::CONNECT:
-      return (mask & CONNECT_BITMASK) != 0;
-    default:
-      return false;
-  }
+  return mask & method;
 }
 
 std::string get_allowed_methods_string(uint8_t verb_mask) {
