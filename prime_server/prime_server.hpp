@@ -13,7 +13,6 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
-#include <vector>
 
 #include <prime_server/zmq_helpers.hpp>
 
