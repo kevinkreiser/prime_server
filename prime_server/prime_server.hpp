@@ -125,8 +125,6 @@ protected:
   std::list<request_info_t> request_history;
   // a function that can short circuit a request and return a response
   shortcircuiter_t<request_container_t> shortcircuiter;
-  // a vector of shortcircuiter functions and its priorities
-  // shortcircuiters_t shortcircuiters;
 };
 
 // proxy messages between layers of a backend load balancing in between
