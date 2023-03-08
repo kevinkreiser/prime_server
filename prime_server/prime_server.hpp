@@ -78,7 +78,7 @@ public:
            bool log = false,
            size_t max_request_size = DEFAULT_MAX_REQUEST_SIZE,
            uint32_t request_timeout = DEFAULT_REQUEST_TIMEOUT,
-           const shortcircuiter_t<request_container_t>& shortcircuiters = nullptr);
+           const shortcircuiter_t<request_container_t>& shortcircuiters = {});
   virtual ~server_t();
   void serve();
 
