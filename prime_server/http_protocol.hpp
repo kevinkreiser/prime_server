@@ -54,12 +54,6 @@ using headers_t =
 using query_t = std::unordered_map<std::string, std::list<std::string>>;
 enum method_t { OPTIONS = 1, GET = 2, HEAD = 4, POST = 8, PUT = 16, DELETE = 32, TRACE = 64, CONNECT = 128};
 
-// Define custom hash function for method_t enum class
-struct MethodHash {
-  uint8_t operator()(const method_t& m) const {
-    return static_cast<uint8_t>(m);
-  }
-};
 
 const std::unordered_map<std::string, method_t> STRING_TO_METHOD{{"OPTIONS", method_t::OPTIONS},
                                                                  {"GET", method_t::GET},
@@ -70,7 +64,7 @@ const std::unordered_map<std::string, method_t> STRING_TO_METHOD{{"OPTIONS", met
                                                                  {"TRACE", method_t::TRACE},
                                                                  {"CONNECT", method_t::CONNECT}};
 
-const std::unordered_map<method_t, std::string, MethodHash>
+const std::unordered_map<method_t, std::string>
     METHOD_TO_STRING{{method_t::OPTIONS, "OPTIONS"}, {method_t::GET, "GET"},
                      {method_t::HEAD, "HEAD"},       {method_t::POST, "POST"},
                      {method_t::PUT, "PUT"},         {method_t::DELETE, "DELETE"},

@@ -4,6 +4,8 @@
 #include <ctime>
 #include <curl/curl.h>
 
+#include <cmath>
+
 using namespace prime_server;
 
 // TODO: someone please replace the http protocol, its a giant mess. kthxbye
@@ -40,7 +42,7 @@ std::string get_allowed_methods_string(uint8_t verb_mask) {
   std::string methods;
   bool first = true;
   for (int i = 0; i < 8; ++i) {
-    method_t method = static_cast<method_t>(i);
+    method_t method = static_cast<method_t>(pow(2, i));
     if (is_method_allowed(verb_mask, method)) {
       if (!first) {
         methods += ", ";
