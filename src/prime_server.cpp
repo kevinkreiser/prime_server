@@ -313,12 +313,7 @@ bool server_t<request_container_t, request_info_t>::enqueue(const zmq::message_t
     // figure out if we are expecting to close this request or not
     auto info = parsed_request.to_info(request_id++);
     
-    std::unique_ptr<zmq::message_t> shortcircuit;
-    if(shortcircuiter){
-      shortcircuit = shortcircuiter(parsed_request);
-    }else{
-      std::cout << "no shortcircuit" << std::endl;
-    }
+    auto shortcircuit = shortcircuiter ? shortcircuiter(parsed_request) : nullptr;
 
     // send on the request if its not a health check
     if (!shortcircuit &&
