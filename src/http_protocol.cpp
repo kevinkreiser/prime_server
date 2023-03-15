@@ -765,7 +765,7 @@ prime_server::shortcircuiter_t<prime_server::http_request_t> make_shortcircuiter
   std::string allowed_verbs = get_allowed_methods_string(verb_mask);
 
 // TODO: Answer to preflight requests in a more robust way 
-  return [verb_mask, allowed_verbs, health_check_path](const prime_server::http_request_t& request) {
+  return [=](const prime_server::http_request_t& request) {
     if(request.path == health_check_path){
 
       prime_server::http_response_t response(200, "OK");
