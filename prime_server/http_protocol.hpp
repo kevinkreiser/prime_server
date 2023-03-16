@@ -195,5 +195,5 @@ protected:
 using http_server_t = server_t<http_request_t, http_request_info_t>;
 
 shortcircuiter_t<http_request_t> make_shortcircuiter(const std::string& health_check_path  = "/health_check",
-                                                     const uint8_t& verb_mask = 255);
+                                                     const uint8_t& verb_mask = std::numeric_limits<uint8_t>::max());
 } // namespace prime_server

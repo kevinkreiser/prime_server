@@ -756,8 +756,8 @@ std::string http_response_t::generic(unsigned code,
 
 // make a short circuiter that will respond to health checks and OPTIONS request
 // Ref: https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/OPTIONS
-shortcircuiter_t<http_request_t> make_shortcircuiter(const std::string& health_check_path = "/health_check",
-                                                     const uint8_t& verb_mask = std::numeric_limits<uint8_t>::max()){
+shortcircuiter_t<http_request_t> make_shortcircuiter(const std::string& health_check_path,
+                                                     const uint8_t& verb_mask){
 
   std::string allowed_verbs = get_allowed_methods_string(verb_mask);
 

@@ -3,6 +3,7 @@
 #include "prime_server.hpp"
 using namespace prime_server;
 #include "logging/logging.hpp"
+#include "http_util.hpp"
 
 #include <cstring>
 #include <string>
