@@ -754,42 +754,38 @@ std::string http_response_t::generic(unsigned code,
   return response;
 }
 
-// namespace prime_server
-}
-
 // make a short circuiter that will respond to health checks and OPTIONS request
 // Ref: https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/OPTIONS
-prime_server::shortcircuiter_t<prime_server::http_request_t> make_shortcircuiter(const uint8_t& verb_mask = std::numeric_limits<uint8_t>::max(),
-                                                                                      const std::string& health_check_path = "/health_check") {
+shortcircuiter_t<http_request_t> make_shortcircuiter(const std::string& health_check_path = "/health_check",
+                                                     const uint8_t& verb_mask = std::numeric_limits<uint8_t>::max()){
 
   std::string allowed_verbs = get_allowed_methods_string(verb_mask);
 
-// TODO: Answer to preflight requests in a more robust way 
-  return [=](const prime_server::http_request_t& request) {
-    if(request.path == health_check_path){
+  // Pre-create shared response objects
+  http_response_t health_check_response(200, "OK");
+  std::string health_check_str = health_check_response.to_string();
+  std::shared_ptr<zmq::message_t> shared_health_check = std::make_shared<zmq::message_t>(health_check_str.size(), health_check_str.c_str());
 
-      prime_server::http_response_t response(200, "OK");
-      std::string response_content = response.to_string();
-      zmq::message_t message(response_content.size() ,response_content.c_str());
-      return std::unique_ptr<zmq::message_t>(new zmq::message_t(std::move(message)));
+  http_response_t method_not_allowed_response(405, "Method Not Allowed");
+  std::string method_not_allowed_str = method_not_allowed_response.to_string();
+  std::shared_ptr<zmq::message_t> shared_method_not_allowed = std::make_shared<zmq::message_t>(method_not_allowed_str.size(), method_not_allowed_str.c_str());
 
-    }else if(!is_method_allowed(verb_mask, request.method)){
+  http_response_t options_response(200, "OK");
+  options_response.headers.insert({"Allow", allowed_verbs});
+  std::string options_str = options_response.to_string();
+  std::shared_ptr<zmq::message_t> shared_options = std::make_shared<zmq::message_t>(options_str.size(), options_str.c_str());
 
-      prime_server::http_response_t response(405, "Method Not Allowed");
-      std::string response_content = response.to_string();
-      zmq::message_t message(response_content.size() ,response_content.c_str());
-      return std::unique_ptr<zmq::message_t>(new zmq::message_t(std::move(message)));
-      
-    }else	if(request.method == method_t::OPTIONS){
-
-      prime_server::http_response_t response(200, "OK","", request.headers);
-      response.headers.insert({"Allow", allowed_verbs});
-      std::string response_content = response.to_string();
-      zmq::message_t message(response_content.size() ,response_content.c_str());
-      return std::unique_ptr<zmq::message_t>(new zmq::message_t(std::move(message)));
-  }else {
-      return std::unique_ptr<zmq::message_t>{};
+  return [=](const http_request_t& request) {
+    if (request.path == health_check_path) {
+      return shared_health_check;
+    } else if (!is_method_allowed(verb_mask, request.method)) {
+      return shared_method_not_allowed;
+    } else if (request.method == method_t::OPTIONS) {
+      return shared_options;
+    } else {
+      return std::shared_ptr<zmq::message_t>();
     }
   };
-                                                                                  
+}
+// namespace prime_server
 }

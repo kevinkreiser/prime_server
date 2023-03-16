@@ -7,6 +7,8 @@
 #include <map>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <string>
+#include <sstream>
 
 using namespace prime_server::http;
 namespace {
@@ -93,6 +95,22 @@ worker_t::result_t disk_result(const http_request_t& request,
   }
   // hand it back
   return result;
+}
+
+
+uint8_t get_method_mask(const std::string& verb_list) {
+  uint8_t method_mask = 0;
+  std::istringstream iss(verb_list);
+  std::string verb;
+
+  while (std::getline(iss, verb, ',')) {
+    auto it = STRING_TO_METHOD.find(verb);
+    if (it != STRING_TO_METHOD.end()) {
+      method_mask |= it->second;
+    }
+  }
+
+  return method_mask;
 }
 
 } // namespace http

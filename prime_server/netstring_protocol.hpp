@@ -58,6 +58,5 @@ protected:
 
 using netstring_server_t = server_t<netstring_entity_t, netstring_request_info_t>;
 
+shortcircuiter_t<netstring_entity_t> make_shortcircuiter(const std::string& health_check_str = "health_check");
 } // namespace prime_server
-
-prime_server::shortcircuiter_t<prime_server::netstring_entity_t> make_shortcircuiter(const std::string& health_check_str = "health_check");

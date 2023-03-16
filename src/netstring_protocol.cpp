@@ -171,15 +171,16 @@ size_t netstring_client_t::stream_responses(const void* message, size_t size, bo
   return responses.size();
 }
 
-} // namespace prime_server
+shortcircuiter_t<netstring_entity_t> make_shortcircuiter(const std::string& health_check_str) {
+  netstring_entity_t response = netstring_entity_t::from_string("healthy", 7);
+  std::string response_str = response.to_string();
+  std::shared_ptr<zmq::message_t> shared_response = std::make_shared<zmq::message_t>(response_str.size(), response_str.c_str());
 
-prime_server::shortcircuiter_t<prime_server::netstring_entity_t> make_shortcircuiter(const std::string& health_check_str){
-  return [health_check_str](const prime_server::netstring_entity_t& request) {
-    if(request.body == health_check_str){
-      netstring_entity_t response = netstring_entity_t::from_string("healthy", 7);
-      std::string response_str = response.to_string();
-      return std::unique_ptr<zmq::message_t>(new zmq::message_t(response_str.size(), response_str.c_str()));
+  return [=](const netstring_entity_t& request) {
+    if (request.body == health_check_str) {
+      return shared_response;
     }
-    return std::unique_ptr<zmq::message_t>();
+    return std::shared_ptr<zmq::message_t>(nullptr);
   };
 }
+} // namespace prime_server

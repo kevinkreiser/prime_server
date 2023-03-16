@@ -60,7 +60,7 @@ constexpr uint32_t DEFAULT_REQUEST_TIMEOUT = -1;              // infinity second
 // a single session_t that implements all the guts of the protocol
 
 template <class request_container_t>
-using shortcircuiter_t = std::function<std::unique_ptr<zmq::message_t>(const request_container_t&)>;
+using shortcircuiter_t = std::function<std::shared_ptr<zmq::message_t>(const request_container_t&)>;
 
 // TODO: make configuration objects to use as parameter packs because these constructors are large
 
@@ -214,6 +214,4 @@ void quiesce(unsigned int drain_seconds = 0, unsigned int shutdown_seconds = 0);
 bool draining();
 // whether or not the daemon thread is waiting for other threads to exit
 bool shutting_down();
-
-
 } // namespace prime_server

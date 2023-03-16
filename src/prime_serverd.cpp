@@ -13,6 +13,7 @@
 #include "http_protocol.hpp"
 #include "prime_helpers.hpp"
 #include "prime_server.hpp"
+#include "http_util.hpp"
 using namespace prime_server;
 #include "logging/logging.hpp"
 
@@ -45,7 +46,8 @@ int main(int argc, char** argv) {
 
   shortcircuiter_t<http_request_t> shortcircuiter;
   if (argc > 4) {
-    shortcircuiter = make_shortcircuiter(255, argv[4]);
+    uint8_t mask = http::get_method_mask(argv[5]);
+    shortcircuiter = make_shortcircuiter(argv[4], mask);
   }
 
   // change these to tcp://known.ip.address.with:port if you want to do this across machines

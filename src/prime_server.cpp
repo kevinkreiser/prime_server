@@ -390,7 +390,6 @@ int proxy_t::expire() {
   // just get the time and iterate from the beginning popping off stale ones
   return static_cast<bool>(fifo.size()) + 1;
 }
-
 void proxy_t::forward() {
   // keep forwarding messages
   while (!shutting_down()) {
@@ -457,7 +456,6 @@ void proxy_t::forward() {
     }
   }
 }
-
 worker_t::worker_t(zmq::context_t& context,
                    const std::string& upstream_proxy_endpoint,
                    const std::string& downstream_proxy_endpoint,

@@ -55,7 +55,8 @@ int main(int argc, char** argv) {
   // http_shortcircuiters_t shortcircuiters;
   shortcircuiter_t<http_request_t> shortcircuiter;
   if (argc > 9) {
-    shortcircuiter = make_shortcircuiter(255, argv[4]);
+    uint8_t mask = http::get_method_mask(argv[10]);
+    shortcircuiter = make_shortcircuiter(argv[9], mask);
   }
 
   // start it up
