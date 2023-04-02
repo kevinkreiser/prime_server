@@ -194,6 +194,8 @@ protected:
 
 using http_server_t = server_t<http_request_t, http_request_info_t>;
 
+constexpr uint8_t ALL_VERBS_MASK = OPTIONS | GET | HEAD | POST | PUT | DELETE | TRACE | CONNECT;
+
 shortcircuiter_t<http_request_t> make_shortcircuiter(const std::string& health_check_path  = "/health_check",
-                                                     const uint8_t& verb_mask = std::numeric_limits<uint8_t>::max());
+                                                     const uint8_t& verb_mask = ALL_VERBS_MASK);
 } // namespace prime_server
