@@ -59,7 +59,7 @@ int main(int argc, char** argv) {
 
   shortcircuiter_t<http_request_t> shortcircuiter;
   if (argc > 4) {
-    uint8_t mask = http::get_method_mask(argv[5]);
+    uint8_t mask = argc > 5 ? http::get_method_mask(argv[5]) : ALL_VERBS_MASK;
     shortcircuiter = make_shortcircuiter(argv[4], mask);
   }
 
