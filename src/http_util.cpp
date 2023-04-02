@@ -110,7 +110,7 @@ uint8_t get_method_mask(const std::string& verb_list) {
     }
   }
 
-  return method_mask;
+  return method_mask ? method_mask : ALL_VERBS_MASK;
 }
 
 } // namespace http
