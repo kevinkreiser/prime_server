@@ -43,11 +43,10 @@ std::string get_allowed_methods_string(uint8_t verb_mask) {
   bool first = true;
   for (method_t method = 1; i != 0; i <<= 1) {
     if (is_method_allowed(verb_mask, method)) {
-      if (!first) {
+      if (!methods.empty()) {
         methods += ", ";
       }
       methods += prime_server::METHOD_TO_STRING.find(method)->second;
-      first = false;
     }
   }
   return methods;
