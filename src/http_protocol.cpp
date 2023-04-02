@@ -41,8 +41,7 @@ bool is_method_allowed(uint8_t mask, method_t method) {
 std::string get_allowed_methods_string(uint8_t verb_mask) {
   std::string methods;
   bool first = true;
-  for (int i = 0; i < 8; ++i) {
-    method_t method = static_cast<method_t>(pow(2, i));
+  for (method_t method = 1; i != 0; i <<= 1) {
     if (is_method_allowed(verb_mask, method)) {
       if (!first) {
         methods += ", ";
