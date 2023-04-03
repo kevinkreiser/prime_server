@@ -39,7 +39,7 @@ std::string get_allowed_methods_string(uint8_t verb_mask) {
   std::string methods;
   bool first = true;
   for (method_t method = 1; i != 0; i <<= 1) {
-    if (is_method_allowed(verb_mask, method)) {
+     if (verb_mask & static_cast<uint8_t>(method)) {
       if (!methods.empty()) {
         methods += ", ";
       }
@@ -773,7 +773,7 @@ shortcircuiter_t<http_request_t> make_shortcircuiter(const std::string& health_c
   return [=](const http_request_t& request) {
     if (request.path == health_check_path) {
       return shared_health_check;
-    } else if (!is_method_allowed(verb_mask, request.method)) {
+    } else if (!(verb_mask & static_cast<uint8_t>(request.method))) {
       return shared_method_not_allowed;
     } else if (request.method == method_t::OPTIONS) {
       return shared_options;
