@@ -197,5 +197,16 @@ using http_server_t = server_t<http_request_t, http_request_info_t>;
 constexpr uint8_t ALL_VERBS_MASK = OPTIONS | GET | HEAD | POST | PUT | DELETE | TRACE | CONNECT;
 
 shortcircuiter_t<http_request_t> make_shortcircuiter(const std::string& health_check_path  = "/health_check",
-                                                     const uint8_t& verb_mask = ALL_VERBS_MASK);
+                                                     const uint8_t& verb_mask = ALL_VERBS_MASK,
+                                                     const std::string& allowed_origins = "*",
+                                                     const std::string& allowed_headers = "*",
+                                                     const int max_age = 86400);
+
+std::unordered_set<std::string> parse_string_list(const std::string& parameter_str);
+
+std::unique_ptr<zmq::message_t> handle_cors(const http_request_t& request,
+                                            const std::string& allowed_methods,
+                                            const std::string& allow_origins,
+                                            const std::string& allowed_headers,
+                                            const int max_age);
 } // namespace prime_server
