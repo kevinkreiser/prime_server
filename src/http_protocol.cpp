@@ -41,7 +41,7 @@ std::string get_allowed_methods_string(uint8_t verb_mask) {
   for (int method = 1; method != 0; method <<= 1) {
      if (verb_mask & static_cast<uint8_t>(method)) {
       if (!methods.empty()) {
-        methods += ", ";
+        methods += ",";
       }
       methods += prime_server::METHOD_TO_STRING.find(static_cast<method_t>(method))->second;
     }
@@ -767,13 +767,6 @@ std::function<std::shared_ptr<zmq::message_t>(const http_request_t&)> handle_cor
     const std::string& allowed_headers,
     const int max_age) {
 
-    std::cout << "Entering handle_cors function" << std::endl;
-    std::cout << "Allowed methods: " << allowed_methods << std::endl;
-    std::cout << "Allowed origins: " << allowed_origins << std::endl;
-    std::cout << "Allowed headers: " << allowed_headers << std::endl;
-    
-    std::cout << "Entering handle_cors function" << std::endl;
-
     auto parsed_allowed_methods = parse_string_list(allowed_methods);
     auto parsed_allowed_origins = parse_string_list(allowed_origins);
     auto parsed_allowed_headers = parse_string_list(allowed_headers);
@@ -782,14 +775,9 @@ std::function<std::shared_ptr<zmq::message_t>(const http_request_t&)> handle_cor
     std::string blocked_by_cors_str = blocked_by_cors_response.to_string();
     std::shared_ptr<zmq::message_t> shared_blocked_by_cors = std::make_shared<zmq::message_t>(blocked_by_cors_str.size(), blocked_by_cors_str.c_str());
 
-    std::cout << "Preparing lambda function" << std::endl;
-
     return [=](const http_request_t& request) -> std::shared_ptr<zmq::message_t> {
 
-        std::cout << "Inside lambda function" << std::endl;
-
         auto method = request.headers.find("Access-Control-Request-Method")->second;
-        std::cout << "Method: " << method << std::endl;
         auto origin = request.headers.find("Origin");
         auto req_headers_iter = request.headers.find("Access-Control-Request-Headers");
 
@@ -806,7 +794,6 @@ std::function<std::shared_ptr<zmq::message_t>(const http_request_t&)> handle_cor
             }
         }
 
-        // TODO: Recheck this logic, something is wrong and segfaults are happening
         bool is_origin_allowed = parsed_allowed_origins.find("*") != parsed_allowed_origins.end() ||
                                  (origin != request.headers.end() && parsed_allowed_origins.find(origin->second) != parsed_allowed_origins.end());
 
@@ -816,7 +803,6 @@ std::function<std::shared_ptr<zmq::message_t>(const http_request_t&)> handle_cor
         bool is_method_allowed = parsed_allowed_methods.find(method) != parsed_allowed_methods.end();
 
         if (is_origin_allowed && is_headers_allowed && is_method_allowed) {
-            std::cout << "CORS request allowed" << std::endl;
             http_response_t cors_response(200, "OK");
             cors_response.headers.insert({"Access-Control-Allow-Methods", allowed_methods});
             if(origin != request.headers.end()) {
@@ -830,7 +816,6 @@ std::function<std::shared_ptr<zmq::message_t>(const http_request_t&)> handle_cor
             std::shared_ptr<zmq::message_t> shared_cors = std::make_shared<zmq::message_t>(cors_str.size(), cors_str.c_str());
             return shared_cors;
         } else {
-            std::cout << "CORS request blocked" << std::endl;
             return shared_blocked_by_cors;
         }
     };
@@ -876,14 +861,15 @@ shortcircuiter_t<http_request_t> make_shortcircuiter(const std::string& health_c
     } 
     else if (!(verb_mask & static_cast<uint8_t>(request.method))) {
       return shared_method_not_allowed;
-    } else if (request.method == method_t::OPTIONS) {
+    } 
+    else if (request.method == method_t::OPTIONS) {
       if(request.headers.find("Access-Control-Request-Method") != request.headers.end()) {
-        std::cout << "CORS request" << std::endl;
         return cors_handler(request);
       }else {
         return shared_options;
       }
-    } else {
+    } 
+    else {
       return std::shared_ptr<zmq::message_t>();
     }
   };
