@@ -4,8 +4,6 @@
 #include <ctime>
 #include <curl/curl.h>
 
-#include <cmath>
-
 using namespace prime_server;
 
 // TODO: someone please replace the http protocol, its a giant mess. kthxbye
