@@ -200,12 +200,4 @@ shortcircuiter_t<http_request_t> make_shortcircuiter(const std::string& health_c
                                                      const std::string& allowed_origins = "*",
                                                      const std::string& allowed_headers = "*",
                                                      const int max_age = 86400);
-
-std::unordered_set<std::string> parse_string_list(const std::string& parameter_str);
-
-std::unique_ptr<zmq::message_t> handle_cors(const http_request_t& request,
-                                            const std::string& allowed_methods,
-                                            const std::string& allow_origins,
-                                            const std::string& allowed_headers,
-                                            const int max_age);
 } // namespace prime_server
