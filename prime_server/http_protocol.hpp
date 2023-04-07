@@ -72,7 +72,6 @@ const std::unordered_map<method_t, std::string>
 const std::unordered_map<std::string, bool> SUPPORTED_VERSIONS{{"HTTP/1.0", true},
                                                                {"HTTP/1.1", true}};
 
-
 struct http_entity_t {
   std::string version;
   headers_t headers;
