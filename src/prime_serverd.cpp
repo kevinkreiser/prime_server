@@ -101,7 +101,8 @@ int main(int argc, char** argv) {
                 else if (request.method == method_t::POST) {
                   try {
                     if (request.body.empty())
-                      throw;
+                      throw std::runtime_error(
+                          "POST requests should have a non-empty body");
                     possible_prime = std::stoul(request.body);
                   } catch (...) {
                     throw std::runtime_error(
