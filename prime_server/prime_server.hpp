@@ -64,7 +64,6 @@ using shortcircuiter_t = std::function<std::shared_ptr<zmq::message_t>(const req
 
 // TODO: make configuration objects to use as parameter packs because these constructors are large
 
-
 // server sits between a clients and a load balanced backend
 template <class request_container_t, class request_info_t>
 class server_t {
