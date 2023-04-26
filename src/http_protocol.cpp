@@ -33,7 +33,6 @@ std::string url_decode(const std::string& encoded) {
 
 std::string get_allowed_methods_string(uint8_t verb_mask) {
   std::string methods;
-  bool first = true;
   for (int method = 1; method != 0; method <<= 1) {
      if (verb_mask & static_cast<uint8_t>(method)) {
       if (!methods.empty()) {
