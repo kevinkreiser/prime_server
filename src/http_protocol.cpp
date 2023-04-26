@@ -31,8 +31,6 @@ std::string url_decode(const std::string& encoded) {
   return decoded_str;
 }
 
-
-
 std::string get_allowed_methods_string(uint8_t verb_mask) {
   std::string methods;
   bool first = true;
