@@ -28,8 +28,8 @@ AC_PROG_EGREP
 
 AC_LANG([C++])
 
-# require c++11
-AX_CXX_COMPILE_STDCXX_11([noext],[mandatory])
+# require c++17
+AX_CXX_COMPILE_STDCXX_17([noext], [mandatory])
 
 # check zmq version
 PKG_CHECK_MODULES(DEPS, [libzmq >= 4.1.4 libczmq >= 3.0 libcurl >= 7.22.0])
