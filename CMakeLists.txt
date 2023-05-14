@@ -5,8 +5,8 @@ project(prime_server LANGUAGES CXX C VERSION ${PRIME_SERVER_VERSION_MAJOR}.${PRI
 INCLUDE(FindPkgConfig)
 INCLUDE(GNUInstallDirs)
 
-# Use a C++11 enabled compiler
-set(CMAKE_CXX_STANDARD 11)
+# Use a C++17 enabled compiler
+set(CMAKE_CXX_STANDARD 17)
 
 # What type of build
 if(NOT MSVC_IDE) # TODO: May need to be extended for Xcode, CLion, etc.
