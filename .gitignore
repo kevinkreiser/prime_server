@@ -1,10 +1,11 @@
 # editor temporary / backup files
 *~
 
-# artefacts from autotools
+# artifacts from autotools
 INSTALL
 Makefile.in
 aclocal.m4
+ar-lib
 autom4te.cache/
 compile
 config.guess
