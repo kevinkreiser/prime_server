@@ -10,6 +10,7 @@
 #include <thread>
 #include <unistd.h>
 #include <unordered_set>
+#include <vector>
 
 using namespace prime_server;
 
@@ -28,9 +29,16 @@ public:
   }
   // easier to test with straight up strings
   bool enqueue(const std::string& requester, const std::string& message, http_request_t& request) {
+    last_responses.clear(); // you should have checked what was dequeued before calling this again
     zmq::message_t r(&const_cast<char&>(requester.front()), requester.size(), [](void*, void*) {});
     zmq::message_t m(&const_cast<char&>(message.front()), message.size(), [](void*, void*) {});
     return http_server_t::enqueue(r, m, request);
+  }
+  // remember the last response that was sent
+  std::vector<http_response_t> last_responses;
+  virtual bool dequeue(const http_request_info_t& info, const zmq::message_t& response) {
+    last_responses.emplace_back(http_response_t::from_string(static_cast<const char*>(response.data()), response.size()));
+    return http_server_t::dequeue(info, response);
   }
 };
 
@@ -242,6 +250,33 @@ void test_response_parsing() {
   response = http_response_t::from_string(response_str.c_str(), response_str.size());
   if (response.body != "32416190071")
     throw std::runtime_error("Response parsing failed");
+}
+
+void test_cors_preflight() {
+  // a server who lets us snoop on what its doing
+  zmq::context_t context;
+  testable_http_server_t server(context, "ipc:///tmp/test_http_server",
+                                "ipc:///tmp/test_http_proxy_upstream", "ipc:///tmp/test_http_results",
+                                "ipc:///tmp/test_http_interrupt");
+  server.passify();
+
+  // get a preflight request as a zmq message that we can enqueue to the server
+  http_request_t request;
+  request.headers.emplace("Access-Control-Request-Method", "POST");
+  request.headers.emplace("Access-Control-Request-Headers", "origin");
+  request.headers.emplace("Origin", "https://foo.bar");
+  request.method = OPTIONS;
+  request.body = "/baz";
+  request.version = "HTTP/1.1";
+  auto req_str = request.to_string();
+
+  // send the request
+  http_request_t request_state;
+  server.enqueue("", req_str, request_state);
+
+  // we dont have preflight support implemented yet so we expect nothing to happen here
+  if (server.last_responses.size() != 0)
+    throw std::logic_error("Cors preflight is not implemented but we got a response");
 }
 
 constexpr char alpha_numeric[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -523,6 +558,8 @@ int main() {
   suite.test(TEST_CASE(test_response_parsing));
 
   suite.test(TEST_CASE(test_chunked_encoding));
+
+  suite.test(TEST_CASE(test_cors_preflight));
 
   // fail if it hangs
   alarm(300);
