@@ -12,6 +12,8 @@
 #include <unordered_set>
 #include <vector>
 
+constexpr size_t MAX_REQUEST_SIZE = 1024 * 1024;
+
 using namespace prime_server;
 
 namespace {
@@ -38,7 +40,15 @@ public:
   std::vector<http_response_t> last_responses;
   virtual bool dequeue(const http_request_info_t& info, const zmq::message_t& response) {
     last_responses.emplace_back(http_response_t::from_string(static_cast<const char*>(response.data()), response.size()));
-    return http_server_t::dequeue(info, response);
+    try {
+      return http_server_t::dequeue(info, response);
+    }
+    catch(const std::runtime_error& e){
+      if(std::string(e.what()).find("unreachable") == std::string::npos) {
+        throw e;
+      }
+    }
+    return false;
   }
 };
 
@@ -252,15 +262,15 @@ void test_response_parsing() {
     throw std::runtime_error("Response parsing failed");
 }
 
-void test_cors_preflight() {
+void test_shortcircuit() {
   // a server who lets us snoop on what its doing
-  shortcircuiter_t<http_request_t> shortcircuiter;
-  shortcircuiter = make_shortcircuiter();
-
   zmq::context_t context;
   testable_http_server_t server(context, "ipc:///tmp/test_http_server",
                                 "ipc:///tmp/test_http_proxy_upstream", "ipc:///tmp/test_http_results",
-                                "ipc:///tmp/test_http_interrupt", false, DEFAULT_MAX_REQUEST_SIZE, DEFAULT_REQUEST_TIMEOUT, shortcircuiter);
+                                "ipc:///tmp/test_http_interrupt", false,
+      MAX_REQUEST_SIZE, -1,
+      [](const http_request_t& r) -> bool { return r.path == "/health_check"; },
+      http_response_t{200, "OK", "foo_bar_baz"}.to_string());
   server.passify();
 
   // get a preflight request as a zmq message that we can enqueue to the server
@@ -270,7 +280,7 @@ void test_cors_preflight() {
   request.headers.emplace("Access-Control-Request-Headers", "origin");
   request.headers.emplace("Origin", "https://foo.bar");
   request.method = OPTIONS;
-  request.body = "/baz";
+  request.path = "/baz";
   request.version = "HTTP/1.1";
   auto req_str = request.to_string();
 
@@ -281,6 +291,15 @@ void test_cors_preflight() {
   // we dont have preflight support implemented yet so we expect nothing to happen here
   if (server.last_responses.size() != 0)
     throw std::logic_error("Cors preflight is not implemented but we got a response");
+
+  // health check should win
+  request.path = "/health_check";
+  req_str = request.to_string();
+  request_state = {};
+  server.enqueue("", req_str, request_state);
+  if (server.last_responses.size() != 1 || server.last_responses.back().body != "foo_bar_baz")
+    throw std::logic_error("Healthcheck is always the first priority heck");
+  server.last_responses.clear();
 }
 
 constexpr char alpha_numeric[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -329,8 +348,6 @@ void http_client_work(zmq::context_t& context) {
   // request and receive
   client.batch();
 }
-
-constexpr size_t MAX_REQUEST_SIZE = 1024 * 1024;
 
 void test_parallel_clients() {
 
@@ -563,7 +580,7 @@ int main() {
 
   suite.test(TEST_CASE(test_chunked_encoding));
 
-  suite.test(TEST_CASE(test_cors_preflight));
+  suite.test(TEST_CASE(test_shortcircuit));
 
   // fail if it hangs
   alarm(300);
