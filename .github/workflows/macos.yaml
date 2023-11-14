@@ -20,7 +20,6 @@ jobs:
           xcrun --show-sdk-path
           SDK_PATH=$(find /Library/Developer/CommandLineTools/SDKs/MacOSX*.sdk -type d -maxdepth 0 | tail -n 1)
           echo ${SDK_PATH}
-          SDK_PATH=$(xcrun --show-sdk-path)
           cmake . -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_SANITIZERS=On -DCMAKE_OSX_SYSROOT=${SDK_PATH} && make all -j$(sysctl -n hw.ncpu)
       - name: test
         shell: bash
