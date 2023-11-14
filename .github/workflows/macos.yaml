@@ -4,7 +4,7 @@ on: [pull_request]
 jobs:
   build:
     name: build and test
-    runs-on: macos-11
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v2
         with:
@@ -13,8 +13,6 @@ jobs:
         shell: bash
         run: |
           brew update
-          brew deps --tree zeromq
-          brew deps --tree czmq
           brew install pkg-config zeromq czmq
       - name: build
         shell: bash
