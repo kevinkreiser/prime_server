@@ -8,6 +8,9 @@ INCLUDE(GNUInstallDirs)
 # Use a C++17 enabled compiler
 set(CMAKE_CXX_STANDARD 17)
 
+option(ENABLE_WALL "Convert compiler warnings to errors" ON)
+option(ENABLE_WERROR "Convert compiler warnings to errors. Requires ENABLE_WALL" ON)
+
 # What type of build
 if(NOT MSVC_IDE) # TODO: May need to be extended for Xcode, CLion, etc.
   if(NOT CMAKE_BUILD_TYPE)
@@ -29,10 +32,16 @@ else()
 endif()
 
 # Show all warnings and treat as errors
-if(MSVC)
-  add_compile_options(/W4 /WX)
-else()
-  add_compile_options(-Wall -Wextra -pedantic -Werror)
+if(MSVC AND ENABLE_WALL)
+  add_compile_options(/W4)
+  if(ENABLE_WERROR)
+  	add_compile_options(/WX)
+  endif()
+elseif(ENABLE_WALL)
+  add_compile_options(-Wall -Wextra -pedantic)
+  if(ENABLE_WERROR)
+  	add_compile_options(-Werror)
+  endif()
 endif()
 
 option(ENABLE_SANITIZERS "Use all the integrated sanitizers for Debug build" OFF)
