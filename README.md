@@ -8,7 +8,8 @@
 
 # Build Status
 
-[![Build Status](https://travis-ci.org/kevinkreiser/prime_server.svg?branch=master)](https://travis-ci.org/kevinkreiser/prime_server)
+![linux build](https://github.com/kevinkreiser/prime_server/actions/workflows/linux.yaml/badge.svg)
+![mac build](https://github.com/kevinkreiser/prime_server/actions/workflows/macos.yaml/badge.svg)
 
 # Quick Start
 
