@@ -142,12 +142,11 @@ server_t<request_container_t, request_info_t>::server_t(
     bool log,
     size_t max_request_size,
     uint32_t request_timeout,
-    const health_check_matcher_t& health_check_matcher,
-    const std::string& health_check_response)
+    const shortcircuiter_t<request_container_t>& shortcircuiter)
     : client(context, ZMQ_STREAM), proxy(context, ZMQ_DEALER), loopback(context, ZMQ_SUB),
       interrupt(context, ZMQ_PUB), log(log), max_request_size(max_request_size),
-      request_timeout(request_timeout), request_id(0), health_check_matcher(health_check_matcher),
-      health_check_response(health_check_response.size(), health_check_response.data()) {
+      request_timeout(request_timeout), request_id(0),
+      shortcircuiter(shortcircuiter) {
 
   int disabled = 0;
   client.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
@@ -313,12 +312,11 @@ bool server_t<request_container_t, request_info_t>::enqueue(const zmq::message_t
   for (const auto& parsed_request : parsed_requests) {
     // figure out if we are expecting to close this request or not
     auto info = parsed_request.to_info(request_id++);
-
-    // if its enabled, see if its a health check
-    bool health_check = health_check_matcher && health_check_matcher(parsed_request);
+    
+    auto shortcircuit = shortcircuiter ? shortcircuiter(parsed_request) : nullptr;
 
     // send on the request if its not a health check
-    if (!health_check &&
+    if (!shortcircuit &&
         (!proxy.send(static_cast<const void*>(&info), sizeof(info), ZMQ_DONTWAIT | ZMQ_SNDMORE) ||
          !proxy.send(parsed_request.to_string(), ZMQ_DONTWAIT))) {
       logging::ERROR("Server failed to enqueue request");
@@ -332,9 +330,9 @@ bool server_t<request_container_t, request_info_t>::enqueue(const zmq::message_t
     requests.emplace(request.enqueued.back(), requester);
     request_history.emplace_back(std::move(info));
 
-    // if it was a health check we reply immediately
-    if (health_check)
-      dequeue(request_history.back(), health_check_response);
+    if (shortcircuit){
+      dequeue(request_history.back(), *shortcircuit);
+    }
   }
   return true;
 }
@@ -458,7 +456,6 @@ void proxy_t::forward() {
     }
   }
 }
-
 worker_t::worker_t(zmq::context_t& context,
                    const std::string& upstream_proxy_endpoint,
                    const std::string& downstream_proxy_endpoint,
@@ -607,6 +604,7 @@ bool draining() {
 bool shutting_down() {
   return quiescable::get().shutting_down;
 }
+
 
 // explicit instantiation for netstring and http
 template class server_t<netstring_entity_t, netstring_request_info_t>;

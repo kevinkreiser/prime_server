@@ -30,5 +30,7 @@ worker_t::result_t disk_result(const http_request_t& path,
                                bool allow_listing = true,
                                size_t size_limit = 1024 * 1024 * 1024);
 
+uint8_t get_method_mask(const std::string& verb_list);
+
 } // namespace http
 } // namespace prime_server

@@ -52,7 +52,9 @@ struct caseless_predicates_t : public std::hash<std::string> {
 using headers_t =
     std::unordered_map<std::string, std::string, caseless_predicates_t, caseless_predicates_t>;
 using query_t = std::unordered_map<std::string, std::list<std::string>>;
-enum method_t { OPTIONS, GET, HEAD, POST, PUT, DELETE, TRACE, CONNECT };
+enum method_t { OPTIONS = 1, GET = 2, HEAD = 4, POST = 8, PUT = 16, DELETE = 32, TRACE = 64, CONNECT = 128};
+
+
 const std::unordered_map<std::string, method_t> STRING_TO_METHOD{{"OPTIONS", method_t::OPTIONS},
                                                                  {"GET", method_t::GET},
                                                                  {"HEAD", method_t::HEAD},
@@ -61,7 +63,8 @@ const std::unordered_map<std::string, method_t> STRING_TO_METHOD{{"OPTIONS", met
                                                                  {"DELETE", method_t::DELETE},
                                                                  {"TRACE", method_t::TRACE},
                                                                  {"CONNECT", method_t::CONNECT}};
-const std::unordered_map<method_t, std::string, std::hash<int>>
+
+const std::unordered_map<method_t, std::string>
     METHOD_TO_STRING{{method_t::OPTIONS, "OPTIONS"}, {method_t::GET, "GET"},
                      {method_t::HEAD, "HEAD"},       {method_t::POST, "POST"},
                      {method_t::PUT, "PUT"},         {method_t::DELETE, "DELETE"},
@@ -190,4 +193,11 @@ protected:
 
 using http_server_t = server_t<http_request_t, http_request_info_t>;
 
+constexpr uint8_t ALL_VERBS_MASK = OPTIONS | GET | HEAD | POST | PUT | DELETE | TRACE | CONNECT;
+
+shortcircuiter_t<http_request_t> make_shortcircuiter(const std::string& health_check_path  = "/health_check",
+                                                     const uint8_t& verb_mask = ALL_VERBS_MASK,
+                                                     const std::string& allowed_origins = "*",
+                                                     const std::string& allowed_headers = "*",
+                                                     const int max_age = 86400);
 } // namespace prime_server

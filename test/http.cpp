@@ -262,15 +262,18 @@ void test_response_parsing() {
     throw std::runtime_error("Response parsing failed");
 }
 
-void test_shortcircuit() {
+void test_shortcircuit_requested_method_not_allowed() {
+
+  shortcircuiter_t<http_request_t> shortcircuiter;
+  shortcircuiter = make_shortcircuiter("/health_check", (OPTIONS | GET) , "https://foo.bar", "Origin");
+
   // a server who lets us snoop on what its doing
   zmq::context_t context;
   testable_http_server_t server(context, "ipc:///tmp/test_http_server",
                                 "ipc:///tmp/test_http_proxy_upstream", "ipc:///tmp/test_http_results",
                                 "ipc:///tmp/test_http_interrupt", false,
-      MAX_REQUEST_SIZE, -1,
-      [](const http_request_t& r) -> bool { return r.path == "/health_check"; },
-      http_response_t{200, "OK", "foo_bar_baz"}.to_string());
+                                MAX_REQUEST_SIZE, -1, shortcircuiter);
+  
   server.passify();
 
   // get a preflight request as a zmq message that we can enqueue to the server
@@ -287,17 +290,164 @@ void test_shortcircuit() {
   http_request_t request_state;
   server.enqueue("", req_str, request_state);
 
-  // we dont have preflight support implemented yet so we expect nothing to happen here
-  if (server.last_responses.size() != 0)
-    throw std::logic_error("Cors preflight is not implemented but we got a response");
-
-  // health check should win
-  request.path = "/health_check";
   req_str = request.to_string();
   request_state = {};
   server.enqueue("", req_str, request_state);
-  if (server.last_responses.size() != 1 || server.last_responses.back().body != "foo_bar_baz")
-    throw std::logic_error("Healthcheck is always the first priority heck");
+  if (server.last_responses.size() != 1 || server.last_responses.back().code != 403)
+    throw std::logic_error("Request blocked due to violation of CORS policy should have been returned");
+  server.last_responses.clear();
+}
+
+void test_shortcircuit_wrong_cors_not_allowed() {
+
+  shortcircuiter_t<http_request_t> shortcircuiter;
+  shortcircuiter = make_shortcircuiter("/health_check", (OPTIONS | POST | GET) , "https://foo.bar", "*");
+
+  // a server who lets us snoop on what its doing
+  zmq::context_t context;
+  testable_http_server_t server(context, "ipc:///tmp/test_http_server",
+                                "ipc:///tmp/test_http_proxy_upstream", "ipc:///tmp/test_http_results",
+                                "ipc:///tmp/test_http_interrupt", false,
+                                MAX_REQUEST_SIZE, -1, shortcircuiter);
+  
+  server.passify();
+
+  // get a preflight request as a zmq message that we can enqueue to the server
+  http_request_t request;
+  request.headers.emplace("Access-Control-Request-Method", "GET");
+  request.headers.emplace("Access-Control-Request-Headers", "origin");
+  request.headers.emplace("Origin", "https://foo.baz");  // Request origin
+  request.method = OPTIONS;
+  request.path = "/baz";
+  request.version = "HTTP/1.1";
+  auto req_str = request.to_string();
+
+  // send the request
+  http_request_t request_state;
+  server.enqueue("", req_str, request_state);
+
+  req_str = request.to_string();
+  request_state = {};
+  server.enqueue("", req_str, request_state);
+
+  // Cors not allowed since the origin is not allowed
+  if (server.last_responses.size() != 1 || server.last_responses.back().code != 403)
+    throw std::logic_error("CORS not allowed should have been returned");
+  server.last_responses.clear();
+}
+
+void test_shortcircuit_cors_not_allowed() {
+
+  shortcircuiter_t<http_request_t> shortcircuiter;
+  shortcircuiter = make_shortcircuiter("/health_check", (OPTIONS | POST | GET) , "", "*");
+
+  // a server who lets us snoop on what its doing
+  zmq::context_t context;
+  testable_http_server_t server(context, "ipc:///tmp/test_http_server",
+                                "ipc:///tmp/test_http_proxy_upstream", "ipc:///tmp/test_http_results",
+                                "ipc:///tmp/test_http_interrupt", false,
+                                MAX_REQUEST_SIZE, -1, shortcircuiter);
+  
+  server.passify();
+
+  // get a preflight request as a zmq message that we can enqueue to the server
+  http_request_t request;
+  request.headers.emplace("Access-Control-Request-Method", "GET");
+  request.headers.emplace("Access-Control-Request-Headers", "origin");
+  request.headers.emplace("Origin", "https://foo.baz");  // Request origin
+  request.method = OPTIONS;
+  request.path = "/baz";
+  request.version = "HTTP/1.1";
+  auto req_str = request.to_string();
+
+  // send the request
+  http_request_t request_state;
+  server.enqueue("", req_str, request_state);
+
+  req_str = request.to_string();
+  request_state = {};
+  server.enqueue("", req_str, request_state);
+
+  // Cors not allowed since the origin is not allowed
+  if (server.last_responses.size() != 1 || server.last_responses.back().code != 403)
+    throw std::logic_error("CORS not allowed should have been returned");
+  server.last_responses.clear();
+}
+
+
+void test_shortcircuit_all_cors_allowed() {
+
+  shortcircuiter_t<http_request_t> shortcircuiter;
+  shortcircuiter = make_shortcircuiter("/health_check", ALL_VERBS_MASK , "*", "*");
+
+  // a server who lets us snoop on what its doing
+  zmq::context_t context;
+  testable_http_server_t server(context, "ipc:///tmp/test_http_server",
+                                "ipc:///tmp/test_http_proxy_upstream", "ipc:///tmp/test_http_results",
+                                "ipc:///tmp/test_http_interrupt", false,
+                                MAX_REQUEST_SIZE, -1, shortcircuiter);
+  
+  server.passify();
+
+  // get a preflight request as a zmq message that we can enqueue to the server
+  http_request_t request;
+  request.headers.emplace("Access-Control-Request-Method", "GET");
+  request.headers.emplace("Access-Control-Request-Headers", "origin");
+  request.headers.emplace("Origin", "https://foo.baz");  // Request origin
+  request.method = OPTIONS;
+  request.path = "/baz";
+  request.version = "HTTP/1.1";
+  auto req_str = request.to_string();
+
+  // send the request
+  http_request_t request_state;
+  server.enqueue("", req_str, request_state);
+
+  req_str = request.to_string();
+  request_state = {};
+  server.enqueue("", req_str, request_state);
+
+  // Cors not allowed since the origin is not allowed
+  if (server.last_responses.size() != 1 || server.last_responses.back().code != 200)
+    throw std::logic_error("CORS allowed should have been returned");
+  server.last_responses.clear();
+}
+
+void test_shortcircuit_specific_cors_allowed() {
+
+  shortcircuiter_t<http_request_t> shortcircuiter;
+  shortcircuiter = make_shortcircuiter("/health_check", ALL_VERBS_MASK , "https://foo.baz", "*");
+
+  // a server who lets us snoop on what its doing
+  zmq::context_t context;
+  testable_http_server_t server(context, "ipc:///tmp/test_http_server",
+                                "ipc:///tmp/test_http_proxy_upstream", "ipc:///tmp/test_http_results",
+                                "ipc:///tmp/test_http_interrupt", false,
+                                MAX_REQUEST_SIZE, -1, shortcircuiter);
+  
+  server.passify();
+
+  // get a preflight request as a zmq message that we can enqueue to the server
+  http_request_t request;
+  request.headers.emplace("Access-Control-Request-Method", "GET");
+  request.headers.emplace("Access-Control-Request-Headers", "origin");
+  request.headers.emplace("Origin", "https://foo.baz");  // Request origin
+  request.method = OPTIONS;
+  request.path = "/baz";
+  request.version = "HTTP/1.1";
+  auto req_str = request.to_string();
+
+  // send the request
+  http_request_t request_state;
+  server.enqueue("", req_str, request_state);
+
+  req_str = request.to_string();
+  request_state = {};
+  server.enqueue("", req_str, request_state);
+
+  // Cors not allowed since the origin is not allowed
+  if (server.last_responses.size() != 1 || server.last_responses.back().code != 200)
+    throw std::logic_error("CORS allowed should have been returned");
   server.last_responses.clear();
 }
 
@@ -350,6 +500,9 @@ void http_client_work(zmq::context_t& context) {
 
 void test_parallel_clients() {
 
+  shortcircuiter_t<http_request_t> shortcircuiter;
+  shortcircuiter = make_shortcircuiter();
+
   zmq::context_t context;
 
   // server
@@ -359,8 +512,7 @@ void test_parallel_clients() {
                     context, "ipc:///tmp/test_http_server", "ipc:///tmp/test_http_proxy_upstream",
                     "ipc:///tmp/test_http_results", "ipc:///tmp/test_http_interrupt", false,
                     MAX_REQUEST_SIZE, -1,
-                    [](const http_request_t& r) -> bool { return r.path == "/health_check"; },
-                    http_response_t{200, "OK", "foo_bar_baz"}.to_string())));
+                    shortcircuiter)));
   server.detach();
 
   // load balancer for parsing
@@ -580,7 +732,13 @@ int main() {
 
   suite.test(TEST_CASE(test_chunked_encoding));
 
-  suite.test(TEST_CASE(test_shortcircuit));
+  suite.test(TEST_CASE(test_shortcircuit_wrong_cors_not_allowed));
+
+  suite.test(TEST_CASE(test_shortcircuit_all_cors_allowed));
+
+  suite.test(TEST_CASE(test_shortcircuit_specific_cors_allowed));
+
+  suite.test(TEST_CASE(test_shortcircuit_requested_method_not_allowed));
 
   // fail if it hangs
   alarm(300);

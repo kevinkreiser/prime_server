@@ -3,6 +3,7 @@
 #include "prime_server.hpp"
 using namespace prime_server;
 #include "logging/logging.hpp"
+#include "http_util.hpp"
 
 #include <cstring>
 #include <string>
@@ -52,20 +53,18 @@ int main(int argc, char** argv) {
   std::tie(drain_seconds, shutdown_seconds) = parse_quiesce_config(argc > 8 ? argv[8] : "");
   quiesce(drain_seconds, shutdown_seconds);
 
-  // default to no health check, if one is provided its just the path and the canned response is OK
-  http_server_t::health_check_matcher_t health_check_matcher{};
-  std::string health_check_response;
+  // http_shortcircuiters_t shortcircuiters;
+  shortcircuiter_t<http_request_t> shortcircuiter;
   if (argc > 9) {
-    health_check_matcher = [&argv](const http_request_t& r) -> bool { return r.path == argv[9]; };
-    // TODO: make this configurable
-    health_check_response = http_response_t{200, "OK"}.to_string();
+    uint8_t mask = http::get_method_mask(argv[10]);
+    shortcircuiter = make_shortcircuiter(argv[9], mask);
   }
 
   // start it up
   zmq::context_t context;
   http_server_t server(context, server_endpoint, proxy_endpoint, server_result_loopback,
                        server_request_interrupt, log, max_request_size_bytes, request_timeout_seconds,
-                       health_check_matcher, health_check_response);
+                       shortcircuiter);
 
   server.serve();
   return EXIT_SUCCESS;
