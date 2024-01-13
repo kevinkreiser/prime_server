@@ -128,9 +128,15 @@ install(TARGETS prime_echod
 	prime_proxyd
 	prime_workerd DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-CONFIGURE_FILE(
-	"${CMAKE_CURRENT_SOURCE_DIR}/libprime_server.pc.in"
-	"${CMAKE_CURRENT_BINARY_DIR}/libprime_server.pc"
+# pkg-config stuff, also make it compatible with autotools
+set(prefix ${CMAKE_INSTALL_PREFIX})
+set(exec_prefix ${prefix})
+set(libdir ${prefix}/${CMAKE_INSTALL_LIBDIR})
+set(includedir ${prefix}/${CMAKE_INSTALL_INCLUDEDIR})
+
+configure_file(
+	${CMAKE_CURRENT_SOURCE_DIR}/libprime_server.pc.in
+	${CMAKE_CURRENT_BINARY_DIR}/libprime_server.pc
 	@ONLY)
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libprime_server.pc" DESTINATION ${pkgconfigdir})
 

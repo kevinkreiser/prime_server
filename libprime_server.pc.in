@@ -7,4 +7,6 @@ Name: libprime_server
 Description: prime_server c++ library
 Version: @VERSION@
 Libs: -L${libdir} -lprime_server
+Requires: libzmq
+Requires.private: libczmq
 Cflags: -I${includedir}
