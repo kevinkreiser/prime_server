@@ -8,5 +8,5 @@ Description: prime_server c++ library
 Version: @VERSION@
 Libs: -L${libdir} -lprime_server
 Requires: libzmq
-Requires.private: libczmq
+Requires.private: libczmq libcurl
 Cflags: -I${includedir}
