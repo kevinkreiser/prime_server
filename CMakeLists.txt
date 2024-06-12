@@ -108,6 +108,7 @@ target_link_libraries(prime_proxyd prime_server ${CMAKE_THREAD_LIBS_INIT})
 add_executable(prime_workerd ${CMAKE_SOURCE_DIR}/src/prime_workerd.cpp)
 target_link_libraries(prime_workerd prime_server ${CMAKE_THREAD_LIBS_INIT})
 
+# TODO(nils): AFAIU the project version shouldn't be the SO version
 set_target_properties(prime_server PROPERTIES
 	PUBLIC_HEADER "${PRIME_LIBRARY_HEADERS}"
 	SOVERSION ${PROJECT_VERSION_MAJOR}
@@ -128,11 +129,21 @@ install(TARGETS prime_echod
 	prime_proxyd
 	prime_workerd DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-CONFIGURE_FILE(
-	"${CMAKE_CURRENT_SOURCE_DIR}/libprime_server.pc.in"
-	"${CMAKE_CURRENT_BINARY_DIR}/libprime_server.pc"
+# pkg-config stuff, also make it compatible with autotools
+set(prefix ${CMAKE_INSTALL_PREFIX})
+set(exec_prefix ${prefix})
+set(libdir ${prefix}/${CMAKE_INSTALL_LIBDIR})
+set(includedir ${prefix}/${CMAKE_INSTALL_INCLUDEDIR})
+
+configure_file(
+	${CMAKE_CURRENT_SOURCE_DIR}/libprime_server.pc.in
+	${CMAKE_CURRENT_BINARY_DIR}/libprime_server.pc
 	@ONLY)
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libprime_server.pc" DESTINATION ${pkgconfigdir})
+
+# uninstall target
+configure_file(cmake/uninstall.cmake.in ${CMAKE_CURRENT_BINARY_DIR}/prime_server_uninstall.cmake @ONLY)
+add_custom_target(uninstall COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/prime_server_uninstall.cmake)
 
 # Add tests - Requires CTest
 enable_testing()

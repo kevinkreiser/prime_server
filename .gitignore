@@ -65,6 +65,7 @@ coverage/
 .project
 .settings
 .idea/
+.vscode
 cmake-build-debug/
 
 # CMake out-of-source build directories
