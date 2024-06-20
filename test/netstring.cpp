@@ -156,15 +156,22 @@ void test_parallel_clients() {
 
   zmq::context_t context;
 
+  // netstring_shortcircuiters_t shortcircuiters;
+
+  // netstring_healthcheck_shortcircuiter_t healthcheck_shortcircuiter("test_healthcheck");
+  // netstring_shortcircuiter_function_t healthcheck_shortcircuit = std::bind(&netstring_healthcheck_shortcircuiter_t::operator(), healthcheck_shortcircuiter, std::placeholders::_1);
+
+  // shortcircuiters.insert(healthcheck_shortcircuit);
+
+
+
   // server
   std::thread server(
       std::bind(&netstring_server_t::serve,
                 netstring_server_t(
                     context, "ipc:///tmp/test_netstring_server",
                     "ipc:///tmp/test_netstring_proxy_upstream", "ipc:///tmp/test_netstring_results",
-                    "ipc:///tmp/test_netstring_interrupt", false, MAX_REQUEST_SIZE, -1,
-                    [](const netstring_entity_t& r) -> bool { return r.body == "health_check"; },
-                    netstring_entity_t::to_string("foo_bar_baz"))));
+                    "ipc:///tmp/test_netstring_interrupt", false, MAX_REQUEST_SIZE, -1/*, shortcircuiters*/)));
   server.detach();
 
   // load balancer for parsing

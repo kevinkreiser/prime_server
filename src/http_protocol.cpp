@@ -31,6 +31,91 @@ std::string url_decode(const std::string& encoded) {
   return decoded_str;
 }
 
+std::string get_allowed_methods_string(uint8_t verb_mask) {
+  std::string methods;
+  for (int method = 1; method != 0; method <<= 1) {
+     if (verb_mask & static_cast<uint8_t>(method)) {
+      if (!methods.empty()) {
+        methods += ",";
+      }
+      methods += prime_server::METHOD_TO_STRING.find(static_cast<method_t>(method))->second;
+    }
+  }
+  return methods;
+}
+
+std::unordered_set<std::string> parse_string_list(const std::string& parameter_str) {
+    std::unordered_set<std::string> parameters;
+    std::stringstream ss(parameter_str);
+    std::string parameter;
+
+    while (std::getline(ss, parameter, ',')) {
+        parameters.insert(parameter);
+    }
+
+    return parameters;
+}
+
+std::function<std::shared_ptr<zmq::message_t>(const http_request_t&)> handle_cors(
+    const std::string& allowed_methods,
+    const std::string& allowed_origins,
+    const std::string& allowed_headers,
+    const int max_age) {
+
+    auto parsed_allowed_methods = parse_string_list(allowed_methods);
+    auto parsed_allowed_origins = parse_string_list(allowed_origins);
+    auto parsed_allowed_headers = parse_string_list(allowed_headers);
+    
+    http_response_t blocked_by_cors_response(403, "CORS policy: Request blocked due to violation of CORS policy.");
+    std::string blocked_by_cors_str = blocked_by_cors_response.to_string();
+    std::shared_ptr<zmq::message_t> shared_blocked_by_cors = std::make_shared<zmq::message_t>(blocked_by_cors_str.size(), blocked_by_cors_str.c_str());
+
+    return [=](const http_request_t& request) -> std::shared_ptr<zmq::message_t> {
+
+        auto method = request.headers.find("Access-Control-Request-Method")->second;
+        auto origin = request.headers.find("Origin");
+        auto req_headers_iter = request.headers.find("Access-Control-Request-Headers");
+
+        bool all_headers_allowed = true;
+        if (req_headers_iter != request.headers.end()) {
+            auto headers = parse_string_list(req_headers_iter->second);
+
+            // Check if all requested headers are allowed
+            for (const auto& header : headers) {
+                if (parsed_allowed_headers.find(header) == parsed_allowed_headers.end()) {
+                    all_headers_allowed = false;
+                    break;
+                }
+            }
+        }
+
+        bool is_origin_allowed = parsed_allowed_origins.find("*") != parsed_allowed_origins.end() ||
+                                 (origin != request.headers.end() && parsed_allowed_origins.find(origin->second) != parsed_allowed_origins.end());
+
+        bool is_headers_allowed = parsed_allowed_headers.find("*") != parsed_allowed_headers.end() ||
+                                  all_headers_allowed;
+
+        bool is_method_allowed = parsed_allowed_methods.find(method) != parsed_allowed_methods.end();
+
+        if (is_origin_allowed && is_headers_allowed && is_method_allowed) {
+            http_response_t cors_response(200, "OK");
+            cors_response.headers.insert({"Access-Control-Allow-Methods", allowed_methods});
+            if(origin != request.headers.end()) {
+                cors_response.headers.insert({"Access-Control-Allow-Origin", origin->second});
+            }
+            if(req_headers_iter != request.headers.end()) {
+                cors_response.headers.insert({"Access-Control-Allow-Headers", req_headers_iter->second});
+            }
+            cors_response.headers.insert({"Access-Control-Max-Age", std::to_string(max_age)});
+            std::string cors_str = cors_response.to_string();
+            std::shared_ptr<zmq::message_t> shared_cors = std::make_shared<zmq::message_t>(cors_str.size(), cors_str.c_str());
+            return shared_cors;
+        } else {
+            return shared_blocked_by_cors;
+        }
+    };
+}
+
 const headers_t::value_type CORS{"Access-Control-Allow-Origin", "*"};
 const http_request_t::request_exception_t
     RESPONSE_400(http_response_t(400, "Bad Request", "Malformed HTTP request", {CORS}));
@@ -731,4 +816,59 @@ std::string http_response_t::generic(unsigned code,
   return response;
 }
 
+// make a short circuiter that will respond to health checks and OPTIONS request
+// Ref: https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/OPTIONS
+shortcircuiter_t<http_request_t> make_shortcircuiter(const std::string& health_check_path,
+                                                     const uint8_t& verb_mask,
+                                                     const std::string& allowed_origins,
+                                                     const std::string& allowed_headers,
+                                                     const int max_age){
+
+  std::string allowed_verbs = get_allowed_methods_string(verb_mask);
+
+  auto cors_handler = handle_cors(allowed_verbs, allowed_origins, allowed_headers, max_age);
+
+  // Pre-created shared response objects
+  std::shared_ptr<zmq::message_t> shared_empty = std::shared_ptr<zmq::message_t>();
+
+  http_response_t health_check_response(200, "OK");
+  std::string health_check_str = health_check_response.to_string();
+  std::shared_ptr<zmq::message_t> shared_health_check = std::make_shared<zmq::message_t>(health_check_str.size(), health_check_str.c_str());
+
+  http_response_t method_not_allowed_response(405, "Method Not Allowed");
+  std::string method_not_allowed_str = method_not_allowed_response.to_string();
+  std::shared_ptr<zmq::message_t> shared_method_not_allowed = std::make_shared<zmq::message_t>(method_not_allowed_str.size(), method_not_allowed_str.c_str());
+
+  http_response_t options_response(200, "OK");
+  options_response.headers.insert({"Allow", allowed_verbs});
+  std::string options_str = options_response.to_string();
+  std::shared_ptr<zmq::message_t> shared_options = std::make_shared<zmq::message_t>(options_str.size(), options_str.c_str());
+
+  http_response_t cors_response(200, "OK");
+  cors_response.headers.insert({"Access-Control-Allow-Origin", allowed_origins});
+  cors_response.headers.insert({"Access-Control-Allow-Methods", allowed_verbs});
+  cors_response.headers.insert({"Access-Control-Allow-Headers", allowed_headers});
+  cors_response.headers.insert({"Access-Control-Max-Age", std::to_string(max_age)});
+  std::string cors_str = cors_response.to_string();
+  std::shared_ptr<zmq::message_t> shared_cors = std::make_shared<zmq::message_t>(cors_str.size(), cors_str.c_str());
+
+  return [=](const http_request_t& request) {
+    if (request.path == health_check_path) {
+      return shared_health_check;
+    } 
+    else if (!(verb_mask & static_cast<uint8_t>(request.method))) {
+      return shared_method_not_allowed;
+    } 
+    else if (request.method == method_t::OPTIONS) {
+      if(request.headers.find("Access-Control-Request-Method") != request.headers.end()) {
+        return cors_handler(request);
+      }else {
+        return shared_options;
+      }
+    } 
+    else {
+      return shared_empty;
+    }
+  };
+}
 } // namespace prime_server

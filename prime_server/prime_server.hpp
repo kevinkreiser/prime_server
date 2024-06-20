@@ -59,13 +59,15 @@ constexpr uint32_t DEFAULT_REQUEST_TIMEOUT = -1;              // infinity second
 // TODO: bundle both request_containter_t (req, rep) and request_info_t into
 // a single session_t that implements all the guts of the protocol
 
+template <class request_container_t>
+using shortcircuiter_t = std::function<std::shared_ptr<zmq::message_t>(const request_container_t&)>;
+
 // TODO: make configuration objects to use as parameter packs because these constructors are large
 
 // server sits between a clients and a load balanced backend
 template <class request_container_t, class request_info_t>
 class server_t {
 public:
-  using health_check_matcher_t = std::function<bool(const request_container_t&)>;
 
   server_t(zmq::context_t& context,
            const std::string& client_endpoint,
@@ -75,8 +77,7 @@ public:
            bool log = false,
            size_t max_request_size = DEFAULT_MAX_REQUEST_SIZE,
            uint32_t request_timeout = DEFAULT_REQUEST_TIMEOUT,
-           const health_check_matcher_t& health_check_matcher = {},
-           const std::string& health_check_response = {});
+           const shortcircuiter_t<request_container_t>& shortcircuiters = {});
   virtual ~server_t();
   void serve();
 
@@ -121,10 +122,8 @@ protected:
   std::unordered_map<uint64_t, zmq::message_t> requests;
   // order list of requests
   std::list<request_info_t> request_history;
-  // a matcher for determining whether a request is a health check or not
-  std::function<bool(const request_container_t&)> health_check_matcher;
-  // the response bytes to send when a health check request is received
-  zmq::message_t health_check_response;
+  // a function that can short circuit a request and return a response
+  shortcircuiter_t<request_container_t> shortcircuiter;
 };
 
 // proxy messages between layers of a backend load balancing in between
@@ -214,5 +213,4 @@ void quiesce(unsigned int drain_seconds = 0, unsigned int shutdown_seconds = 0);
 bool draining();
 // whether or not the daemon thread is waiting for other threads to exit
 bool shutting_down();
-
 } // namespace prime_server

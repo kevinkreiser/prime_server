@@ -28,6 +28,8 @@ m4/ltsugar.m4
 m4/ltversion.m4
 m4/lt~obsolete.m4
 libtool
+ar-lib
+
 
 # built objects
 *.o
@@ -70,3 +72,6 @@ cmake-build-debug/
 
 # CMake out-of-source build directories
 build/
+
+# VSCode settings
+.vscode/
