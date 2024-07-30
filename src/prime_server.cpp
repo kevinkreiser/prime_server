@@ -158,6 +158,7 @@ server_t<request_container_t, request_info_t>::server_t(
   proxy.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
   proxy.connect(proxy_endpoint.c_str());
 
+  loopback.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
   loopback.bind(result_endpoint.c_str());
 
   interrupt.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
@@ -479,6 +480,7 @@ worker_t::worker_t(zmq::context_t& context,
   downstream_proxy.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
   downstream_proxy.connect(downstream_proxy_endpoint.c_str());
 
+  loopback.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
   loopback.connect(result_endpoint.c_str());
 
   interrupt.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
