@@ -49,17 +49,22 @@ option(ENABLE_ADDRESS_SANITIZER "Use memory sanitizer for Debug build" OFF)
 option(ENABLE_UNDEFINED_SANITIZER "Use UB sanitizer for Debug build" OFF)
 include(cmake/sanitizer.cmake)
 
+find_package(Threads REQUIRED)
+find_package(PkgConfig REQUIRED)
+
 # Handle the dependencies
-pkg_check_modules(CURL REQUIRED libcurl>=7.22.0)
+if (WIN32)
+  find_package(ZeroMQ CONFIG REQUIRED)
+else()
+	pkg_check_modules(ZMQ REQUIRED IMPORTED_TARGET libzmq>=4.1.4)
+	include_directories(${ZMQ_INCLUDEDIR})
+endif(WIN32)
+
+pkg_check_modules(CURL REQUIRED IMPORTED_TARGET libcurl>=7.22.0)
 include_directories(${CURL_INCLUDEDIR})
 
-pkg_check_modules(ZMQ REQUIRED libzmq>=4.1.4)
-include_directories(${ZMQ_INCLUDEDIR})
-
-pkg_check_modules(CZMQ REQUIRED libczmq>=3.0)
+pkg_check_modules(CZMQ REQUIRED IMPORTED_TARGET libczmq>=3.0)
 include_directories(${CZMQ_INCLUDEDIR})
-
-find_package (Threads REQUIRED)
 
 # Include the hpp files
 include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/prime_server)
@@ -69,7 +74,8 @@ set(PRIME_LIBRARY_HEADERS
 	${CMAKE_SOURCE_DIR}/prime_server/http_util.hpp
 	${CMAKE_SOURCE_DIR}/prime_server/netstring_protocol.hpp
 	${CMAKE_SOURCE_DIR}/prime_server/zmq_helpers.hpp
-	${CMAKE_SOURCE_DIR}/prime_server/http_protocol.hpp)
+	${CMAKE_SOURCE_DIR}/prime_server/http_protocol.hpp
+	${CMAKE_SOURCE_DIR}/prime_server/dirent.h)
 
 set(PRIME_LIBRARY_SOURCES
 	${CMAKE_SOURCE_DIR}/src/logging/logging.hpp
@@ -81,13 +87,24 @@ set(PRIME_LIBRARY_SOURCES
 	${CMAKE_SOURCE_DIR}/src/zmq_helpers.cpp)
 
 # Build the library
-add_library(prime_server SHARED ${PRIME_LIBRARY_SOURCES})
+add_library(prime_server ${PRIME_LIBRARY_SOURCES})
+#message(STATUS "bla: ${ZMQ_LINK_LIBRARIES} ${CURL_LINK_LIBRARIES}")
 target_link_libraries(prime_server
   PUBLIC
-    ${ZMQ_LDFLAGS}
+    $<$<BOOL:${WIN32}>:libzmq>
+    $<$<NOT:$<BOOL:${WIN32}>>:PkgConfig::ZMQ>
   PRIVATE
-    ${CZMQ_LDFLAGS}
-    ${CURL_LDFLAGS})
+  	PkgConfig::CZMQ
+    PkgConfig::CURL)
+
+if (WIN32)
+  target_compile_definitions(prime_server
+	PRIVATE
+	  NOGDI
+	  WIN32_LEAN_AND_MEAN
+	  NOMINMAX
+  )
+endif()
 
 # Build executables
 add_executable(prime_echod ${CMAKE_SOURCE_DIR}/src/prime_echod.cpp)

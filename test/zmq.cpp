@@ -3,7 +3,13 @@
 
 #include <string>
 #include <thread>
+#ifdef _WIN32
+#include <direct.h> // _mkdir
+#include <fcntl.h>
+#include <io.h> // _chsize
+#else
 #include <unistd.h>
+#endif
 
 namespace {
 
@@ -327,7 +333,9 @@ void test_pub_sub() {
 
 int main() {
   // make this whole thing bail if it doesnt finish fast
+#ifndef _WIN32
   alarm(60);
+#endif
 
   testing::suite suite("zmq");
 

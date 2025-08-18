@@ -6,7 +6,13 @@
 #include <fstream>
 #include <map>
 #include <sys/stat.h>
+#ifdef _WIN32
+#include <direct.h> // _mkdir
+#include <fcntl.h>
+#include <io.h> // _chsize
+#else
 #include <unistd.h>
+#endif
 
 using namespace prime_server::http;
 namespace {

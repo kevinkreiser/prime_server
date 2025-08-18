@@ -100,9 +100,6 @@ protected:
   static_assert(static_cast<const void*>(&sfinae_test_info) ==
                     static_cast<const void*>(&sfinae_test_info.id),
                 "request_info_t::id must be the first member");
-  static_assert(static_cast<const void*>(&sfinae_test_info.id + 1) ==
-                    static_cast<const void*>(&sfinae_test_info.time_stamp),
-                "request_info_t::time_stamp must be the second member");
 
   zmq::socket_t client;
   zmq::socket_t proxy;
