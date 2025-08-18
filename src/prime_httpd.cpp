@@ -7,6 +7,11 @@ using namespace prime_server;
 #include <cstring>
 #include <string>
 
+#ifdef _WIN32
+#define strncasecmp _strnicmp
+#define strcasecmp _stricmp
+#endif
+
 int main(int argc, char** argv) {
 
   if (argc < 5) {
