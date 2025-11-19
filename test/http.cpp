@@ -39,12 +39,12 @@ public:
   // remember the last response that was sent
   std::vector<http_response_t> last_responses;
   virtual bool dequeue(const http_request_info_t& info, const zmq::message_t& response) {
-    last_responses.emplace_back(http_response_t::from_string(static_cast<const char*>(response.data()), response.size()));
+    last_responses.emplace_back(
+        http_response_t::from_string(static_cast<const char*>(response.data()), response.size()));
     try {
       return http_server_t::dequeue(info, response);
-    }
-    catch(const std::runtime_error& e){
-      if(std::string(e.what()).find("unreachable") == std::string::npos) {
+    } catch (const std::runtime_error& e) {
+      if (std::string(e.what()).find("unreachable") == std::string::npos) {
         throw e;
       }
     }
@@ -286,10 +286,9 @@ void test_response_parsing() {
 void test_shortcircuit() {
   // a server who lets us snoop on what its doing
   zmq::context_t context;
-  testable_http_server_t server(context, "ipc:///tmp/test_http_server",
-                                "ipc:///tmp/test_http_proxy_upstream", "ipc:///tmp/test_http_results",
-                                "ipc:///tmp/test_http_interrupt", false,
-      MAX_REQUEST_SIZE, -1,
+  testable_http_server_t server(
+      context, "ipc:///tmp/test_http_server", "ipc:///tmp/test_http_proxy_upstream",
+      "ipc:///tmp/test_http_results", "ipc:///tmp/test_http_interrupt", false, MAX_REQUEST_SIZE, -1,
       [](const http_request_t& r) -> bool { return r.path == "/health_check"; },
       http_response_t{200, "OK", "foo_bar_baz"}.to_string());
   server.passify();
