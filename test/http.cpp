@@ -189,6 +189,23 @@ void test_request_parsing() {
   auto content_length = request.headers.find("content-length");
   if (content_length == request.headers.cend() || content_length->second != "11")
     throw std::runtime_error("Request parsing failed");
+
+  request_str = "GET /empty HTTP/1.1\r\nx-often-empty-header:         \r\n\r\nfoo";
+  request = http_request_t::from_string(request_str.c_str(), request_str.size());
+  if (request.body != "foo")
+    throw std::runtime_error("Request parsing failed");
+  auto empty = request.headers.find("x-often-empty-header");
+  if (empty == request.headers.cend() || !empty->second.empty())
+    throw std::runtime_error("Request parsing failed");
+
+  request_str = "GET /bad_header HTTP/1.1\r\nx-bad-header-no-colon         \r\n\r\nbar";
+  try {
+    request = http_request_t::from_string(request_str.c_str(), request_str.size());
+    throw std::runtime_error("Request parsing should have failed");
+  } catch (const http_request_t::request_exception_t& e) {
+    if (e.code != 400)
+      throw std::runtime_error("Request parsing failed");
+  }
 }
 
 void test_query_parsing() {
