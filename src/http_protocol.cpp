@@ -51,7 +51,8 @@ const http_request_t::request_exception_t
                                  "The HTTP request version is not supported",
                                  {CORS}));
 
-template <class T> size_t name_max(const std::unordered_map<std::string, T>& methods) {
+template <class T>
+size_t name_max(const std::unordered_map<std::string, T>& methods) {
   size_t i = 0;
   for (const auto& kv : methods)
     i = std::max(i, kv.first.size());
@@ -460,10 +461,11 @@ http_request_t::from_stream(const char* start, size_t length, size_t max_size) {
           // while the char is in the set, basically implement TRIM.. lets instead hope to ditch our
           // custom parser
           size_t field_end, value_begin;
-          if ((field_end = partial_buffer.find(':')) == std::string::npos ||
-              (value_begin = partial_buffer.find_first_not_of(' ', field_end + 1)) ==
-                  std::string::npos)
+          if ((field_end = partial_buffer.find(':')) == std::string::npos)
             throw RESPONSE_400;
+          if ((value_begin = partial_buffer.find_first_not_of(' ', field_end + 1)) ==
+              std::string::npos)
+            value_begin = partial_buffer.size();
           headers.insert({partial_buffer.substr(0, field_end), partial_buffer.substr(value_begin)});
         } // the end or body
         else {
