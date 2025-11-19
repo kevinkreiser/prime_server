@@ -3,7 +3,7 @@
 // some version info
 #define PRIME_SERVER_VERSION_MAJOR 0
 #define PRIME_SERVER_VERSION_MINOR 7
-#define PRIME_SERVER_VERSION_PATCH 1
+#define PRIME_SERVER_VERSION_PATCH 2
 
 #include <cstdint>
 #include <functional>
