@@ -8,7 +8,13 @@
 #include <iterator>
 #include <memory>
 #include <thread>
+#ifdef _WIN32
+#include <direct.h> // _mkdir
+#include <fcntl.h>
+#include <io.h> // _chsize
+#else
 #include <unistd.h>
+#endif
 #include <unordered_set>
 #include <vector>
 
@@ -338,7 +344,7 @@ void http_client_work(zmq::context_t& context) {
   std::string request;
   http_client_t client(
       context, "ipc:///tmp/test_http_server",
-      [&requests, &request]() {
+      [&requests, &request, &total]() {
         // we want more requests
         if (requests.size() < total) {
           std::pair<std::unordered_set<std::string>::iterator, bool> inserted =
@@ -356,7 +362,7 @@ void http_client_work(zmq::context_t& context) {
           request.clear();
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
-      [&requests, &received](const void* data, size_t size) {
+      [&requests, &received, &total](const void* data, size_t size) {
         // get the result and tell if there is more or not
         auto response = http_response_t::from_string(static_cast<const char*>(data), size);
         if (requests.find(response.body) == requests.end())
@@ -603,7 +609,9 @@ int main() {
   suite.test(TEST_CASE(test_shortcircuit));
 
   // fail if it hangs
+#ifndef _WIN32
   alarm(300);
+#endif
 
   suite.test(TEST_CASE(test_parallel_clients));
 

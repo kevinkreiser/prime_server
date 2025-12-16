@@ -6,8 +6,14 @@
 #include <queue>
 #include <stdexcept>
 #include <thread>
-#include <unistd.h>
 #include <unordered_set>
+#ifdef _WIN32
+#include <direct.h> // _mkdir
+#include <fcntl.h>
+#include <io.h> // _chsize
+#else
+#include <unistd.h>
+#endif
 
 #include "http_protocol.hpp"
 #include "logging/logging.hpp"
@@ -33,6 +39,7 @@ struct quiescable final {
     if (drain_seconds == 0 && shutdown_seconds == 0)
       return;
     // first we block SIGTERM in the main thread (its children will inherit this)
+#ifndef _WIN32
     sigset_t set;
     sigemptyset(&set);
     sigaddset(&set, SIGTERM);
@@ -55,6 +62,9 @@ struct quiescable final {
         logging::ERROR("Could not wait for SIGTERM, graceful shutdown disabled");
       }
     }).detach();
+#else
+    return; 
+#endif  // _WIN32
   }
 
   std::atomic<bool> draining;

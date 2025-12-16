@@ -1,5 +1,9 @@
 #include "zmq_helpers.hpp"
+#ifdef _WIN32
+#include <WinSock2.h>
+#else
 #include <arpa/inet.h>
+#endif  // _WIN32
 #include <cerrno>
 #include <ctime>
 #include <czmq.h>
