@@ -1,9 +1,5 @@
 #include <atomic>
-#include <chrono>
 #include <csignal>
-#include <deque>
-#include <future>
-#include <queue>
 #include <stdexcept>
 #include <thread>
 #include <unistd.h>
@@ -23,14 +19,13 @@ struct interrupt_t : public std::runtime_error {
 constexpr uint32_t INTERRUPT_AGE_CUTOFF = 600; // request age in seconds
 
 struct quiescable final {
-  static const quiescable& get(unsigned int drain_seconds = 0, unsigned int shutdown_seconds = 0) {
-    static quiescable instance(drain_seconds, shutdown_seconds);
+  static const quiescable& get(unsigned int drain_seconds = 0) {
+    static quiescable instance(drain_seconds);
     return instance;
   }
-  quiescable(unsigned int drain_seconds, unsigned int shutdown_seconds)
-      : draining(false), shutting_down(false) {
-    // if both are unset we disable this functionality
-    if (drain_seconds == 0 && shutdown_seconds == 0)
+  quiescable(unsigned int drain_seconds) : draining(false), shutting_down(false) {
+    // if unset we disable this functionality
+    if (drain_seconds == 0)
       return;
     // first we block SIGTERM in the main thread (its children will inherit this)
     sigset_t set;
@@ -42,15 +37,13 @@ struct quiescable final {
       return;
     }
     // then we make daemon thread just to handle SIGTERM
-    std::thread([set, drain_seconds, shutdown_seconds, this]() {
+    std::thread([set, drain_seconds, this]() {
       // wait for SIGTERM to trigger
       int sig = 0;
       if (sigwait(&set, &sig) == 0) {
         draining = true;
         sleep(drain_seconds);
         shutting_down = true;
-        sleep(shutdown_seconds);
-        exit(0);
       } else {
         logging::ERROR("Could not wait for SIGTERM, graceful shutdown disabled");
       }
@@ -174,12 +167,11 @@ server_t<request_container_t, request_info_t>::~server_t() {
 
 template <class request_container_t, class request_info_t>
 void server_t<request_container_t, request_info_t>::serve() {
-  int poll_timeout = request_timeout * 1000;
+  // cap the poll to 1s so we notice shutting_down promptly after drain completes
   while (!shutting_down()) {
     // check for activity on the client socket and the result socket
-    // TODO: set a timeout based on session inactivity timeout or request timeout
     zmq::pollitem_t items[] = {{loopback, 0, ZMQ_POLLIN, 0}, {client, 0, ZMQ_POLLIN, 0}};
-    zmq::poll(items, 2, poll_timeout);
+    zmq::poll(items, 2, 1000);
 
     // got a new result
     if (items[0].revents & ZMQ_POLLIN) {
@@ -467,7 +459,7 @@ worker_t::worker_t(zmq::context_t& context,
                    const std::string& heart_beat)
     : upstream_proxy(context, ZMQ_DEALER), downstream_proxy(context, ZMQ_DEALER),
       loopback(context, ZMQ_PUSH), interrupt(context, ZMQ_SUB), work_function(work_function),
-      cleanup_function(cleanup_function), heart_beat_interval(5000), heart_beat(heart_beat),
+      cleanup_function(cleanup_function), heart_beat(heart_beat),
       job(std::numeric_limits<decltype(job)>::max()) {
 
   int disabled = 0;
@@ -495,11 +487,12 @@ void worker_t::work() {
   // give client code a way to abort
   interrupt_function_t bail = std::bind(&worker_t::handle_interrupt, this, false);
 
+  // cap the poll to 1s so we notice shutting_down promptly after drain completes
   // keep forwarding messages
   while (!shutting_down()) {
     // check for activity on the in bound socket, timeout after heart_beat interval
     zmq::pollitem_t items[] = {{upstream_proxy, 0, ZMQ_POLLIN, 0}, {interrupt, 0, ZMQ_POLLIN, 0}};
-    zmq::poll(items, 2, heart_beat_interval);
+    zmq::poll(items, 2, 1000);
 
     // got some work to do
     if (items[0].revents & ZMQ_POLLIN) {
@@ -596,8 +589,8 @@ void worker_t::handle_interrupt(bool force_check) {
     throw interrupt_t(job & 0xFFFFFFFF);
 }
 
-void quiesce(unsigned int drain_seconds, unsigned int shutdown_seconds) {
-  quiescable::get(drain_seconds, shutdown_seconds);
+void quiesce(unsigned int drain_seconds) {
+  quiescable::get(drain_seconds);
 }
 bool draining() {
   return quiescable::get().draining;

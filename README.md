@@ -1,15 +1,16 @@
-
-             o
-    .,-. .--..  .--.--. .-.     .--. .-. .--..    ._.-. .--.
-    |   )|   |  |  |  |(.-'     `--.(.-' |    \  / (.-' |
-    |`-' ' -' `-'  '  `-`--'____`--' `--''     `'   `--''
-    |
-    '
+```
+         o
+.,-. .--..  .--.--. .-.     .--. .-. .--..    ._.-. .--.
+|   )|   |  |  |  |(.-'     `--.(.-' |    \  / (.-' |
+|`-' ' -' `-'  '  `-`--'___`_--' `--''     `'   `--''
+|
+'
+```
 
 # Build Status
 
-![linux build](https://github.com/kevinkreiser/prime_server/actions/workflows/linux.yaml/badge.svg)
-![mac build](https://github.com/kevinkreiser/prime_server/actions/workflows/macos.yaml/badge.svg)
+linux build
+mac build
 
 # Quick Start
 
@@ -105,36 +106,39 @@ killall prime_serverd
 
 What we want is a tool that lets you build a system that is pipelined and parallelized ie. the ZMQ "butterfly" or "parallel pipeline" pattern. See [this tutorial](http://zeromq.org/tutorials:butterfly). We'll get to why in a bit but first, this is kind of what it should look like:
 
-                           (input)        request_producer
-                                          /      |       \
-                                         /       |        \
-                                        v        v         v
-                        (parallelize)  worker  worker   worker ...
-                                         \       |        /
-                                          \      |       /
-                                           v     v      v
-                         (rebalance)    intermediate_router
-                                          /      |       \
-                                         /       |        \
-                                        v        v         v
-                        (parallelize)  worker  worker   worker ...
-                                         \       |        /
-                                          \      |       /
-                                           v     v      v
-                          (output)       response_collector
+```
+                       (input)        request_producer
+                                      /      |       \
+                                     /       |        \
+                                    v        v         v
+                    (parallelize)  worker  worker   worker ...
+                                     \       |        /
+                                      \      |       /
+                                       v     v      v
+                     (rebalance)    intermediate_router
+                                      /      |       \
+                                     /       |        \
+                                    v        v         v
+                    (parallelize)  worker  worker   worker ...
+                                     \       |        /
+                                      \      |       /
+                                       v     v      v
+                      (output)       response_collector
+```
 
 This seems like a pretty good pattern for some offline scientific code that just pumps jobs into the system and waits for the results to land at the bottom. However this isn't very useful for online systems that face users for example. For that we need some kind of loopback so that we can get the result back to the requester. Something like:
 
-                                         ==========                   ==========
-                                         | worker |                   | worker |
-                                         | worker |                   | worker |
-    client <---> server ---> proxy <---> |  ....  | <---> proxy <---> |  ....  | <---> ....
-                   ^                     | worker |                   | worker |
-                   |                     | worker |                   | worker |
-                   |                     ==========                   ==========
-                   |                         |                            |
-                    \ _____________________ /___________________________ /
-
+```
+                                     ==========                   ==========
+                                     | worker |                   | worker |
+                                     | worker |                   | worker |
+client <---> server ---> proxy <---> |  ....  | <---> proxy <---> |  ....  | <---> ....
+               ^                     | worker |                   | worker |
+               |                     | worker |                   | worker |
+               |                     ==========                   ==========
+               |                         |                            |
+                \ _____________________ /___________________________ /
+```
 
 A client (a browser or just a separate thread) makes a request to a server. The server listens for new requests and replies when the backend parts send back results. The backend is comprised of load balancing proxies between layers of worker pools. In real life you may run these in different processes or on different machines. We use threads in the example server to conveniently simulate this within a single process, so please note the lack of any mutex/locking patterns (thank you ZMQ!).
 
@@ -149,16 +153,16 @@ You may be asking yourself, why on earth are all of the worker pools hooked into
 
 The toy example of an HTTP service that computes whether or not a number is prime is a simple illustration of why someone might want a setup as described above. But it's not the actual use-case that drove the creation of this project. Having worked on a few service oriented archtectures my team members and I noticed that we'd compiled what amounted to a wishlist of architectural features. In buzz-word form those were roughly:
 
-* Simplicity
-* Flexibility
-* Fault Tolerance
-* Separation of Concerns
-* Throughput
-* Load Balancing
-* Fair Queuing
-* Quality of Service
-* Non-blocking
-* Web Scale (just kidding)
+- Simplicity
+- Flexibility
+- Fault Tolerance
+- Separation of Concerns
+- Throughput
+- Load Balancing
+- Fair Queuing
+- Quality of Service
+- Non-blocking
+- Web Scale (just kidding)
 
 We needed to handle HTTP requests that would have widely varying degrees of complexity. Specifically, we were writing [some software](https://github.com/valhalla) that does shortest (for some value of short) path computations over large graphs. For example, users would be able to make requests to get the best route by car/foot/bike/etc. from London to Edinburgh, which may take 10s of milliseconds. In contrast though, a user would also be able to ask for the route from Capetown to Beijing, which could take a few seconds. Different requests can vary in computation time over several orders of magnitude.
 
@@ -180,9 +184,9 @@ The idea was enticing; could we build a minimal HTTP server with just ZMQ to sit
 
 The API consists of essentially 3 parts:
 
-* Client/server stuff - the bits that make and answer requests. The server stands between clients and the pipeline of workers and load balancing proxies.
-* Proxy/worker stuff - the bits that fulfill the requests. The proxy sits between a pool of workers at a given stage in the pipeline and the next stage. The proxy knows what workers are available to do work and will not send on a request until a worker is available to take it. The workers are responsible to either send their results to another stage of the pipeline (the next proxy) or a sensible, protocol specific, response back to the server who will forward it on to the client.
-* Protocol stuff - the bits that parse and serialize requests and responses respectively. It's a prearranged format that makes it possible for the client to speak something that the worker understands and vice-versa. HTTP is pretty useful here but other protocols exist. You can even create your own if you like. Also note that intermediate stages of workers can talk whatever protocol they like to each other.
+- Client/server stuff - the bits that make and answer requests. The server stands between clients and the pipeline of workers and load balancing proxies.
+- Proxy/worker stuff - the bits that fulfill the requests. The proxy sits between a pool of workers at a given stage in the pipeline and the next stage. The proxy knows what workers are available to do work and will not send on a request until a worker is available to take it. The workers are responsible to either send their results to another stage of the pipeline (the next proxy) or a sensible, protocol specific, response back to the server who will forward it on to the client.
+- Protocol stuff - the bits that parse and serialize requests and responses respectively. It's a prearranged format that makes it possible for the client to speak something that the worker understands and vice-versa. HTTP is pretty useful here but other protocols exist. You can even create your own if you like. Also note that intermediate stages of workers can talk whatever protocol they like to each other.
 
 So you want to make a web service. How can you do that… For the sake of example, let's say you want to do that all in the same process… In real life (i.e. production) you don't want to do that because, well, the wishlist again. But yeah let's just learn the easy way shall we?
 
@@ -319,28 +323,29 @@ The second thing we want to do is work `zbeacon` perks into the API. Currently t
 
 Automatic service discovery is pretty great, but that's not the really interesting part here; what if our pipeline weren't a pipeline? What if it were a graph?!
 
-    client <---> server _________
-                 ^ | ^            \
-                 | | |             v
-                 | | |       =============
-                 | | |   .-> |   proxy   | <--.
-                 | | |  /    |-----------|     \
-                 | | |  \    |  workers  |      |
-                 | | |   \ _ |    ...    | _    |
-                 | | |       =============   \  |
-                 | |  \ _________ /           | |
-                 |  \ ___________             | |
-                 |                \           | |
-                 |                 \          | |
-                 |                  v         | |
-                 |          =============    /  |
-                 |      .-> |   proxy   | <-'   |
-                 |     /    |-----------|       |
-                 |     \    |  workers  |       |
-                 |      \ _ |    ...    | ____ /
-                 |          =============
-                  \ ____________ /
-
+```
+client <---> server _________
+             ^ | ^            \
+             | | |             v
+             | | |       =============
+             | | |   .-> |   proxy   | <--.
+             | | |  /    |-----------|     \
+             | | |  \    |  workers  |      |
+             | | |   \ _ |    ...    | _    |
+             | | |       =============   \  |
+             | |  \ _________ /           | |
+             |  \ ___________             | |
+             |                \           | |
+             |                 \          | |
+             |                  v         | |
+             |          =============    /  |
+             |      .-> |   proxy   | <-'   |
+             |     /    |-----------|       |
+             |     \    |  workers  |       |
+             |      \ _ |    ...    | ____ /
+             |          =============
+              \ ____________ /
+```
 
 We may be reaching the limits of ASCII 'art' here but bear with me...
 
@@ -352,9 +357,9 @@ A graph structure for the various stages also has the potential to better organi
 
 For example say you wanted to offer up math as a service (MaS of course). You might have:
 
-* workers to compute derivatives
-* workers to do summations
-* workers to compute integrals
+- workers to compute derivatives
+- workers to do summations
+- workers to compute integrals
 
 Now of course you could implement this all in a client side library, but for the sake of argument, ignore the impracticality for a second. What you wouldn't want to do is write a worker that does all three things. It would be nicer to isolate workers based on the type of work they perform (again the wishlist). This requires forwarding to a specific worker pool based on the url (in this example). Which brings up another `TODO`, we probably want to allow the server to forward requests to worker pools based on the URL (lots of other servers have this). Furthermore some of these operations are more complex than others. If you watched your system for a while (with a statistically relevant amount of traffic) you could look at the amount of CPU spent per stage and reallocate proportionally sized worker pools. You could even dynamically size the worker pools based on current traffic if you were really slick ;o)
 

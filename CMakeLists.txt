@@ -73,7 +73,6 @@ set(PRIME_LIBRARY_HEADERS
 
 set(PRIME_LIBRARY_SOURCES
 	${CMAKE_SOURCE_DIR}/src/logging/logging.hpp
-	${CMAKE_SOURCE_DIR}/src/prime_helpers.hpp
 	${CMAKE_SOURCE_DIR}/src/http_protocol.cpp
 	${CMAKE_SOURCE_DIR}/src/http_util.cpp
 	${CMAKE_SOURCE_DIR}/src/netstring_protocol.cpp
@@ -163,6 +162,10 @@ add_test(netstring netstring)
 add_executable(shaping ${CMAKE_SOURCE_DIR}/test/shaping.cpp)
 target_link_libraries(shaping prime_server ${CMAKE_THREAD_LIBS_INIT})
 add_test(shaping shaping)
+
+add_executable(shutdown ${CMAKE_SOURCE_DIR}/test/shutdown.cpp)
+target_link_libraries(shutdown prime_server ${CMAKE_THREAD_LIBS_INIT})
+add_test(shutdown shutdown)
 
 add_executable(zmq ${CMAKE_SOURCE_DIR}/test/zmq.cpp)
 target_link_libraries(zmq prime_server ${CMAKE_THREAD_LIBS_INIT})

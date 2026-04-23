@@ -1,17 +1,15 @@
+#include <cstdlib>
 #include <functional>
 #include <iostream>
 #include <list>
-#include <memory>
 #include <set>
 #include <stdexcept>
 #include <string>
 #include <thread>
-#include <unordered_set>
 
 // netstrings are far easier to work with but http is a more interesting use-case
 // so we just do everthing using the http protocol here
 #include "http_protocol.hpp"
-#include "prime_helpers.hpp"
 #include "prime_server.hpp"
 using namespace prime_server;
 #include "logging/logging.hpp"
@@ -21,7 +19,7 @@ int main(int argc, char** argv) {
   if (argc < 2) {
     logging::ERROR(
         "Usage: " + std::string(argv[0]) +
-        " num_requests|server_listen_endpoint concurrency [drain_time,shutdown_time] [/health_check_endpoint]");
+        " num_requests|server_listen_endpoint concurrency [drain_seconds] [/health_check_endpoint]");
     return 1;
   }
 
@@ -39,9 +37,7 @@ int main(int argc, char** argv) {
     worker_concurrency = std::stoul(argv[2]);
 
   // setup the signal handler to gracefully shutdown when requested with sigterm
-  unsigned int drain_seconds, shutdown_seconds;
-  std::tie(drain_seconds, shutdown_seconds) = parse_quiesce_config(argc > 3 ? argv[3] : "");
-  quiesce(drain_seconds, shutdown_seconds);
+  quiesce(argc > 3 ? std::stoul(argv[3]) : 28);
 
   // default to no health check, if one is provided its just the path and the canned response is OK
   http_server_t::health_check_matcher_t health_check_matcher{};
