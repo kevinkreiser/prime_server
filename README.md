@@ -65,8 +65,8 @@ The library comes with a standalone binary which is essentially just a server or
 
 ```bash
 #simulate the whole thing with 1 vs 8 workers per worker layer
-time prime_serverd 1000000 1
-time prime_serverd 1000000 8
+time prime_serverd 100000000000000,100000000008000 1
+time prime_serverd 100000000000000,100000000008000 8
 
 #try the sample python only server
 python py/prime_serverd.py &> /dev/null &
@@ -258,8 +258,11 @@ We basically just have to define a `work` function/object/lambda whose signature
 
 ```c++
 int main(void) {
-  //when we hear SIGTERM, wait 28 seconds to drain traffic then wait a second for the threads to stop
-  quiesce(28, 1);
+  //orchestrators, such as systemd, k8s, etc., will ask your application to shutdown gracefully via SIGTERM
+  //you must exit before their configured deadline (TimeoutStopSec, terminationGracePeriodSeconds) or get SIGKILL'd
+  //assuming a 30 second deadline, we give 28s to the workers to finish off any outstanding requests
+  //we stop the server/worker threads and main uses the remaining 2 seconds to clean up and exit normally
+  quiesce(28);
 
   zmq::context_t context;
 
@@ -290,7 +293,7 @@ int main(void) {
 }
 ```
 
-The first thing we do is hook up a signal handler in a daemon thread that will listen for `SIGTERM` and quit gracefully after giving the workers time to drain traffic and shutdown. Then we get down to the business of connecting stuff together. All `zmq` communication requires a `context`. So we get one of those and pass it around to all the bits. Our setup is really simple, we run an `http_server_t` in one thread. The server keeps track of and forwards requests on to a load balancing `proxy_t` in another thread. The proxy keeps a queue of requests and shuttles them FIFO style to the first non-busy `worker_t` that it has in its inventory. We spawn a bunch of `worker_t`s which are constantly handshaking with the proxy. "I'm here" and "I'm done" messages let the proxy know which workers are bored and which are busy. This should minimize latency in so far as a greedy scheduler can. You'll notice the program is pretty much meant to be run as a daemon which is why it `join`s on the `serve` method. The program will run until you `ctl-c` it away or gracefully kill it with `SIGTERM`.
+The first thing we do is hook up a signal handler in a daemon thread that will listen for `SIGTERM` and, after a drain period, signal all `serve`/`work` loops to exit so the process shuts down naturally when `main` returns. Then we get down to the business of connecting stuff together. All `zmq` communication requires a `context`. So we get one of those and pass it around to all the bits. Our setup is really simple, we run an `http_server_t` in one thread. The server keeps track of and forwards requests on to a load balancing `proxy_t` in another thread. The proxy keeps a queue of requests and shuttles them FIFO style to the first non-busy `worker_t` that it has in its inventory. We spawn a bunch of `worker_t`s which are constantly handshaking with the proxy. "I'm here" and "I'm done" messages let the proxy know which workers are bored and which are busy. This should minimize latency in so far as a greedy scheduler can. You'll notice the program is pretty much meant to be run as a daemon which is why it `join`s on the `serve` method. The program will run until you `ctl-c` it away or gracefully kill it with `SIGTERM`.
 
 Now we'll get your **R**esponsive **U**nicode **M**essages **P**ortal shaking.. err.. cracking.. err.. running.. with this:
 
