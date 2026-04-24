@@ -1,8 +1,9 @@
+#include <cmath>
 #include <cstdlib>
 #include <functional>
 #include <iostream>
 #include <list>
-#include <set>
+#include <unordered_set>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -24,12 +25,22 @@ int main(int argc, char** argv) {
   }
 
   // number of jobs to do or server endpoint
-  size_t requests = 0;
+  size_t requests = 0, prime_start = 0, prime_end = 0;
   std::string server_endpoint = "ipc:///tmp/server_endpoint";
   if (std::string(argv[1]).find("://") != std::string::npos)
     server_endpoint = argv[1];
-  else
-    requests = std::stoul(argv[1]);
+  else {
+    std::string argv1(argv[1]);
+    prime_start = std::stoul(argv1.substr(0, argv1.find(',')));
+    prime_end = std::stoul(argv1.substr(argv1.find(',') + 1));
+    prime_start += !(prime_start % 2);
+    prime_end -= !(prime_end % 2);
+    if (prime_start >= prime_end) {
+      logging::ERROR("provide a valid range of numbers to test for prime");
+      return 1;
+    }
+    requests = (prime_end - prime_start)/2 + 1;
+  }
 
   // number of workers to use at each stage
   size_t worker_concurrency = 1;
@@ -153,10 +164,9 @@ int main(int argc, char** argv) {
                                ++divisor;
                              }
 
-                             // if it was prime send it back unmolested, else send back 2 which we
-                             // know is prime
+                             // if it was prime send it back unmolested, else send back 2 which we know is prime
                              if (divisor < high)
-                               prime = 2;
+                               prime = static_cast<size_t>(-1);
                              http_response_t response(200, "OK", std::to_string(prime));
                              response.from_info(*static_cast<http_request_info_t*>(request_info));
                              worker_t::result_t result{false, {}, {}};
@@ -177,15 +187,17 @@ int main(int argc, char** argv) {
     // client makes requests and gets back responses in a batch fashion
     size_t produced_requests = 0, collected_results = 0;
     std::string request;
-    std::set<size_t> primes = {2};
+    std::unordered_set<size_t> primes;
+    primes.reserve(static_cast<size_t>(std::ceil(prime_end / std::log(prime_end) - prime_start / std::log(prime_start))));
+    prime_start -= 2;
     http_client_t client(
         context, server_endpoint,
-        [&request, requests, &produced_requests]() {
+        [&request, requests, &prime_start,&produced_requests]() {
           // blank request means we are done
-          if (produced_requests < requests)
+          if (produced_requests++ < requests)
             request = http_request_t::to_string(method_t::GET,
                                                 "/is_prime?possible_prime=" +
-                                                    std::to_string(produced_requests++ * 2 + 3));
+                                                    std::to_string(prime_start += 2));
           else
             request.clear();
           return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
@@ -195,7 +207,8 @@ int main(int argc, char** argv) {
           std::string response_str(static_cast<const char*>(message), length);
           try {
             size_t number = std::stoul(response_str.substr(response_str.rfind('\n')));
-            primes.insert(number);
+            if (number != static_cast<size_t>(-1))
+              primes.insert(number);
           } catch (...) { logging::ERROR("Responded with: " + response_str); }
           return ++collected_results < requests;
         });
@@ -204,7 +217,7 @@ int main(int argc, char** argv) {
     // show primes
     // for(const auto& prime : primes)
     //  std::cout << prime << " | ";
-    std::cout << primes.size() << std::endl;
+    std::cout << primes.size() << " primes found" <<std::endl;
 
   } // or listen for requests from some other client indefinitely
   else {
