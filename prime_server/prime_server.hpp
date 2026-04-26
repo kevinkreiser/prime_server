@@ -167,12 +167,16 @@ public:
     std::list<std::string> messages;
     std::string heart_beat;
   };
-  // call this periodically in long-running work functions to cooperate with cancellation.
-  // throws interrupt_t if the current request was cancelled (client disconnect, timeout) or
-  // if the process is shutting down. safe to ignore for short/fast work functions.
+  // call this periodically in the work function to bail if the request is defunct. if this
+  // is the case, it throws (but don't catch it) so the worker can bail. this happens if
+  // the client disconnects, the request times out or the process is shutting down
   using interrupt_function_t = std::function<void()>;
+  // the work function is what receives the request, does the work and returns the result.
+  // the result could be final and return to the client or go on to the next pipeline stage
   using work_function_t =
       std::function<result_t(const std::list<zmq::message_t>&, void*, interrupt_function_t&)>;
+  // the cleanup function is called when the worker is done with the request. it is used to clean
+  // up any ephemeral resources used by the worker
   using cleanup_function_t = std::function<void()>;
 
   worker_t(zmq::context_t& context,
