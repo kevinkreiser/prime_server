@@ -169,7 +169,6 @@ server_t<request_container_t, request_info_t>::~server_t() {
 
 template <class request_container_t, class request_info_t>
 void server_t<request_container_t, request_info_t>::serve() {
-  // cap the poll to 1s so we notice shutting_down promptly after drain completes
   while (!shutting_down()) {
     // check for activity on the client socket and the result socket
     zmq::pollitem_t items[] = {{loopback, 0, ZMQ_POLLIN, 0}, {client, 0, ZMQ_POLLIN, 0}};
@@ -489,7 +488,6 @@ void worker_t::work() {
   // give client code a way to abort
   interrupt_function_t bail = std::bind(&worker_t::handle_interrupt, this, false);
 
-  // cap the poll to 1s so we notice shutting_down promptly after drain completes
   // keep forwarding messages
   while (!shutting_down()) {
     // check for activity on the in bound socket, timeout after heart_beat interval
