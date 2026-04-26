@@ -160,7 +160,7 @@ int main(int argc, char** argv) {
                                ++divisor;
                              }
 
-                             // if it was prime send it back unmolested, else send back 2 which we know is prime
+                             // if it was prime send it back unmolested, else send back sentinel value meaning not prime
                              if (divisor < high)
                                prime = static_cast<size_t>(-1);
                              http_response_t response(200, "OK", std::to_string(prime));
