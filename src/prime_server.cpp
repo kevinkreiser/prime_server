@@ -558,7 +558,7 @@ void worker_t::work() {
       return;
 
     // got interrupt(s)
-    if ((items[1].revents & ZMQ_POLLIN)) {
+    if (items[1].revents & ZMQ_POLLIN) {
       handle_interrupt(false);
       // cull off the old ones, but also note that the list is loosely ordered
       // this means we can hold on to some older ones longer than we would have liked
