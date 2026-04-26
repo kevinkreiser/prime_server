@@ -49,8 +49,6 @@ int main(int argc, char** argv) {
   // load balancer for parsing
   std::thread echo_proxy(std::bind(&proxy_t::forward, proxy_t(context, proxy_endpoint + "_upstream",
                                                               proxy_endpoint + "_downstream")));
-  echo_proxy.detach();
-
   // echoers
   std::list<std::thread> echo_worker_threads;
   for (size_t i = 0; i < worker_concurrency; ++i) {
@@ -77,9 +75,12 @@ int main(int argc, char** argv) {
                              }
                              return result;
                            })));
-    echo_worker_threads.back().detach();
   }
 
+  // wait for all the threads to get a shutdown signal and exit, then main can clean up whatever its allocated
   server_thread.join();
+  for (auto& t : echo_worker_threads)
+    t.join();
+  echo_proxy.join();
   return EXIT_SUCCESS;
 }

@@ -80,17 +80,16 @@ int main(int argc, char** argv) {
   // load balancer for file serving
   std::thread file_proxy(std::bind(&proxy_t::forward, proxy_t(context, proxy_endpoint + "_upstream",
                                                               proxy_endpoint + "_downstream")));
-  file_proxy.detach();
-
   // file serving thread
   std::thread file_worker(
       std::bind(&worker_t::work, worker_t(context, proxy_endpoint + "_downstream", "ipc:///dev/null",
                                           result_endpoint, request_interrupt,
                                           std::bind(&disk_work, std::placeholders::_1,
                                                     std::placeholders::_2, std::placeholders::_3))));
-  file_worker.detach();
 
-  // serve forever (or until a signal shuts us down)
+  // wait for all the threads to get a shutdown signal and exit, then main can clean up whatever its allocated
   server.join();
+  file_worker.join();
+  file_proxy.join();
   return EXIT_SUCCESS;
 }

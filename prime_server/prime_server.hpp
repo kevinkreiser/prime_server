@@ -167,6 +167,9 @@ public:
     std::list<std::string> messages;
     std::string heart_beat;
   };
+  // call this periodically in long-running work functions to cooperate with cancellation.
+  // throws interrupt_t if the current request was cancelled (client disconnect, timeout) or
+  // if the process is shutting down. safe to ignore for short/fast work functions.
   using interrupt_function_t = std::function<void()>;
   using work_function_t =
       std::function<result_t(const std::list<zmq::message_t>&, void*, interrupt_function_t&)>;

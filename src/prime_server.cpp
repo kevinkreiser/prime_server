@@ -11,6 +11,8 @@
 #include "prime_server.hpp"
 
 namespace {
+constexpr int POLL_TIMEOUT = 1000;
+
 struct interrupt_t : public std::runtime_error {
   interrupt_t(uint32_t id)
       : std::runtime_error("Request " + std::to_string(id) + " was interrupted") {
@@ -171,7 +173,7 @@ void server_t<request_container_t, request_info_t>::serve() {
   while (!shutting_down()) {
     // check for activity on the client socket and the result socket
     zmq::pollitem_t items[] = {{loopback, 0, ZMQ_POLLIN, 0}, {client, 0, ZMQ_POLLIN, 0}};
-    zmq::poll(items, 2, 1000);
+    zmq::poll(items, 2, POLL_TIMEOUT);
 
     // got a new result
     if (items[0].revents & ZMQ_POLLIN) {
@@ -388,7 +390,7 @@ void proxy_t::forward() {
     // check for activity on either of the sockets, but if we have no workers just let requests sit on
     // the upstream socket
     zmq::pollitem_t items[] = {{downstream, 0, ZMQ_POLLIN, 0}, {upstream, 0, ZMQ_POLLIN, 0}};
-    zmq::poll(items, expire(), -1);
+    zmq::poll(items, expire(), POLL_TIMEOUT);
 
     // this worker is bored
     if (items[0].revents & ZMQ_POLLIN) {
@@ -492,7 +494,7 @@ void worker_t::work() {
   while (!shutting_down()) {
     // check for activity on the in bound socket, timeout after heart_beat interval
     zmq::pollitem_t items[] = {{upstream_proxy, 0, ZMQ_POLLIN, 0}, {interrupt, 0, ZMQ_POLLIN, 0}};
-    zmq::poll(items, 2, 1000);
+    zmq::poll(items, 2, POLL_TIMEOUT);
 
     // got some work to do
     if (items[0].revents & ZMQ_POLLIN) {
@@ -577,6 +579,10 @@ void worker_t::advertise() {
   }
 }
 void worker_t::handle_interrupt(bool force_check) {
+  // everything is interrupted
+  if (shutting_down())
+    throw interrupt_t(job & 0xFFFFFFFF);
+
   // is there anything there right now
   auto messages = interrupt.recv_all(ZMQ_DONTWAIT);
   for (const auto& message : messages) {

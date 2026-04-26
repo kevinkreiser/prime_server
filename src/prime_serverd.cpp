@@ -78,8 +78,6 @@ int main(int argc, char** argv) {
   std::thread parse_proxy(
       std::bind(&proxy_t::forward, proxy_t(context, parse_proxy_endpoint + "_upstream",
                                            parse_proxy_endpoint + "_downstream")));
-  parse_proxy.detach();
-
   // request parsers
   std::list<std::thread> parse_worker_threads;
   for (size_t i = 0; i < worker_concurrency; ++i) {
@@ -135,14 +133,12 @@ int main(int argc, char** argv) {
                 return result;
               }
             })));
-    parse_worker_threads.back().detach();
   }
 
   // load balancer for prime computation
   std::thread compute_proxy(
       std::bind(&proxy_t::forward, proxy_t(context, compute_proxy_endpoint + "_upstream",
                                            compute_proxy_endpoint + "_downstream")));
-  compute_proxy.detach();
 
   // prime computers
   std::list<std::thread> compute_worker_threads;
@@ -173,13 +169,18 @@ int main(int argc, char** argv) {
                              result.messages.emplace_back(response.to_string());
                              return result;
                            })));
-    compute_worker_threads.back().detach();
   }
 
   // make a client in process and quit when its batch is done
   // listen for requests from some other client indefinitely
   if (requests > 0) {
+    // batch mode: detach everything, client.batch() is the blocking call
     server_thread.detach();
+    parse_proxy.detach();
+    for (auto& t : parse_worker_threads) t.detach();
+    compute_proxy.detach();
+    for (auto& t : compute_worker_threads) t.detach();
+
     // sometimes you miss getting results back because the sub socket
     // on the server hasnt yet connected with pub sockets on the workers
     // std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -219,9 +220,14 @@ int main(int argc, char** argv) {
     //  std::cout << prime << " | ";
     std::cout << primes.size() << " primes found" <<std::endl;
 
-  } // or listen for requests from some other client indefinitely
+  } // or listen for requests from some other client indefinitely or until shutdown
   else {
+    // daemon mode: wait for all the threads to get a shutdown signal and exit, then main can clean up whatever its allocated
     server_thread.join();
+    for (auto& t : parse_worker_threads) t.join();
+    for (auto& t : compute_worker_threads) t.join();
+    parse_proxy.join();
+    compute_proxy.join();
   }
 
   return EXIT_SUCCESS;

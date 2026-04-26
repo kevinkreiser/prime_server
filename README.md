@@ -218,6 +218,7 @@ using namespace prime_server;
 //configuration constants for various sockets
 const std::string server_endpoint = "tcp://*:8002";
 const std::string result_endpoint = "ipc:///tmp/result_endpoint";
+const std::string request_interrupt = "ipc:///tmp/request_interrupt";
 const std::string proxy_endpoint = "ipc:///tmp/proxy_endpoint";
 
 //assortment of artisional content
@@ -229,11 +230,12 @@ So first off we're including a couple of bits from `libprime_server` itself main
 
 ```c++
 //actually serve up content
-worker_t::result_t art_work(const std::list<zmq::message_t>& job, void* request_info) {
+worker_t::result_t art_work(const std::list<zmq::message_t>& job, void* request_info,
+                            worker_t::interrupt_function_t&) {
   //false means this is going back to the client, there is no next stage of the pipeline
-  worker_t::result_t result{false};
+  worker_t::result_t result{false, {}, {}};
   //this type differs per protocol hence the void* fun
-  auto& info = *static_cast<http_request_t::info_t*>(request_info);
+  auto& info = *static_cast<http_request_info_t*>(request_info);
   http_response_t response;
   try {
     //TODO: actually use/validate the request parameters
@@ -254,7 +256,7 @@ worker_t::result_t art_work(const std::list<zmq::message_t>& job, void* request_
 }
 ```
 
-We basically just have to define a `work` function/object/lambda whose signature matches what the API expects. The `worker_t::result_t` is the bit that `prime_server` will be shuttling around your architecture. The bulk of this function is just stuff you have to do at every stage in your pipeline. You'll need to unpack the message from the previous stage; in this case it was the server itself so the `work` function assumes its valid HTTP-looking bytes. You'll then want to formulate a response, either to be sent back to the client or forwarded to the next stage in the pipeline. In our case the workers respond to the client in all scenarios so we always initialize `worker_t::result_t::intermediate` as `false`. If it were `true` the worker would attempt to forward the result of this stage to the proxy for the next pool of workers. At the end we simply do some formatting to the response so that the client will make sense of it and we store this in `worker_t::result_t::messages`. OK so now what is left to do? Not much, just hook up some plumbing, basically constructing your pipeline.
+We basically just have to define a `work` function/object/lambda whose signature matches what the API expects. The `worker_t::result_t` is the bit that `prime_server` will be shuttling around your architecture. The third parameter, `interrupt_function_t&`, is a functor the worker passes to your work function. Call it periodically in long-running work to cooperate with cancellation: it throws if the request was interrupted (client disconnected, timed out) or if the process is shutting down. For short work functions like this one, you can safely ignore it. The bulk of this function is just stuff you have to do at every stage in your pipeline. You'll need to unpack the message from the previous stage; in this case it was the server itself so the `work` function assumes its valid HTTP-looking bytes. You'll then want to formulate a response, either to be sent back to the client or forwarded to the next stage in the pipeline. In our case the workers respond to the client in all scenarios so we always initialize `worker_t::result_t::intermediate` as `false`. If it were `true` the worker would attempt to forward the result of this stage to the proxy for the next pool of workers. At the end we simply do some formatting to the response so that the client will make sense of it and we store this in `worker_t::result_t::messages`. OK so now what is left to do? Not much, just hook up some plumbing, basically constructing your pipeline.
 
 ```c++
 int main(void) {
@@ -268,13 +270,13 @@ int main(void) {
 
   //http server, false turns off request/response logging
   std::thread server = std::thread(std::bind(&http_server_t::serve,
-    http_server_t(context, server_endpoint, proxy_endpoint + "_upstream", result_endpoint, false)));
+    http_server_t(context, server_endpoint, proxy_endpoint + "_upstream", result_endpoint,
+                  request_interrupt, false)));
 
   //load balancer
   std::thread proxy(
     std::bind(&proxy_t::forward,
       proxy_t(context, proxy_endpoint + "_upstream", proxy_endpoint + "_downstream")));
-  proxy.detach();
 
   //workers
   auto worker_concurrency = std::max<size_t>(1, std::thread::hardware_concurrency());
@@ -283,17 +285,20 @@ int main(void) {
     //worker function could be defined inline here via lambda, it could be std::bind'd to an instance method
     //or simply just a free function like we have here
     workers.emplace_back(std::bind(&worker_t::work,
-      worker_t(context, proxy_endpoint + "_downstream", "ipc:///tmp/NO_ENDPOINT", result_endpoint, &art_work)));
-    workers.back().detach();
+      worker_t(context, proxy_endpoint + "_downstream", "ipc:///tmp/NO_ENDPOINT", result_endpoint,
+               request_interrupt, &art_work)));
   }
 
-  //wait for a signal to kill us
+  //join all threads before main returns so nothing outlives stack-local resources
   server.join();
+  for(auto& t : workers)
+    t.join();
+  proxy.join();
   return 0;
 }
 ```
 
-The first thing we do is hook up a signal handler in a daemon thread that will listen for `SIGTERM` and, after a drain period, signal all `serve`/`work` loops to exit so the process shuts down naturally when `main` returns. Then we get down to the business of connecting stuff together. All `zmq` communication requires a `context`. So we get one of those and pass it around to all the bits. Our setup is really simple, we run an `http_server_t` in one thread. The server keeps track of and forwards requests on to a load balancing `proxy_t` in another thread. The proxy keeps a queue of requests and shuttles them FIFO style to the first non-busy `worker_t` that it has in its inventory. We spawn a bunch of `worker_t`s which are constantly handshaking with the proxy. "I'm here" and "I'm done" messages let the proxy know which workers are bored and which are busy. This should minimize latency in so far as a greedy scheduler can. You'll notice the program is pretty much meant to be run as a daemon which is why it `join`s on the `serve` method. The program will run until you `ctl-c` it away or gracefully kill it with `SIGTERM`.
+The first thing we do is hook up a signal handler in a daemon thread that will listen for `SIGTERM` and, after a drain period, signal all `serve`/`work`/`forward` loops to exit so the process shuts down naturally when `main` returns. Then we get down to the business of connecting stuff together. All `zmq` communication requires a `context`. So we get one of those and pass it around to all the bits. Our setup is really simple, we run an `http_server_t` in one thread. The server keeps track of and forwards requests on to a load balancing `proxy_t` in another thread. The proxy keeps a queue of requests and shuttles them FIFO style to the first non-busy `worker_t` that it has in its inventory. We spawn a bunch of `worker_t`s which are constantly handshaking with the proxy. "I'm here" and "I'm done" messages let the proxy know which workers are bored and which are busy. This should minimize latency in so far as a greedy scheduler can. The server and workers share a `request_interrupt` endpoint that allows the server to cancel requests (on client disconnect or timeout) and notify workers about process shutdown. At the end we `join` all threads before `main` returns — this ensures workers finish any in-flight requests before stack-local resources like `context` are destroyed. The program will run until you `ctl-c` it away or gracefully kill it with `SIGTERM`.
 
 Now we'll get your **R**esponsive **U**nicode **M**essages **P**ortal shaking.. err.. cracking.. err.. running.. with this:
 
