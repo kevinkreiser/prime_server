@@ -80,8 +80,7 @@ void test_shutdown() {
 // The work_function simulates a long-running request that periodically calls bail() -- the only
 // cooperative cancellation point the API offers. With current code, bail() only checks per-request
 // interrupts (timeout, client disconnect) and is blind to shutting_down. This test asserts the
-// DESIRED behavior: bail() should throw when the process is shutting down. It will FAIL until
-// handle_interrupt is fixed to also check shutting_down().
+// DESIRED behavior: bail() should throw when the process is shutting down
 void test_interrupt_from_shutdown() {
   quiesce(1);
 

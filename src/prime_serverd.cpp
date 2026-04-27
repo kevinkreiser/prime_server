@@ -34,6 +34,7 @@ int main(int argc, char** argv) {
     prime_start = std::stoul(argv1.substr(0, argv1.find(',')));
     prime_end = std::stoul(argv1.substr(argv1.find(',') + 1));
     prime_start += !(prime_start % 2);
+    prime_start = std::max(prime_start, 3ul);
     prime_end -= !(prime_end % 2);
     if (prime_start >= prime_end) {
       logging::ERROR("provide a valid range of numbers to test for prime");
@@ -220,9 +221,8 @@ int main(int argc, char** argv) {
     //  std::cout << prime << " | ";
     std::cout << primes.size() << " primes found" <<std::endl;
 
-  } // or listen for requests from some other client indefinitely or until shutdown
+  } // daemon mode: wait for all the threads to get a shutdown signal and exit, then main can clean up whatever its allocated
   else {
-    // daemon mode: wait for all the threads to get a shutdown signal and exit, then main can clean up whatever its allocated
     server_thread.join();
     for (auto& t : parse_worker_threads) t.join();
     for (auto& t : compute_worker_threads) t.join();
