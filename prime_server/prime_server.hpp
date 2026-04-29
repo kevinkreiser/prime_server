@@ -222,7 +222,7 @@ protected:
 // control.
 //
 // NOTE: this is only meant to be called in the main thread at the beginning of your program
-void quiesce(unsigned int drain_seconds = 0);
+void quiesce(unsigned int drain_seconds = 0, unsigned int = 0);
 // whether or not the daemon thread is waiting for traffic to drain
 bool draining();
 // whether or not the daemon thread has finished draining and signaled loops to exit

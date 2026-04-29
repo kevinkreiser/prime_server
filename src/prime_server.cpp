@@ -597,7 +597,7 @@ void worker_t::handle_interrupt(bool force_check) {
     throw interrupt_t(job & 0xFFFFFFFF);
 }
 
-void quiesce(unsigned int drain_seconds) {
+void quiesce(unsigned int drain_seconds, unsigned int) {
   quiescable::get(drain_seconds);
 }
 bool draining() {
