@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(cmake/version.cmake)
 get_version(${CMAKE_SOURCE_DIR}/prime_server/prime_server.hpp "PRIME_SERVER_")
 project(prime_server LANGUAGES CXX C VERSION ${PRIME_SERVER_VERSION_MAJOR}.${PRIME_SERVER_VERSION_MINOR}.${PRIME_SERVER_VERSION_PATCH})
@@ -73,7 +74,6 @@ set(PRIME_LIBRARY_HEADERS
 
 set(PRIME_LIBRARY_SOURCES
 	${CMAKE_SOURCE_DIR}/src/logging/logging.hpp
-	${CMAKE_SOURCE_DIR}/src/prime_helpers.hpp
 	${CMAKE_SOURCE_DIR}/src/http_protocol.cpp
 	${CMAKE_SOURCE_DIR}/src/http_util.cpp
 	${CMAKE_SOURCE_DIR}/src/netstring_protocol.cpp
@@ -107,6 +107,10 @@ target_link_libraries(prime_proxyd prime_server ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(prime_workerd ${CMAKE_SOURCE_DIR}/src/prime_workerd.cpp)
 target_link_libraries(prime_workerd prime_server ${CMAKE_THREAD_LIBS_INIT})
+
+# README example -- built by CI to catch API drift, not installed
+add_executable(art ${CMAKE_SOURCE_DIR}/src/art.cpp)
+target_link_libraries(art prime_server ${CMAKE_THREAD_LIBS_INIT})
 
 # TODO(nils): AFAIU the project version shouldn't be the SO version
 set_target_properties(prime_server PROPERTIES
@@ -163,6 +167,10 @@ add_test(netstring netstring)
 add_executable(shaping ${CMAKE_SOURCE_DIR}/test/shaping.cpp)
 target_link_libraries(shaping prime_server ${CMAKE_THREAD_LIBS_INIT})
 add_test(shaping shaping)
+
+add_executable(shutdown ${CMAKE_SOURCE_DIR}/test/shutdown.cpp)
+target_link_libraries(shutdown prime_server ${CMAKE_THREAD_LIBS_INIT})
+add_test(shutdown shutdown)
 
 add_executable(zmq ${CMAKE_SOURCE_DIR}/test/zmq.cpp)
 target_link_libraries(zmq prime_server ${CMAKE_THREAD_LIBS_INIT})

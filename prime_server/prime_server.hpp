@@ -2,8 +2,8 @@
 
 // some version info
 #define PRIME_SERVER_VERSION_MAJOR 0
-#define PRIME_SERVER_VERSION_MINOR 7
-#define PRIME_SERVER_VERSION_PATCH 2
+#define PRIME_SERVER_VERSION_MINOR 8
+#define PRIME_SERVER_VERSION_PATCH 0
 
 #include <cstdint>
 #include <functional>
@@ -167,9 +167,16 @@ public:
     std::list<std::string> messages;
     std::string heart_beat;
   };
+  // call this periodically in the work function to bail if the request is defunct. if this
+  // is the case, it throws (but don't catch it) so the worker can bail. this happens if
+  // the client disconnects, the request times out or the process is shutting down
   using interrupt_function_t = std::function<void()>;
+  // the work function is what receives the request, does the work and returns the result.
+  // the result could be final and return to the client or go on to the next pipeline stage
   using work_function_t =
       std::function<result_t(const std::list<zmq::message_t>&, void*, interrupt_function_t&)>;
+  // the cleanup function is called when the worker is done with the request. it is used to clean
+  // up any ephemeral resources used by the worker
   using cleanup_function_t = std::function<void()>;
 
   worker_t(zmq::context_t& context,
@@ -194,25 +201,31 @@ protected:
 
   work_function_t work_function;
   cleanup_function_t cleanup_function;
-  long heart_beat_interval;
   std::string heart_beat;
   uint64_t job;
   std::unordered_set<uint64_t> interrupts;
   std::list<uint64_t> interrupt_history;
 };
 
-// configures a daemon thread to listen for SIGTERM. upon receiving SIGTERM, this thread will wait for
-// drain_seconds for the killer to drain traffic. after the initial wait is up, the thread will wait
-// an additional shutdown_seconds, to allow any other threads to cleanup and shut themselves down
-// gracefully, after which the the thread will exit the process. this is useful if the runner of your
-// process, ie the one who sent SIGTERM to your process, expects you to continue doing work, ie finish
-// up the last requests you were working on, while it redirects request traffic away from your process
-// to some other handler
+// configures a daemon thread to listen for SIGTERM. upon receiving SIGTERM, this thread will wait
+// drain_seconds for the killer to drain traffic. during that time your application can finish any
+// outstanding requests it may have. after the initial wait is up, shutting_down is set to true,
+// signaling all serve/work loops to exit. the process then exits naturally when main returns.
+// this is useful if the runner (eg. systemd, kubernetes) of your process, ie the one who sent
+// SIGTERM to your process, expects you to continue doing work, ie finish up the last requests you
+// were working on, while it redirects request traffic away from your process to some other handler.
+//
+// serve() and work() poll timeouts are capped to 1 second, so the worst-case delay between
+// shutting_down being set and the loops noticing is 1 second. when setting your orchestrator's kill
+// deadline (e.g. kubernetes terminationGracePeriodSeconds or systemd TimeoutStopSec), account for
+// drain_seconds + 1 second + however long your application needs to clean up after main regains
+// control.
+//
 // NOTE: this is only meant to be called in the main thread at the beginning of your program
-void quiesce(unsigned int drain_seconds = 0, unsigned int shutdown_seconds = 0);
+void quiesce(unsigned int drain_seconds = 0, unsigned int = 0);
 // whether or not the daemon thread is waiting for traffic to drain
 bool draining();
-// whether or not the daemon thread is waiting for other threads to exit
+// whether or not the daemon thread has finished draining and signaled loops to exit
 bool shutting_down();
 
 } // namespace prime_server

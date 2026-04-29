@@ -1,15 +1,16 @@
-
-             o
-    .,-. .--..  .--.--. .-.     .--. .-. .--..    ._.-. .--.
-    |   )|   |  |  |  |(.-'     `--.(.-' |    \  / (.-' |
-    |`-' ' -' `-'  '  `-`--'____`--' `--''     `'   `--''
-    |
-    '
+```
+         o
+.,-. .--..  .--.--. .-.     .--. .-. .--..    ._.-. .--.
+|   )|   |  |  |  |(.-'     `--.(.-' |    \  / (.-' |
+|`-' ' -' `-'  '  `-`--'___`_--' `--''     `'   `--''
+|
+'
+```
 
 # Build Status
 
-![linux build](https://github.com/kevinkreiser/prime_server/actions/workflows/linux.yaml/badge.svg)
-![mac build](https://github.com/kevinkreiser/prime_server/actions/workflows/macos.yaml/badge.svg)
+linux build
+mac build
 
 # Quick Start
 
@@ -64,8 +65,8 @@ The library comes with a standalone binary which is essentially just a server or
 
 ```bash
 #simulate the whole thing with 1 vs 8 workers per worker layer
-time prime_serverd 1000000 1
-time prime_serverd 1000000 8
+time prime_serverd 100000000000000,100000000008000 1
+time prime_serverd 100000000000000,100000000008000 8
 
 #try the sample python only server
 python py/prime_serverd.py &> /dev/null &
@@ -105,36 +106,39 @@ killall prime_serverd
 
 What we want is a tool that lets you build a system that is pipelined and parallelized ie. the ZMQ "butterfly" or "parallel pipeline" pattern. See [this tutorial](http://zeromq.org/tutorials:butterfly). We'll get to why in a bit but first, this is kind of what it should look like:
 
-                           (input)        request_producer
-                                          /      |       \
-                                         /       |        \
-                                        v        v         v
-                        (parallelize)  worker  worker   worker ...
-                                         \       |        /
-                                          \      |       /
-                                           v     v      v
-                         (rebalance)    intermediate_router
-                                          /      |       \
-                                         /       |        \
-                                        v        v         v
-                        (parallelize)  worker  worker   worker ...
-                                         \       |        /
-                                          \      |       /
-                                           v     v      v
-                          (output)       response_collector
+```
+                       (input)        request_producer
+                                      /      |       \
+                                     /       |        \
+                                    v        v         v
+                    (parallelize)  worker  worker   worker ...
+                                     \       |        /
+                                      \      |       /
+                                       v     v      v
+                     (rebalance)    intermediate_router
+                                      /      |       \
+                                     /       |        \
+                                    v        v         v
+                    (parallelize)  worker  worker   worker ...
+                                     \       |        /
+                                      \      |       /
+                                       v     v      v
+                      (output)       response_collector
+```
 
 This seems like a pretty good pattern for some offline scientific code that just pumps jobs into the system and waits for the results to land at the bottom. However this isn't very useful for online systems that face users for example. For that we need some kind of loopback so that we can get the result back to the requester. Something like:
 
-                                         ==========                   ==========
-                                         | worker |                   | worker |
-                                         | worker |                   | worker |
-    client <---> server ---> proxy <---> |  ....  | <---> proxy <---> |  ....  | <---> ....
-                   ^                     | worker |                   | worker |
-                   |                     | worker |                   | worker |
-                   |                     ==========                   ==========
-                   |                         |                            |
-                    \ _____________________ /___________________________ /
-
+```
+                                     ==========                   ==========
+                                     | worker |                   | worker |
+                                     | worker |                   | worker |
+client <---> server ---> proxy <---> |  ....  | <---> proxy <---> |  ....  | <---> ....
+               ^                     | worker |                   | worker |
+               |                     | worker |                   | worker |
+               |                     ==========                   ==========
+               |                         |                            |
+                \ _____________________ /___________________________ /
+```
 
 A client (a browser or just a separate thread) makes a request to a server. The server listens for new requests and replies when the backend parts send back results. The backend is comprised of load balancing proxies between layers of worker pools. In real life you may run these in different processes or on different machines. We use threads in the example server to conveniently simulate this within a single process, so please note the lack of any mutex/locking patterns (thank you ZMQ!).
 
@@ -149,16 +153,16 @@ You may be asking yourself, why on earth are all of the worker pools hooked into
 
 The toy example of an HTTP service that computes whether or not a number is prime is a simple illustration of why someone might want a setup as described above. But it's not the actual use-case that drove the creation of this project. Having worked on a few service oriented archtectures my team members and I noticed that we'd compiled what amounted to a wishlist of architectural features. In buzz-word form those were roughly:
 
-* Simplicity
-* Flexibility
-* Fault Tolerance
-* Separation of Concerns
-* Throughput
-* Load Balancing
-* Fair Queuing
-* Quality of Service
-* Non-blocking
-* Web Scale (just kidding)
+- Simplicity
+- Flexibility
+- Fault Tolerance
+- Separation of Concerns
+- Throughput
+- Load Balancing
+- Fair Queuing
+- Quality of Service
+- Non-blocking
+- Web Scale (just kidding)
 
 We needed to handle HTTP requests that would have widely varying degrees of complexity. Specifically, we were writing [some software](https://github.com/valhalla) that does shortest (for some value of short) path computations over large graphs. For example, users would be able to make requests to get the best route by car/foot/bike/etc. from London to Edinburgh, which may take 10s of milliseconds. In contrast though, a user would also be able to ask for the route from Capetown to Beijing, which could take a few seconds. Different requests can vary in computation time over several orders of magnitude.
 
@@ -180,9 +184,9 @@ The idea was enticing; could we build a minimal HTTP server with just ZMQ to sit
 
 The API consists of essentially 3 parts:
 
-* Client/server stuff - the bits that make and answer requests. The server stands between clients and the pipeline of workers and load balancing proxies.
-* Proxy/worker stuff - the bits that fulfill the requests. The proxy sits between a pool of workers at a given stage in the pipeline and the next stage. The proxy knows what workers are available to do work and will not send on a request until a worker is available to take it. The workers are responsible to either send their results to another stage of the pipeline (the next proxy) or a sensible, protocol specific, response back to the server who will forward it on to the client.
-* Protocol stuff - the bits that parse and serialize requests and responses respectively. It's a prearranged format that makes it possible for the client to speak something that the worker understands and vice-versa. HTTP is pretty useful here but other protocols exist. You can even create your own if you like. Also note that intermediate stages of workers can talk whatever protocol they like to each other.
+- Client/server stuff - the bits that make and answer requests. The server stands between clients and the pipeline of workers and load balancing proxies.
+- Proxy/worker stuff - the bits that fulfill the requests. The proxy sits between a pool of workers at a given stage in the pipeline and the next stage. The proxy knows what workers are available to do work and will not send on a request until a worker is available to take it. The workers are responsible to either send their results to another stage of the pipeline (the next proxy) or a sensible, protocol specific, response back to the server who will forward it on to the client.
+- Protocol stuff - the bits that parse and serialize requests and responses respectively. It's a prearranged format that makes it possible for the client to speak something that the worker understands and vice-versa. HTTP is pretty useful here but other protocols exist. You can even create your own if you like. Also note that intermediate stages of workers can talk whatever protocol they like to each other.
 
 So you want to make a web service. How can you do that… For the sake of example, let's say you want to do that all in the same process… In real life (i.e. production) you don't want to do that because, well, the wishlist again. But yeah let's just learn the easy way shall we?
 
@@ -196,102 +200,22 @@ sudo apt-get install libprime-server-dev
 
 Ok great, let's write our program against it, call it `art.cpp`. We'll start by including a few things we'll need:
 
-```c++
-//prime_server guts
-#include <prime_server/prime_server.hpp>
-#include <prime_server/http_protocol.hpp>
-using namespace prime_server;
-
-//nuts and bolts required
-#include <thread>
-#include <functional>
-#include <chrono>
-#include <string>
-#include <list>
-#include <vector>
-#include <csignal>
-
-//configuration constants for various sockets
-const std::string server_endpoint = "tcp://*:8002";
-const std::string result_endpoint = "ipc:///tmp/result_endpoint";
-const std::string proxy_endpoint = "ipc:///tmp/proxy_endpoint";
-
-//assortment of artisional content
-const std::vector<std::string> art = { "(_,_)", "(_|_)", "(_*_)",
-                                       "(‿ˠ‿)", "(‿ꜟ‿)", "(‿ε‿)" };
-```
+https://github.com/kevinkreiser/prime_server/blob/191bae359189101af4f64d3eb94c6040c9e9cd67/src/art.cpp#L1-L23
 
 So first off we're including a couple of bits from `libprime_server` itself mainly for the setup of the pipeline and, as you guessed it, the stuff we need to talk the HTTP protocol. After that we include a bunch of standard data structures that we'll make use of throughout the program, it'll be pretty obvious.. Then we have some configuration. Basically we have to tell the different threads' sockets where to find each other. The first one there is a `tcp` socket so that webclients can connect to us through normal means. The other two are unix domain sockets but could be `tcp` if you want to run different parts of this on different machines. For example you could run one stage of the pipeline on machines with fat graphics cards for the GPGPU win, whereas another stage might run better on machines with metric tons of RAM. Finally we have our super sweet text art. Alright now how do we actually return a response to someone looking for some '**T**extual **U**nicode **S**tuff of **H**igh **I**ntellectual **E**xcitement'?
 
-```c++
-//actually serve up content
-worker_t::result_t art_work(const std::list<zmq::message_t>& job, void* request_info) {
-  //false means this is going back to the client, there is no next stage of the pipeline
-  worker_t::result_t result{false};
-  //this type differs per protocol hence the void* fun
-  auto& info = *static_cast<http_request_t::info_t*>(request_info);
-  http_response_t response;
-  try {
-    //TODO: actually use/validate the request parameters
-    auto request = http_request_t::from_string(
-      static_cast<const char*>(job.front().data()), job.front().size());
-    //get your art here
-    response = http_response_t(200, "OK", art[info.id % art.size()]);
-  }
-  catch(const std::exception& e) {
-    //complain
-    response = http_response_t(400, "Bad Request", e.what());
-  }
-  //does some tricky stuff with headers and different versions of http
-  response.from_info(info);
-  //formats the response to protocal that the client will understand
-  result.messages.emplace_back(response.to_string());
-  return result;
-}
-```
+https://github.com/kevinkreiser/prime_server/blob/191bae359189101af4f64d3eb94c6040c9e9cd67/src/art.cpp#L25-L49
 
-We basically just have to define a `work` function/object/lambda whose signature matches what the API expects. The `worker_t::result_t` is the bit that `prime_server` will be shuttling around your architecture. The bulk of this function is just stuff you have to do at every stage in your pipeline. You'll need to unpack the message from the previous stage; in this case it was the server itself so the `work` function assumes its valid HTTP-looking bytes. You'll then want to formulate a response, either to be sent back to the client or forwarded to the next stage in the pipeline. In our case the workers respond to the client in all scenarios so we always initialize `worker_t::result_t::intermediate` as `false`. If it were `true` the worker would attempt to forward the result of this stage to the proxy for the next pool of workers. At the end we simply do some formatting to the response so that the client will make sense of it and we store this in `worker_t::result_t::messages`. OK so now what is left to do? Not much, just hook up some plumbing, basically constructing your pipeline.
+We basically just have to define a `work` function/object/lambda whose signature matches what the API expects. The `worker_t::result_t` is the bit that `prime_server` will be shuttling around your architecture. The third parameter, `interrupt_function_t&`, is a functor the worker passes to your work function. Call it periodically in long-running work to cooperate with cancellation: it throws if the request was interrupted (client disconnected, timed out) or if the process is shutting down. For short work functions like this one, you can safely ignore it. The bulk of this function is just stuff you have to do at every stage in your pipeline. You'll need to unpack the message from the previous stage; in this case it was the server itself so the `work` function assumes its valid HTTP-looking bytes. You'll then want to formulate a response, either to be sent back to the client or forwarded to the next stage in the pipeline. In our case the workers respond to the client in all scenarios so we always initialize `worker_t::result_t::intermediate` as `false`. If it were `true` the worker would attempt to forward the result of this stage to the proxy for the next pool of workers. At the end we simply do some formatting to the response so that the client will make sense of it and we store this in `worker_t::result_t::messages`. OK so now what is left to do? Not much, just hook up some plumbing, basically constructing your pipeline.
 
-```c++
-int main(void) {
-  //when we hear SIGTERM, wait 28 seconds to drain traffic then wait a second for the threads to stop
-  quiesce(28, 1);
+https://github.com/kevinkreiser/prime_server/blob/191bae359189101af4f64d3eb94c6040c9e9cd67/src/art.cpp#L51-L87
 
-  zmq::context_t context;
-
-  //http server, false turns off request/response logging
-  std::thread server = std::thread(std::bind(&http_server_t::serve,
-    http_server_t(context, server_endpoint, proxy_endpoint + "_upstream", result_endpoint, false)));
-
-  //load balancer
-  std::thread proxy(
-    std::bind(&proxy_t::forward,
-      proxy_t(context, proxy_endpoint + "_upstream", proxy_endpoint + "_downstream")));
-  proxy.detach();
-
-  //workers
-  auto worker_concurrency = std::max<size_t>(1, std::thread::hardware_concurrency());
-  std::list<std::thread> workers;
-  for(size_t i = 0; i < worker_concurrency; ++i) {
-    //worker function could be defined inline here via lambda, it could be std::bind'd to an instance method
-    //or simply just a free function like we have here
-    workers.emplace_back(std::bind(&worker_t::work,
-      worker_t(context, proxy_endpoint + "_downstream", "ipc:///tmp/NO_ENDPOINT", result_endpoint, &art_work)));
-    workers.back().detach();
-  }
-
-  //wait for a signal to kill us
-  server.join();
-  return 0;
-}
-```
-
-The first thing we do is hook up a signal handler in a daemon thread that will listen for `SIGTERM` and quit gracefully after giving the workers time to drain traffic and shutdown. Then we get down to the business of connecting stuff together. All `zmq` communication requires a `context`. So we get one of those and pass it around to all the bits. Our setup is really simple, we run an `http_server_t` in one thread. The server keeps track of and forwards requests on to a load balancing `proxy_t` in another thread. The proxy keeps a queue of requests and shuttles them FIFO style to the first non-busy `worker_t` that it has in its inventory. We spawn a bunch of `worker_t`s which are constantly handshaking with the proxy. "I'm here" and "I'm done" messages let the proxy know which workers are bored and which are busy. This should minimize latency in so far as a greedy scheduler can. You'll notice the program is pretty much meant to be run as a daemon which is why it `join`s on the `serve` method. The program will run until you `ctl-c` it away or gracefully kill it with `SIGTERM`.
+The first thing we do is hook up a signal handler in a daemon thread that will listen for `SIGTERM` and, after a drain period, signal all `serve`/`work`/`forward` loops to exit so the process shuts down naturally when `main` returns. Then we get down to the business of connecting stuff together. All `zmq` communication requires a `context`. So we get one of those and pass it around to all the bits. Our setup is really simple, we run an `http_server_t` in one thread. The server keeps track of and forwards requests on to a load balancing `proxy_t` in another thread. The proxy keeps a queue of requests and shuttles them FIFO style to the first non-busy `worker_t` that it has in its inventory. We spawn a bunch of `worker_t`s which are constantly handshaking with the proxy. "I'm here" and "I'm done" messages let the proxy know which workers are bored and which are busy. This should minimize latency in so far as a greedy scheduler can. The server and workers share a `request_interrupt` endpoint that allows the server to cancel requests (on client disconnect or timeout) and notify workers about process shutdown. At the end we `join` all threads before `main` returns — this ensures workers finish any in-flight requests before any resources main initialized for them are destroyed or relinquished. The program will run until you `ctl-c` it away or gracefully kill it with `SIGTERM`.
 
 Now we'll get your **R**esponsive **U**nicode **M**essages **P**ortal shaking.. err.. cracking.. err.. running.. with this:
 
 ```bash
-g++ art.cpp -std=c++11 -lprime_server -o art
+g++ art.cpp -std=c++17 -lprime_server -o art
 ./art
 ```
 
@@ -319,28 +243,29 @@ The second thing we want to do is work `zbeacon` perks into the API. Currently t
 
 Automatic service discovery is pretty great, but that's not the really interesting part here; what if our pipeline weren't a pipeline? What if it were a graph?!
 
-    client <---> server _________
-                 ^ | ^            \
-                 | | |             v
-                 | | |       =============
-                 | | |   .-> |   proxy   | <--.
-                 | | |  /    |-----------|     \
-                 | | |  \    |  workers  |      |
-                 | | |   \ _ |    ...    | _    |
-                 | | |       =============   \  |
-                 | |  \ _________ /           | |
-                 |  \ ___________             | |
-                 |                \           | |
-                 |                 \          | |
-                 |                  v         | |
-                 |          =============    /  |
-                 |      .-> |   proxy   | <-'   |
-                 |     /    |-----------|       |
-                 |     \    |  workers  |       |
-                 |      \ _ |    ...    | ____ /
-                 |          =============
-                  \ ____________ /
-
+```
+client <---> server _________
+             ^ | ^            \
+             | | |             v
+             | | |       =============
+             | | |   .-> |   proxy   | <--.
+             | | |  /    |-----------|     \
+             | | |  \    |  workers  |      |
+             | | |   \ _ |    ...    | _    |
+             | | |       =============   \  |
+             | |  \ _________ /           | |
+             |  \ ___________             | |
+             |                \           | |
+             |                 \          | |
+             |                  v         | |
+             |          =============    /  |
+             |      .-> |   proxy   | <-'   |
+             |     /    |-----------|       |
+             |     \    |  workers  |       |
+             |      \ _ |    ...    | ____ /
+             |          =============
+              \ ____________ /
+```
 
 We may be reaching the limits of ASCII 'art' here but bear with me...
 
@@ -352,9 +277,9 @@ A graph structure for the various stages also has the potential to better organi
 
 For example say you wanted to offer up math as a service (MaS of course). You might have:
 
-* workers to compute derivatives
-* workers to do summations
-* workers to compute integrals
+- workers to compute derivatives
+- workers to do summations
+- workers to compute integrals
 
 Now of course you could implement this all in a client side library, but for the sake of argument, ignore the impracticality for a second. What you wouldn't want to do is write a worker that does all three things. It would be nicer to isolate workers based on the type of work they perform (again the wishlist). This requires forwarding to a specific worker pool based on the url (in this example). Which brings up another `TODO`, we probably want to allow the server to forward requests to worker pools based on the URL (lots of other servers have this). Furthermore some of these operations are more complex than others. If you watched your system for a while (with a statistically relevant amount of traffic) you could look at the amount of CPU spent per stage and reallocate proportionally sized worker pools. You could even dynamically size the worker pools based on current traffic if you were really slick ;o)
 

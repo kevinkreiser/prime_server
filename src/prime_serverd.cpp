@@ -1,17 +1,16 @@
+#include <cmath>
+#include <cstdlib>
 #include <functional>
 #include <iostream>
 #include <list>
-#include <memory>
-#include <set>
+#include <unordered_set>
 #include <stdexcept>
 #include <string>
 #include <thread>
-#include <unordered_set>
 
 // netstrings are far easier to work with but http is a more interesting use-case
 // so we just do everthing using the http protocol here
 #include "http_protocol.hpp"
-#include "prime_helpers.hpp"
 #include "prime_server.hpp"
 using namespace prime_server;
 #include "logging/logging.hpp"
@@ -21,17 +20,28 @@ int main(int argc, char** argv) {
   if (argc < 2) {
     logging::ERROR(
         "Usage: " + std::string(argv[0]) +
-        " num_requests|server_listen_endpoint concurrency [drain_time,shutdown_time] [/health_check_endpoint]");
+        " num_requests|server_listen_endpoint concurrency [drain_seconds] [/health_check_endpoint]");
     return 1;
   }
 
   // number of jobs to do or server endpoint
-  size_t requests = 0;
+  size_t requests = 0, prime_start = 0, prime_end = 0;
   std::string server_endpoint = "ipc:///tmp/server_endpoint";
   if (std::string(argv[1]).find("://") != std::string::npos)
     server_endpoint = argv[1];
-  else
-    requests = std::stoul(argv[1]);
+  else {
+    std::string argv1(argv[1]);
+    prime_start = std::stoul(argv1.substr(0, argv1.find(',')));
+    prime_end = std::stoul(argv1.substr(argv1.find(',') + 1));
+    prime_start += !(prime_start % 2);
+    prime_start = std::max(prime_start, 3ul);
+    prime_end -= !(prime_end % 2);
+    if (prime_start >= prime_end) {
+      logging::ERROR("provide a valid range of numbers to test for prime");
+      return 1;
+    }
+    requests = (prime_end - prime_start)/2 + 1;
+  }
 
   // number of workers to use at each stage
   size_t worker_concurrency = 1;
@@ -39,9 +49,7 @@ int main(int argc, char** argv) {
     worker_concurrency = std::stoul(argv[2]);
 
   // setup the signal handler to gracefully shutdown when requested with sigterm
-  unsigned int drain_seconds, shutdown_seconds;
-  std::tie(drain_seconds, shutdown_seconds) = parse_quiesce_config(argc > 3 ? argv[3] : "");
-  quiesce(drain_seconds, shutdown_seconds);
+  quiesce(argc > 3 ? std::stoul(argv[3]) : 28);
 
   // default to no health check, if one is provided its just the path and the canned response is OK
   http_server_t::health_check_matcher_t health_check_matcher{};
@@ -71,8 +79,6 @@ int main(int argc, char** argv) {
   std::thread parse_proxy(
       std::bind(&proxy_t::forward, proxy_t(context, parse_proxy_endpoint + "_upstream",
                                            parse_proxy_endpoint + "_downstream")));
-  parse_proxy.detach();
-
   // request parsers
   std::list<std::thread> parse_worker_threads;
   for (size_t i = 0; i < worker_concurrency; ++i) {
@@ -128,14 +134,12 @@ int main(int argc, char** argv) {
                 return result;
               }
             })));
-    parse_worker_threads.back().detach();
   }
 
   // load balancer for prime computation
   std::thread compute_proxy(
       std::bind(&proxy_t::forward, proxy_t(context, compute_proxy_endpoint + "_upstream",
                                            compute_proxy_endpoint + "_downstream")));
-  compute_proxy.detach();
 
   // prime computers
   std::list<std::thread> compute_worker_threads;
@@ -157,23 +161,27 @@ int main(int argc, char** argv) {
                                ++divisor;
                              }
 
-                             // if it was prime send it back unmolested, else send back 2 which we
-                             // know is prime
+                             // if it was prime send it back unmolested, else send back sentinel value meaning not prime
                              if (divisor < high)
-                               prime = 2;
+                               prime = static_cast<size_t>(-1);
                              http_response_t response(200, "OK", std::to_string(prime));
                              response.from_info(*static_cast<http_request_info_t*>(request_info));
                              worker_t::result_t result{false, {}, {}};
                              result.messages.emplace_back(response.to_string());
                              return result;
                            })));
-    compute_worker_threads.back().detach();
   }
 
   // make a client in process and quit when its batch is done
   // listen for requests from some other client indefinitely
   if (requests > 0) {
+    // batch mode: detach everything, client.batch() is the blocking call
     server_thread.detach();
+    parse_proxy.detach();
+    for (auto& t : parse_worker_threads) t.detach();
+    compute_proxy.detach();
+    for (auto& t : compute_worker_threads) t.detach();
+
     // sometimes you miss getting results back because the sub socket
     // on the server hasnt yet connected with pub sockets on the workers
     // std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -181,15 +189,17 @@ int main(int argc, char** argv) {
     // client makes requests and gets back responses in a batch fashion
     size_t produced_requests = 0, collected_results = 0;
     std::string request;
-    std::set<size_t> primes = {2};
+    std::unordered_set<size_t> primes;
+    primes.reserve(static_cast<size_t>(std::ceil(prime_end / std::log(prime_end) - prime_start / std::log(prime_start))));
+    prime_start -= 2;
     http_client_t client(
         context, server_endpoint,
-        [&request, requests, &produced_requests]() {
+        [&request, requests, &prime_start,&produced_requests]() {
           // blank request means we are done
-          if (produced_requests < requests)
+          if (produced_requests++ < requests)
             request = http_request_t::to_string(method_t::GET,
                                                 "/is_prime?possible_prime=" +
-                                                    std::to_string(produced_requests++ * 2 + 3));
+                                                    std::to_string(prime_start += 2));
           else
             request.clear();
           return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
@@ -199,7 +209,8 @@ int main(int argc, char** argv) {
           std::string response_str(static_cast<const char*>(message), length);
           try {
             size_t number = std::stoul(response_str.substr(response_str.rfind('\n')));
-            primes.insert(number);
+            if (number != static_cast<size_t>(-1))
+              primes.insert(number);
           } catch (...) { logging::ERROR("Responded with: " + response_str); }
           return ++collected_results < requests;
         });
@@ -208,11 +219,15 @@ int main(int argc, char** argv) {
     // show primes
     // for(const auto& prime : primes)
     //  std::cout << prime << " | ";
-    std::cout << primes.size() << std::endl;
+    std::cout << primes.size() << " primes found" <<std::endl;
 
-  } // or listen for requests from some other client indefinitely
+  } // daemon mode: wait for all the threads to get a shutdown signal and exit, then main can clean up whatever its allocated
   else {
     server_thread.join();
+    for (auto& t : parse_worker_threads) t.join();
+    for (auto& t : compute_worker_threads) t.join();
+    parse_proxy.join();
+    compute_proxy.join();
   }
 
   return EXIT_SUCCESS;
