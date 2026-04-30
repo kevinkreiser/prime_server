@@ -3,7 +3,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(cmake/version.cmake)
 get_version(${CMAKE_SOURCE_DIR}/prime_server/prime_server.hpp "PRIME_SERVER_")
 project(prime_server LANGUAGES CXX C VERSION ${PRIME_SERVER_VERSION_MAJOR}.${PRIME_SERVER_VERSION_MINOR}.${PRIME_SERVER_VERSION_PATCH})
-INCLUDE(FindPkgConfig)
 INCLUDE(GNUInstallDirs)
 
 # Use a C++17 enabled compiler
@@ -51,16 +50,27 @@ option(ENABLE_UNDEFINED_SANITIZER "Use UB sanitizer for Debug build" OFF)
 include(cmake/sanitizer.cmake)
 
 # Handle the dependencies
-pkg_check_modules(CURL REQUIRED libcurl>=7.22.0)
-include_directories(${CURL_INCLUDEDIR})
+if(WIN32)
+  find_package(CURL REQUIRED)
+  set(CURL_LDFLAGS CURL::libcurl)
 
-pkg_check_modules(ZMQ REQUIRED libzmq>=4.1.4)
-include_directories(${ZMQ_INCLUDEDIR})
+  find_package(ZeroMQ REQUIRED)
+  set(ZMQ_LDFLAGS libzmq)
+  get_target_property(ZMQ_INCLUDEDIR libzmq INTERFACE_INCLUDE_DIRECTORIES)
 
-pkg_check_modules(CZMQ REQUIRED libczmq>=3.0)
-include_directories(${CZMQ_INCLUDEDIR})
+  find_package(czmq REQUIRED)
+  set(CZMQ_LDFLAGS czmq)
+  get_target_property(CZMQ_INCLUDEDIR czmq INTERFACE_INCLUDE_DIRECTORIES)
+else()
+  INCLUDE(FindPkgConfig)
+  pkg_check_modules(CURL REQUIRED libcurl>=7.22.0)
+  pkg_check_modules(ZMQ REQUIRED libzmq>=4.1.4)
+  pkg_check_modules(CZMQ REQUIRED libczmq>=3.0)
+endif()
 
-find_package (Threads REQUIRED)
+include_directories(${CURL_INCLUDEDIR} ${ZMQ_INCLUDEDIR} ${CZMQ_INCLUDEDIR})
+
+find_package(Threads REQUIRED)
 
 # Include the hpp files
 include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/prime_server)
@@ -82,12 +92,17 @@ set(PRIME_LIBRARY_SOURCES
 
 # Build the library
 add_library(prime_server SHARED ${PRIME_LIBRARY_SOURCES})
+# On Windows, auto-generate dllexport/dllimport decorations
+set_target_properties(prime_server PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_link_libraries(prime_server
   PUBLIC
     ${ZMQ_LDFLAGS}
   PRIVATE
     ${CZMQ_LDFLAGS}
     ${CURL_LDFLAGS})
+if(WIN32)
+  target_link_libraries(prime_server PRIVATE ws2_32)
+endif()
 
 # Build executables
 add_executable(prime_echod ${CMAKE_SOURCE_DIR}/src/prime_echod.cpp)
