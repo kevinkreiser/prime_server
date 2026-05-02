@@ -24,3 +24,26 @@ jobs:
         run: |
           export LD_LIBRARY_PATH=.:$(cat /etc/ld.so.conf.d/* | grep -vF "#" | tr "\\n" ":" | sed -e "s/:$//g")
           make test -j$(nproc)
+
+      - name: smoke test (start server, request, graceful shutdown)
+        shell: bash
+        run: |
+          export LD_LIBRARY_PATH=.:$(cat /etc/ld.so.conf.d/* | grep -vF "#" | tr "\\n" ":" | sed -e "s/:$//g")
+          ./prime_echod tcp://*:8002 1 1 &
+          SERVER_PID=$!
+          sleep 1
+
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8002/test)
+          if [ "$CODE" != "200" ]; then
+            kill -9 $SERVER_PID
+            echo "Expected 200, got $CODE" && exit 1
+          fi
+          echo "request returned $CODE"
+
+          kill -TERM $SERVER_PID
+          sleep 3
+          if kill -0 $SERVER_PID 2>/dev/null; then
+            kill -9 $SERVER_PID
+            echo "Server did not shut down gracefully within 3 seconds" && exit 1
+          fi
+          echo "server shut down gracefully"

@@ -2,8 +2,14 @@
 #include <csignal>
 #include <stdexcept>
 #include <thread>
-#include <unistd.h>
 #include <unordered_set>
+
+#ifdef _WIN32
+#include <windows.h>
+#include <chrono>
+#else
+#include <unistd.h>
+#endif
 
 #include "http_protocol.hpp"
 #include "logging/logging.hpp"
@@ -20,6 +26,7 @@ struct interrupt_t : public std::runtime_error {
 };
 constexpr uint32_t INTERRUPT_AGE_CUTOFF = 600; // request age in seconds
 
+#ifndef _WIN32
 struct quiescable final {
   static const quiescable& get(unsigned int drain_seconds = 0) {
     static quiescable instance(drain_seconds);
@@ -55,7 +62,37 @@ struct quiescable final {
   std::atomic<bool> draining;
   std::atomic<bool> shutting_down;
 };
-
+#else
+struct quiescable final {
+  static const quiescable& get(unsigned int drain_seconds = 0) {
+    static quiescable instance(drain_seconds);
+    return instance;
+  }
+  quiescable(unsigned int drain_seconds) : draining(false), shutting_down(false) {
+    if (drain_seconds == 0)
+      return;
+    // install a console control handler to catch termination events
+    // (CTRL_C, CTRL_CLOSE, service stop) which are analogous to SIGTERM
+    quiescable::drain_seconds = drain_seconds;
+    if (!SetConsoleCtrlHandler(ctrl_handler, TRUE))
+      logging::ERROR("Could not install console ctrl handler, graceful shutdown disabled");
+  }
+  static BOOL WINAPI ctrl_handler(DWORD event) {
+    if (event == CTRL_C_EVENT || event == CTRL_BREAK_EVENT || event == CTRL_CLOSE_EVENT) {
+      auto& self = const_cast<quiescable&>(get());
+      self.draining = true;
+      std::this_thread::sleep_for(std::chrono::seconds(drain_seconds));
+      self.shutting_down = true;
+      return TRUE;
+    }
+    return FALSE;
+  }
+  static unsigned int drain_seconds;
+  std::atomic<bool> draining;
+  std::atomic<bool> shutting_down;
+};
+unsigned int quiescable::drain_seconds = 0;
+#endif
 } // namespace
 
 namespace prime_server {

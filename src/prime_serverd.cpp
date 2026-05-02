@@ -26,7 +26,7 @@ int main(int argc, char** argv) {
 
   // number of jobs to do or server endpoint
   size_t requests = 0, prime_start = 0, prime_end = 0;
-  std::string server_endpoint = "ipc:///tmp/server_endpoint";
+  std::string server_endpoint = "tcp://*:8001";
   if (std::string(argv[1]).find("://") != std::string::npos)
     server_endpoint = argv[1];
   else {
@@ -34,7 +34,7 @@ int main(int argc, char** argv) {
     prime_start = std::stoul(argv1.substr(0, argv1.find(',')));
     prime_end = std::stoul(argv1.substr(argv1.find(',') + 1));
     prime_start += !(prime_start % 2);
-    prime_start = std::max(prime_start, 3ul);
+    prime_start = std::max(prime_start, size_t{3});
     prime_end -= !(prime_end % 2);
     if (prime_start >= prime_end) {
       logging::ERROR("provide a valid range of numbers to test for prime");
@@ -60,12 +60,13 @@ int main(int argc, char** argv) {
     health_check_response = http_response_t{200, "OK"}.to_string();
   }
 
-  // change these to tcp://known.ip.address.with:port if you want to do this across machines
+  // inproc:// works within one process; use tcp:// to split components across machines or processes
+  // on linux ipc:// is a faster alternative to tcp for multiprocess mode, windows doesn't support it
   zmq::context_t context;
-  std::string result_endpoint = "ipc:///tmp/result_endpoint";
-  std::string request_interrupt = "ipc:///tmp/request_interrupt";
-  std::string parse_proxy_endpoint = "ipc:///tmp/parse_proxy_endpoint";
-  std::string compute_proxy_endpoint = "ipc:///tmp/compute_proxy_endpoint";
+  std::string result_endpoint = "inproc://result_endpoint";
+  std::string request_interrupt = "inproc://request_interrupt";
+  std::string parse_proxy_endpoint = "inproc://parse_proxy_endpoint";
+  std::string compute_proxy_endpoint = "inproc://compute_proxy_endpoint";
 
   // server
   std::thread server_thread = std::thread(
@@ -146,7 +147,7 @@ int main(int argc, char** argv) {
   for (size_t i = 0; i < worker_concurrency; ++i) {
     compute_worker_threads.emplace_back(
         std::bind(&worker_t::work,
-                  worker_t(context, compute_proxy_endpoint + "_downstream", "ipc:///dev/null",
+                  worker_t(context, compute_proxy_endpoint + "_downstream", "inproc://dev_null",
                            result_endpoint, request_interrupt,
                            [](const std::list<zmq::message_t>& job, void* request_info,
                               worker_t::interrupt_function_t&) {

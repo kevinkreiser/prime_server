@@ -5,7 +5,6 @@
 #include <functional>
 #include <list>
 #include <memory>
-#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <zmq.h>

@@ -64,11 +64,12 @@ int main(int argc, char** argv) {
     health_check_response = http_response_t{200, "OK"}.to_string();
   }
 
-  // change these to tcp://known.ip.address.with:port if you want to do this across machines
+  // inproc:// works within one process; use tcp:// to split components across machines or processes
+  // on linux ipc:// is a faster alternative to tcp for multiprocess mode, windows doesn't support it
   zmq::context_t context;
-  std::string result_endpoint = "ipc://result_endpoint";
-  std::string request_interrupt = "ipc://request_interrupt";
-  std::string proxy_endpoint = "ipc://proxy_endpoint";
+  std::string result_endpoint = "inproc://result_endpoint";
+  std::string request_interrupt = "inproc://request_interrupt";
+  std::string proxy_endpoint = "inproc://proxy_endpoint";
 
   // server
   std::thread server = std::thread(
@@ -82,7 +83,7 @@ int main(int argc, char** argv) {
                                                               proxy_endpoint + "_downstream")));
   // file serving thread
   std::thread file_worker(
-      std::bind(&worker_t::work, worker_t(context, proxy_endpoint + "_downstream", "ipc:///dev/null",
+      std::bind(&worker_t::work, worker_t(context, proxy_endpoint + "_downstream", "inproc://dev_null",
                                           result_endpoint, request_interrupt,
                                           std::bind(&disk_work, std::placeholders::_1,
                                                     std::placeholders::_2, std::placeholders::_3))));

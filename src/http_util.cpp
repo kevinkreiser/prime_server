@@ -2,11 +2,9 @@
 
 #include <algorithm>
 #include <cctype>
-#include <dirent.h>
+#include <filesystem>
 #include <fstream>
 #include <map>
-#include <sys/stat.h>
-#include <unistd.h>
 
 using namespace prime_server::http;
 namespace {
@@ -43,6 +41,7 @@ worker_t::result_t disk_result(const http_request_t& request,
                                const std::string& root,
                                bool allow_listing,
                                size_t size_limit) {
+  namespace fs = std::filesystem;
   worker_t::result_t result{false, {}, {}};
   // get the canonical path
   auto path = request.path;
@@ -51,12 +50,11 @@ worker_t::result_t disk_result(const http_request_t& request,
     if (p + 1 == i)
       path[p] = path[i] = '/';
   auto canonical = root + path;
-  // stat it
-  struct stat s;
-  if (stat(canonical.c_str(), &s))
-    s.st_mode = 0;
+  // check what we have
+  std::error_code ec;
+  auto status = fs::status(canonical, ec);
   // a regular file
-  if (static_cast<size_t>(s.st_size) <= size_limit && (s.st_mode & S_IFREG)) {
+  if (fs::is_regular_file(status) && fs::file_size(canonical, ec) <= size_limit) {
     // have to be able to open it
     std::fstream input(canonical, std::ios::in | std::ios::binary);
     if (input) {
@@ -66,21 +64,18 @@ worker_t::result_t disk_result(const http_request_t& request,
       result.messages = {response.to_string()};
     }
   } // a directory
-  else if (allow_listing && (s.st_mode & S_IFDIR)) {
+  else if (allow_listing && fs::is_directory(status)) {
     // loop over the directory contents
-    auto* dir = opendir(canonical.c_str());
-    struct dirent* entry;
-    std::map<std::string, unsigned char> entries;
-    while ((entry = readdir(dir)) != nullptr)
-      entries.emplace(entry->d_name, entry->d_type);
-    closedir(dir);
+    std::map<std::string, bool> entries;
+    for (const auto& entry : fs::directory_iterator(canonical, ec))
+      entries.emplace(entry.path().filename().string(), entry.is_directory());
     // generate the html
     std::string listing;
-    for (const auto& entry : entries) {
-      if (entry.second == DT_REG)
-        listing += "<a href='" + entry.first + "'>" + entry.first + "</a><br/>";
-      else if (entry.second == DT_DIR && entry.first != ".")
-        listing += "<a href='" + entry.first + "/'>" + entry.first + "</a><br/>";
+    for (const auto& [name, is_dir] : entries) {
+      if (!is_dir)
+        listing += "<a href='" + name + "'>" + name + "</a><br/>";
+      else if (name != ".")
+        listing += "<a href='" + name + "/'>" + name + "</a><br/>";
     }
     http_response_t response(200, "OK", listing, headers_t{CORS, HTML_MIME});
     response.from_info(request_info);

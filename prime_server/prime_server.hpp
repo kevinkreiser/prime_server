@@ -2,9 +2,10 @@
 
 // some version info
 #define PRIME_SERVER_VERSION_MAJOR 0
-#define PRIME_SERVER_VERSION_MINOR 8
+#define PRIME_SERVER_VERSION_MINOR 9
 #define PRIME_SERVER_VERSION_PATCH 0
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <list>
@@ -96,12 +97,9 @@ protected:
                 "request_info_t::id must be uint32_t");
   static_assert(std::is_same<decltype(request_info_t().time_stamp), uint32_t>::value,
                 "request_info_t::time_stamp must be uint32_t");
-  static constexpr request_info_t sfinae_test_info{};
-  static_assert(static_cast<const void*>(&sfinae_test_info) ==
-                    static_cast<const void*>(&sfinae_test_info.id),
+  static_assert(offsetof(request_info_t, id) == 0,
                 "request_info_t::id must be the first member");
-  static_assert(static_cast<const void*>(&sfinae_test_info.id + 1) ==
-                    static_cast<const void*>(&sfinae_test_info.time_stamp),
+  static_assert(offsetof(request_info_t, time_stamp) == sizeof(uint32_t),
                 "request_info_t::time_stamp must be the second member");
 
   zmq::socket_t client;

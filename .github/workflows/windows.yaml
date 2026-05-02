@@ -1,0 +1,80 @@
+name: prime_server windows
+on: [pull_request]
+
+jobs:
+  build:
+    name: build and test
+    runs-on: windows-latest
+    env:
+      VCPKG_DEFAULT_TRIPLET: x64-windows
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: vcpkg cache
+        uses: actions/cache@v4
+        with:
+          path: C:\vcpkg\installed
+          key: vcpkg-windows-x64-${{ hashFiles('.github/workflows/windows.yaml') }}
+          restore-keys: vcpkg-windows-x64-
+
+      - name: dependencies
+        shell: pwsh
+        run: |
+          vcpkg install zeromq czmq curl[core]
+
+      - name: build
+        shell: pwsh
+        run: |
+          cmake -B build -S . `
+            -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" `
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo `
+            -DENABLE_WERROR=Off
+          cmake --build build --config RelWithDebInfo -j $env:NUMBER_OF_PROCESSORS
+
+      - name: test
+        shell: pwsh
+        run: |
+          ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -j $env:NUMBER_OF_PROCESSORS
+
+      - name: smoke test (start server, request, graceful shutdown)
+        shell: pwsh
+        run: |
+          Add-Type -TypeDefinition @"
+          using System;
+          using System.Runtime.InteropServices;
+          public class ConsoleCtrl {
+              [DllImport("kernel32.dll")]
+              public static extern bool GenerateConsoleCtrlEvent(uint dwCtrlEvent, uint dwProcessGroupId);
+              [DllImport("kernel32.dll")]
+              public static extern bool SetConsoleCtrlHandler(IntPtr handler, bool add);
+          }
+          "@
+
+          $proc = Start-Process -FilePath "build/RelWithDebInfo/prime_echod.exe" `
+            -ArgumentList "tcp://*:8002", "1", "1" `
+            -PassThru -NoNewWindow
+          Start-Sleep -Seconds 1
+
+          $code = (curl.exe -s -o NUL -w "%{http_code}" http://127.0.0.1:8002/test)
+          if ($code -ne "200") {
+            Stop-Process -Id $proc.Id -Force
+            throw "Expected 200, got $code"
+          }
+          Write-Host "request returned $code"
+
+          # In a real terminal: taskkill /PID $proc.Id
+          # CI is headless (no console window) so taskkill can't deliver CTRL_CLOSE_EVENT.
+          # We use GenerateConsoleCtrlEvent directly instead.
+          [ConsoleCtrl]::SetConsoleCtrlHandler([IntPtr]::Zero, $true)
+          [ConsoleCtrl]::GenerateConsoleCtrlEvent(1, 0)  # CTRL_BREAK_EVENT
+          [ConsoleCtrl]::SetConsoleCtrlHandler([IntPtr]::Zero, $false)
+
+          # 1s drain + buffer
+          $exited = $proc.WaitForExit(3000)
+          if (!$exited) {
+            Stop-Process -Id $proc.Id -Force
+            throw "Server did not shut down gracefully within 3 seconds"
+          }
+          Write-Host "server exited gracefully with code $($proc.ExitCode)"

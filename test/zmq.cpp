@@ -3,7 +3,6 @@
 
 #include <string>
 #include <thread>
-#include <unistd.h>
 
 namespace {
 
@@ -20,7 +19,7 @@ void server_thread(zmq::context_t& context, const std::string& request, size_t i
   int disabled = 0;
   server.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
   server.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
-  server.bind("ipc:///tmp/test_server");
+  server.bind("tcp://127.0.0.1:15700");
 
   zmq::message_t identity;
 
@@ -51,7 +50,7 @@ void client_thread(zmq::context_t& context, const std::string& request, size_t i
   int disabled = 0;
   client.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
   client.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
-  client.connect("ipc:///tmp/test_server");
+  client.connect("tcp://127.0.0.1:15700");
   client.recv_all(0);
 
   uint8_t identity[256];
@@ -88,8 +87,8 @@ void test_batch_overflow_synchronous() {
   server.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
   client.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
   client.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
-  server.bind("ipc:///tmp/test_server");
-  client.connect("ipc:///tmp/test_server");
+  server.bind("tcp://127.0.0.1:15700");
+  client.connect("tcp://127.0.0.1:15700");
 
   // great eachother
   auto client_identity = std::move(server.recv_all(0).front());
@@ -141,8 +140,8 @@ void test_batch_overflow_router_dealer() {
                           7);
   dealer.setsockopt(ZMQ_IDENTITY, identity.data(), identity.size());
 
-  dealer.connect("ipc:///tmp/test_router_dealer");
-  router.bind("ipc:///tmp/test_router_dealer");
+  dealer.connect("inproc://test_router_dealer");
+  router.bind("inproc://test_router_dealer");
 
   // make lots of little requests
   size_t request_count = 100000;
@@ -205,10 +204,10 @@ void test_batch_overflow() {
   dealer.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
   router.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
   router.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
-  client.connect("ipc:///tmp/test_server");
-  server.bind("ipc:///tmp/test_server");
-  dealer.connect("ipc:///tmp/test_router_dealer");
-  router.bind("ipc:///tmp/test_router_dealer");
+  client.connect("tcp://127.0.0.1:15700");
+  server.bind("tcp://127.0.0.1:15700");
+  dealer.connect("inproc://test_router_dealer");
+  router.bind("inproc://test_router_dealer");
 
   // great eachother
   server.recv_all(0);
@@ -247,11 +246,11 @@ void test_stream_notify() {
   // server
   zmq::context_t context;
   zmq::socket_t server(context, ZMQ_STREAM);
-  server.bind("ipc:///tmp/test_server");
+  server.bind("tcp://127.0.0.1:15700");
 
   // client
   auto* client = new zmq::socket_t(context, ZMQ_STREAM);
-  client->connect("ipc:///tmp/test_server");
+  client->connect("tcp://127.0.0.1:15700");
   uint8_t identity[256];
   size_t identity_size = sizeof(identity);
   client->getsockopt(ZMQ_IDENTITY, identity, &identity_size);
@@ -292,7 +291,7 @@ void test_pub_sub() {
         zmq::socket_t pub(context, ZMQ_PUB);
         int disabled = 0;
         pub.setsockopt(ZMQ_SNDHWM, &disabled, sizeof(disabled));
-        pub.bind("ipc:///tmp/test_pub_sub");
+        pub.bind("inproc://test_pub_sub");
         while (true)
           pub.send("listen to this", strlen("listen to this"), ZMQ_DONTWAIT);
       },
@@ -306,7 +305,7 @@ void test_pub_sub() {
         int disabled = 0;
         sub.setsockopt(ZMQ_RCVHWM, &disabled, sizeof(disabled));
         sub.setsockopt(ZMQ_SUBSCRIBE, "", 0);
-        sub.connect("ipc:///tmp/test_pub_sub");
+        sub.connect("inproc://test_pub_sub");
 
         zmq::pollitem_t item{sub, 0, ZMQ_POLLIN, 0};
         zmq::poll(&item, 1, -1);
@@ -327,7 +326,7 @@ void test_pub_sub() {
 
 int main() {
   // make this whole thing bail if it doesnt finish fast
-  alarm(60);
+  testing::set_timeout(60);
 
   testing::suite suite("zmq");
 

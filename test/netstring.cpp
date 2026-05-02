@@ -8,7 +8,6 @@
 #include <iterator>
 #include <memory>
 #include <thread>
-#include <unistd.h>
 #include <unordered_set>
 
 using namespace prime_server;
@@ -43,10 +42,10 @@ public:
 
 void test_streaming_server() {
   zmq::context_t context;
-  testable_netstring_server_t server(context, "ipc:///tmp/test_netstring_server",
-                                     "ipc:///tmp/test_netstring_proxy_upstream",
-                                     "ipc:///tmp/test_netstring_results",
-                                     "ipc:///tmp/test_netstring_interrupt");
+  testable_netstring_server_t server(context, "tcp://127.0.0.1:15702",
+                                     "inproc://test_netstring_proxy_upstream",
+                                     "inproc://test_netstring_results",
+                                     "inproc://test_netstring_interrupt");
   server.passify();
 
   netstring_entity_t request;
@@ -65,7 +64,7 @@ void test_streaming_client() {
   size_t responses = 0;
   zmq::context_t context;
   testable_netstring_client_t client(
-      context, "ipc:///tmp/test_netstring_server",
+      context, "tcp://127.0.0.1:15702",
       []() { return std::make_pair<void*, size_t>(nullptr, 0); },
       [&all, &responses](const void* data, size_t size) {
         auto response = netstring_entity_t::from_string(static_cast<const char*>(data), size);
@@ -117,12 +116,12 @@ std::string random_string(size_t length) {
 
 void netstring_client_work(zmq::context_t& context) {
   // client makes requests and gets back responses in a batch fashion
-  const size_t total = 100000;
+  static constexpr size_t total = 100000;
   std::unordered_set<std::string> requests;
   size_t received = 0;
   std::string request;
   netstring_client_t client(
-      context, "ipc:///tmp/test_netstring_server",
+      context, "tcp://127.0.0.1:15702",
       [&requests, &request]() {
         // we want more requests
         if (requests.size() < total) {
@@ -160,24 +159,24 @@ void test_parallel_clients() {
   std::thread server(
       std::bind(&netstring_server_t::serve,
                 netstring_server_t(
-                    context, "ipc:///tmp/test_netstring_server",
-                    "ipc:///tmp/test_netstring_proxy_upstream", "ipc:///tmp/test_netstring_results",
-                    "ipc:///tmp/test_netstring_interrupt", false, MAX_REQUEST_SIZE, -1,
+                    context, "tcp://127.0.0.1:15702",
+                    "inproc://test_netstring_proxy_upstream", "inproc://test_netstring_results",
+                    "inproc://test_netstring_interrupt", false, MAX_REQUEST_SIZE, -1,
                     [](const netstring_entity_t& r) -> bool { return r.body == "health_check"; },
                     netstring_entity_t::to_string("foo_bar_baz"))));
   server.detach();
 
   // load balancer for parsing
   std::thread proxy(
-      std::bind(&proxy_t::forward, proxy_t(context, "ipc:///tmp/test_netstring_proxy_upstream",
-                                           "ipc:///tmp/test_netstring_proxy_downstream")));
+      std::bind(&proxy_t::forward, proxy_t(context, "inproc://test_netstring_proxy_upstream",
+                                           "inproc://test_netstring_proxy_downstream")));
   proxy.detach();
 
   // echo worker
   std::thread worker(
       std::bind(&worker_t::work,
-                worker_t(context, "ipc:///tmp/test_netstring_proxy_downstream", "ipc:///dev/null",
-                         "ipc:///tmp/test_netstring_results", "ipc:///tmp/test_netstring_interrupt",
+                worker_t(context, "inproc://test_netstring_proxy_downstream", "inproc://dev_null",
+                         "inproc://test_netstring_results", "inproc://test_netstring_interrupt",
                          [](const std::list<zmq::message_t>& job, void*,
                             worker_t::interrupt_function_t&) {
                            worker_t::result_t result{false, {}, {}};
@@ -201,7 +200,7 @@ void test_malformed() {
   zmq::context_t context;
   std::string request = "isch_doch_unsinn";
   netstring_client_t client(
-      context, "ipc:///tmp/test_netstring_server",
+      context, "tcp://127.0.0.1:15702",
       [&request]() {
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
@@ -221,7 +220,7 @@ void test_too_large() {
   zmq::context_t context;
   std::string request = netstring_entity_t::to_string(std::string(MAX_REQUEST_SIZE + 10, '!'));
   netstring_client_t client(
-      context, "ipc:///tmp/test_netstring_server",
+      context, "tcp://127.0.0.1:15702",
       [&request]() {
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
@@ -248,7 +247,7 @@ void test_large_request() {
 
   // see if we get it back
   netstring_client_t client(
-      context, "ipc:///tmp/test_netstring_server",
+      context, "tcp://127.0.0.1:15702",
       [&request]() {
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
@@ -269,7 +268,7 @@ void test_health_check() {
   zmq::context_t context;
   auto request = netstring_entity_t::to_string("health_check");
   netstring_client_t client(
-      context, "ipc:///tmp/test_netstring_server",
+      context, "tcp://127.0.0.1:15702",
       [&request]() {
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
@@ -298,7 +297,7 @@ int main() {
   suite.test(TEST_CASE(test_entity));
 
   // fail if it hangs
-  alarm(300);
+  testing::set_timeout(300);
 
   suite.test(TEST_CASE(test_parallel_clients));
 

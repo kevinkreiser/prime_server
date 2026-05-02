@@ -6,9 +6,14 @@
 #include <chrono>
 #include <csignal>
 #include <cstring>
-#include <sys/wait.h>
 #include <thread>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <sys/wait.h>
 #include <unistd.h>
+#endif
 
 using namespace prime_server;
 
@@ -27,10 +32,10 @@ void test_shutdown() {
   // request_timeout=30 is much larger than the 1s poll cap, so without the cap serve() would be
   // stuck for up to 30s before noticing shutting_down.
   std::thread server_thread([&]() {
-    netstring_server_t server(context, "ipc:///tmp/test_shutdown_server",
-                              "ipc:///tmp/test_shutdown_proxy_upstream",
-                              "ipc:///tmp/test_shutdown_results",
-                              "ipc:///tmp/test_shutdown_interrupt",
+    netstring_server_t server(context, "tcp://127.0.0.1:15708",
+                              "inproc://test_shutdown_proxy_upstream",
+                              "inproc://test_shutdown_results",
+                              "inproc://test_shutdown_interrupt",
                               false, DEFAULT_MAX_REQUEST_SIZE, 30);
     server.serve();
     serve_returned = true;
@@ -41,17 +46,17 @@ void test_shutdown() {
   // cap its poll or check that it returned. it just gives the worker sockets something to
   // connect to so ZMQ doesn't block on context teardown.
   std::thread proxy_thread([&]() {
-    proxy_t proxy(context, "ipc:///tmp/test_shutdown_proxy_upstream",
-                           "ipc:///tmp/test_shutdown_proxy_downstream");
+    proxy_t proxy(context, "inproc://test_shutdown_proxy_upstream",
+                           "inproc://test_shutdown_proxy_downstream");
     proxy.forward();
   });
   proxy_thread.detach();
 
   // work() poll is capped to 1s just like serve(), so it notices shutting_down promptly.
   std::thread worker_thread([&]() {
-    worker_t worker(context, "ipc:///tmp/test_shutdown_proxy_downstream",
-                    "ipc:///dev/null", "ipc:///tmp/test_shutdown_results",
-                    "ipc:///tmp/test_shutdown_interrupt",
+    worker_t worker(context, "inproc://test_shutdown_proxy_downstream",
+                    "inproc://dev_null", "inproc://test_shutdown_results",
+                    "inproc://test_shutdown_interrupt",
                     [](const std::list<zmq::message_t>&, void*,
                        worker_t::interrupt_function_t&) -> worker_t::result_t {
                       return {false, {"ok"}, {}};
@@ -65,7 +70,13 @@ void test_shutdown() {
   std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
   // quiesce handler catches this and sets shutting_down after the 1s drain
+#ifdef _WIN32
+  // CTRL_C_EVENT is ignored for process groups created with CREATE_NEW_PROCESS_GROUP,
+  // so we must use CTRL_BREAK_EVENT to reach our own process group
+  GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, GetCurrentProcessId());
+#else
   kill(getpid(), SIGTERM);
+#endif
 
   // 1s drain + up to 1s poll + 1s buffer = 3s should be plenty
   std::this_thread::sleep_for(std::chrono::seconds(3));
@@ -91,10 +102,10 @@ void test_interrupt_from_shutdown() {
 
   // server with a generous request_timeout so timeouts don't interfere
   std::thread server_thread([&]() {
-    netstring_server_t server(context, "ipc:///tmp/test_bail_sd_server",
-                              "ipc:///tmp/test_bail_sd_proxy_up",
-                              "ipc:///tmp/test_bail_sd_results",
-                              "ipc:///tmp/test_bail_sd_interrupt", false, DEFAULT_MAX_REQUEST_SIZE,
+    netstring_server_t server(context, "tcp://127.0.0.1:15709",
+                              "inproc://test_bail_sd_proxy_up",
+                              "inproc://test_bail_sd_results",
+                              "inproc://test_bail_sd_interrupt", false, DEFAULT_MAX_REQUEST_SIZE,
                               30);
     server.serve();
   });
@@ -102,8 +113,8 @@ void test_interrupt_from_shutdown() {
 
   // proxy gives worker sockets something to connect to
   std::thread proxy_thread([&]() {
-    proxy_t proxy(context, "ipc:///tmp/test_bail_sd_proxy_up",
-                  "ipc:///tmp/test_bail_sd_proxy_down");
+    proxy_t proxy(context, "inproc://test_bail_sd_proxy_up",
+                  "inproc://test_bail_sd_proxy_down");
     proxy.forward();
   });
   proxy_thread.detach();
@@ -111,8 +122,8 @@ void test_interrupt_from_shutdown() {
   // worker whose work_function cooperatively calls bail() in a loop
   std::thread worker_thread([&]() {
     worker_t worker(
-        context, "ipc:///tmp/test_bail_sd_proxy_down", "ipc:///dev/null",
-        "ipc:///tmp/test_bail_sd_results", "ipc:///tmp/test_bail_sd_interrupt",
+        context, "inproc://test_bail_sd_proxy_down", "inproc://dev_null",
+        "inproc://test_bail_sd_results", "inproc://test_bail_sd_interrupt",
         [&](const std::list<zmq::message_t>&, void*,
             worker_t::interrupt_function_t& bail) -> worker_t::result_t {
           work_started = true;
@@ -144,7 +155,7 @@ void test_interrupt_from_shutdown() {
   std::thread client_thread([&]() {
     std::string request = netstring_entity_t::to_string("test");
     netstring_client_t client(
-        context, "ipc:///tmp/test_bail_sd_server",
+        context, "tcp://127.0.0.1:15709",
         [&request]() {
           return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
         },
@@ -160,7 +171,11 @@ void test_interrupt_from_shutdown() {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
   // trigger shutdown: draining for 1s, then shutting_down fires
+#ifdef _WIN32
+  GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, GetCurrentProcessId());
+#else
   kill(getpid(), SIGTERM);
+#endif
 
   // 1s drain + up to 1s poll + 2s buffer
   std::this_thread::sleep_for(std::chrono::seconds(4));
@@ -179,13 +194,13 @@ void test_interrupt_from_shutdown() {
 
 int main() {
   // make this whole thing bail if it doesnt finish fast
-  alarm(60);
+  testing::set_timeout(60);
 
   testing::suite suite("shutdown");
 
-  suite.test(FORKED_TEST_CASE(test_shutdown));
+  suite.test(SUBPROCESS_TEST_CASE(test_shutdown));
 
-  suite.test(FORKED_TEST_CASE(test_interrupt_from_shutdown));
+  suite.test(SUBPROCESS_TEST_CASE(test_interrupt_from_shutdown));
 
   return suite.tear_down();
 }

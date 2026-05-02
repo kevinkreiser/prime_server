@@ -11,6 +11,11 @@
 #include <string>
 #include <unordered_map>
 
+// winnt.h defines DELETE as a macro (access right flag)
+#ifdef DELETE
+#undef DELETE
+#endif
+
 namespace prime_server {
 
 class http_client_t : public client_t {

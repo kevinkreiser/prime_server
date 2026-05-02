@@ -10,7 +10,6 @@
 #include <memory>
 #include <mutex>
 #include <thread>
-#include <unistd.h>
 #include <unordered_set>
 
 using namespace prime_server;
@@ -54,23 +53,23 @@ void test_early() {
 
   // server
   std::thread server(std::bind(&netstring_server_t::serve,
-                               netstring_server_t(context, "ipc:///tmp/test_early_server",
-                                                  "ipc:///tmp/test_early_proxy_upstream",
-                                                  "ipc:///tmp/test_early_results",
-                                                  "ipc:///tmp/test_early_interrupt", false)));
+                               netstring_server_t(context, "tcp://127.0.0.1:15703",
+                                                  "inproc://test_early_proxy_upstream",
+                                                  "inproc://test_early_results",
+                                                  "inproc://test_early_interrupt", false)));
   server.detach();
 
   // load balancer
   std::thread proxy(
-      std::bind(&proxy_t::forward, proxy_t(context, "ipc:///tmp/test_early_proxy_upstream",
-                                           "ipc:///tmp/test_early_proxy_downstream")));
+      std::bind(&proxy_t::forward, proxy_t(context, "inproc://test_early_proxy_upstream",
+                                           "inproc://test_early_proxy_downstream")));
   proxy.detach();
 
   // busy worker
   std::thread worker(std::bind(&testable_worker_t::work,
-                               testable_worker_t(context, "ipc:///tmp/test_early_proxy_downstream",
-                                                 "ipc:///dev/null", "ipc:///tmp/test_early_results",
-                                                 "ipc:///tmp/test_early_interrupt", busy_work)));
+                               testable_worker_t(context, "inproc://test_early_proxy_downstream",
+                                                 "inproc://dev_null", "inproc://test_early_results",
+                                                 "inproc://test_early_interrupt", busy_work)));
   worker.detach();
 
   // we want a client that is very fickle, we need the client to send a request and then bail right
@@ -80,7 +79,7 @@ void test_early() {
   // tries to collect n responses because it thinks it needs 0
   std::string request = netstring_entity_t::to_string("nei, will i noed");
   testable_client_t* client = new testable_client_t(
-      context, "ipc:///tmp/test_early_server",
+      context, "tcp://127.0.0.1:15703",
       [&request, &client]() {
         client->batch_size = 0;
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
@@ -101,10 +100,10 @@ void test_loop() {
 
   // server
   std::thread server(std::bind(&netstring_server_t::serve,
-                               netstring_server_t(context, "ipc:///tmp/test_loop_server",
-                                                  "ipc:///tmp/test_loop_proxy_upstream",
-                                                  "ipc:///tmp/test_loop_results",
-                                                  "ipc:///tmp/test_loop_interrupt", false)));
+                               netstring_server_t(context, "tcp://127.0.0.1:15704",
+                                                  "inproc://test_loop_proxy_upstream",
+                                                  "inproc://test_loop_results",
+                                                  "inproc://test_loop_interrupt", false)));
   server.detach();
 
   // we want a client that is very fickle, we need the client to send a request and then bail right
@@ -115,7 +114,7 @@ void test_loop() {
   std::string request = netstring_entity_t::to_string("nei, will i noed");
   testable_client_t* client;
   client = new testable_client_t(
-      context, "ipc:///tmp/test_loop_server",
+      context, "tcp://127.0.0.1:15704",
       [&request, &client]() {
         client->batch_size = 0;
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
@@ -125,15 +124,15 @@ void test_loop() {
 
   // load balancer
   std::thread proxy(
-      std::bind(&proxy_t::forward, proxy_t(context, "ipc:///tmp/test_loop_proxy_upstream",
-                                           "ipc:///tmp/test_loop_proxy_downstream")));
+      std::bind(&proxy_t::forward, proxy_t(context, "inproc://test_loop_proxy_upstream",
+                                           "inproc://test_loop_proxy_downstream")));
   proxy.detach();
 
   // busy worker
   std::thread worker(
       std::bind(&worker_t::work,
-                worker_t(context, "ipc:///tmp/test_loop_proxy_downstream", "ipc:///dev/null",
-                         "ipc:///tmp/test_loop_results", "ipc:///tmp/test_loop_interrupt",
+                worker_t(context, "inproc://test_loop_proxy_downstream", "inproc://dev_null",
+                         "inproc://test_loop_results", "inproc://test_loop_interrupt",
                          [](const std::list<zmq::message_t>&, void*,
                             worker_t::interrupt_function_t& interrupt) -> worker_t::result_t {
                            condition.notify_one();
@@ -157,29 +156,29 @@ void test_timeout() {
 
   // server
   std::thread server(std::bind(&netstring_server_t::serve,
-                               netstring_server_t(context, "ipc:///tmp/test_timeout_server",
-                                                  "ipc:///tmp/test_timeout_proxy_upstream",
-                                                  "ipc:///tmp/test_timeout_results",
-                                                  "ipc:///tmp/test_timeout_interrupt", false,
+                               netstring_server_t(context, "tcp://127.0.0.1:15705",
+                                                  "inproc://test_timeout_proxy_upstream",
+                                                  "inproc://test_timeout_results",
+                                                  "inproc://test_timeout_interrupt", false,
                                                   DEFAULT_MAX_REQUEST_SIZE, 1)));
   server.detach();
 
   // load balancer
   std::thread proxy(
-      std::bind(&proxy_t::forward, proxy_t(context, "ipc:///tmp/test_timeout_proxy_upstream",
-                                           "ipc:///tmp/test_timeout_proxy_downstream")));
+      std::bind(&proxy_t::forward, proxy_t(context, "inproc://test_timeout_proxy_upstream",
+                                           "inproc://test_timeout_proxy_downstream")));
   proxy.detach();
 
   // busy worker
   std::thread worker(
-      std::bind(&worker_t::work, worker_t(context, "ipc:///tmp/test_timeout_proxy_downstream",
-                                          "ipc:///dev/null", "ipc:///tmp/test_timeout_results",
-                                          "ipc:///tmp/test_timeout_interrupt", busy_work)));
+      std::bind(&worker_t::work, worker_t(context, "inproc://test_timeout_proxy_downstream",
+                                          "inproc://dev_null", "inproc://test_timeout_results",
+                                          "inproc://test_timeout_interrupt", busy_work)));
   worker.detach();
 
   std::string request = netstring_entity_t::to_string("wart uf mi");
   testable_client_t client(
-      context, "ipc:///tmp/test_timeout_server",
+      context, "tcp://127.0.0.1:15705",
       [&request]() {
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
@@ -197,7 +196,7 @@ void test_timeout() {
 
 int main() {
   // make this whole thing bail if it doesnt finish fast
-  alarm(60);
+  testing::set_timeout(60);
 
   testing::suite suite("interrupt");
 
