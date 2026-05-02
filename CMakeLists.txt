@@ -80,6 +80,11 @@ include_directories(${CURL_INCLUDEDIR} ${ZMQ_INCLUDEDIR} ${CZMQ_INCLUDEDIR})
 
 find_package(Threads REQUIRED)
 
+# Prevent Windows.h from defining min/max macros and pulling in rarely-used headers
+if(WIN32)
+  add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX)
+endif()
+
 # Include the hpp files
 include_directories(${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/prime_server)
 
