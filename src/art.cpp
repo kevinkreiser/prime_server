@@ -12,11 +12,14 @@ using namespace prime_server;
 #include <vector>
 #include <csignal>
 
-//configuration constants for various sockets
+// server_endpoint uses tcp:// because ZMQ_STREAM requires a network transport (tcp or ipc).
+// internal endpoints use inproc:// since server, proxy, and workers share one process.
+// on Windows, ipc:// (Unix domain sockets) is unavailable so tcp:// is the only option for
+// server-facing sockets; inproc:// works everywhere for in-process communication.
 const std::string server_endpoint = "tcp://*:8002";
-const std::string result_endpoint = "ipc:///tmp/result_endpoint";
-const std::string request_interrupt = "ipc:///tmp/request_interrupt";
-const std::string proxy_endpoint = "ipc:///tmp/proxy_endpoint";
+const std::string result_endpoint = "inproc://result_endpoint";
+const std::string request_interrupt = "inproc://request_interrupt";
+const std::string proxy_endpoint = "inproc://proxy_endpoint";
 
 //assortment of artisional content
 const std::vector<std::string> art = { "(_,_)", "(_|_)", "(_*_)",
@@ -74,7 +77,7 @@ int main(void) {
     //worker function could be defined inline here via lambda, it could be std::bind'd to an instance method
     //or simply just a free function like we have here
     workers.emplace_back(std::bind(&worker_t::work,
-      worker_t(context, proxy_endpoint + "_downstream", "ipc:///tmp/NO_ENDPOINT", result_endpoint,
+      worker_t(context, proxy_endpoint + "_downstream", "inproc://no_endpoint", result_endpoint,
                request_interrupt, &art_work)));
   }
 

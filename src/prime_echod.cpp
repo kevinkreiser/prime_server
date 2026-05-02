@@ -34,11 +34,12 @@ int main(int argc, char** argv) {
   // setup the signal handler to gracefully shutdown when requested with sigterm
   quiesce(argc > 3 ? std::stoul(argv[3]) : 28);
 
-  // change these to tcp://known.ip.address.with:port if you want to do this across machines
+  // inproc:// works within one process; use tcp:// to split components across machines or processes
+  // on linux ipc:// is a faster alternative to tcp for multiprocess mode, windows doesn't support it
   zmq::context_t context;
-  std::string result_endpoint = "ipc:///tmp/result_endpoint";
-  std::string request_interrupt = "ipc://request_interrupt";
-  std::string proxy_endpoint = "ipc:///tmp/proxy_endpoint";
+  std::string result_endpoint = "inproc://result_endpoint";
+  std::string request_interrupt = "inproc://request_interrupt";
+  std::string proxy_endpoint = "inproc://proxy_endpoint";
 
   // server
   std::thread server_thread =
@@ -54,7 +55,7 @@ int main(int argc, char** argv) {
   for (size_t i = 0; i < worker_concurrency; ++i) {
     echo_worker_threads.emplace_back(
         std::bind(&worker_t::work,
-                  worker_t(context, proxy_endpoint + "_downstream", "ipc:///dev/null",
+                  worker_t(context, proxy_endpoint + "_downstream", "inproc://dev_null",
                            result_endpoint, request_interrupt,
                            [](const std::list<zmq::message_t>& job, void* request_info,
                               worker_t::interrupt_function_t&) {

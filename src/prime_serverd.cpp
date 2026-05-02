@@ -26,7 +26,7 @@ int main(int argc, char** argv) {
 
   // number of jobs to do or server endpoint
   size_t requests = 0, prime_start = 0, prime_end = 0;
-  std::string server_endpoint = "ipc:///tmp/server_endpoint";
+  std::string server_endpoint = "tcp://*:8001";
   if (std::string(argv[1]).find("://") != std::string::npos)
     server_endpoint = argv[1];
   else {
@@ -60,12 +60,12 @@ int main(int argc, char** argv) {
     health_check_response = http_response_t{200, "OK"}.to_string();
   }
 
-  // change these to tcp://known.ip.address.with:port if you want to do this across machines
+  // inproc:// works within one process; use tcp:// to split components across machines or processes
   zmq::context_t context;
-  std::string result_endpoint = "ipc:///tmp/result_endpoint";
-  std::string request_interrupt = "ipc:///tmp/request_interrupt";
-  std::string parse_proxy_endpoint = "ipc:///tmp/parse_proxy_endpoint";
-  std::string compute_proxy_endpoint = "ipc:///tmp/compute_proxy_endpoint";
+  std::string result_endpoint = "inproc://result_endpoint";
+  std::string request_interrupt = "inproc://request_interrupt";
+  std::string parse_proxy_endpoint = "inproc://parse_proxy_endpoint";
+  std::string compute_proxy_endpoint = "inproc://compute_proxy_endpoint";
 
   // server
   std::thread server_thread = std::thread(
@@ -146,7 +146,7 @@ int main(int argc, char** argv) {
   for (size_t i = 0; i < worker_concurrency; ++i) {
     compute_worker_threads.emplace_back(
         std::bind(&worker_t::work,
-                  worker_t(context, compute_proxy_endpoint + "_downstream", "ipc:///dev/null",
+                  worker_t(context, compute_proxy_endpoint + "_downstream", "inproc://dev_null",
                            result_endpoint, request_interrupt,
                            [](const std::list<zmq::message_t>& job, void* request_info,
                               worker_t::interrupt_function_t&) {
