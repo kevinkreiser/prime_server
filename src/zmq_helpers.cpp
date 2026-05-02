@@ -1,9 +1,14 @@
 #include "zmq_helpers.hpp"
+#ifdef _WIN32
+#include <winsock2.h>
+#else
 #include <arpa/inet.h>
+#endif
 #include <cerrno>
 #include <ctime>
 #include <czmq.h>
 #include <random>
+#include <stdexcept>
 
 namespace {
 
