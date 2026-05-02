@@ -8,7 +8,6 @@
 #include <iterator>
 #include <memory>
 #include <thread>
-#include <unistd.h>
 #include <unordered_set>
 
 using namespace prime_server;
@@ -61,16 +60,16 @@ void test_unshaped() {
 
   // server
   std::thread server(std::bind(&netstring_server_t::serve,
-                               netstring_server_t(context, "ipc:///tmp/test_unshaped_server",
-                                                  "ipc:///tmp/test_unshaped_proxy_upstream",
-                                                  "ipc:///tmp/test_unshaped_results",
-                                                  "ipc:///tmp/test_unshaped_interrupt", false)));
+                               netstring_server_t(context, "tcp://127.0.0.1:15706",
+                                                  "inproc://test_unshaped_proxy_upstream",
+                                                  "inproc://test_unshaped_results",
+                                                  "inproc://test_unshaped_interrupt", false)));
   server.detach();
 
   // load balancer for parsing
   std::thread proxy(std::bind(&proxy_t::forward,
-                              testable_proxy_t(context, "ipc:///tmp/test_unshaped_proxy_upstream",
-                                               "ipc:///tmp/test_unshaped_proxy_downstream")));
+                              testable_proxy_t(context, "inproc://test_unshaped_proxy_upstream",
+                                               "inproc://test_unshaped_proxy_downstream")));
   proxy.detach();
 
   // a or b workers
@@ -78,8 +77,8 @@ void test_unshaped() {
     std::thread worker(
         std::bind(&worker_t::work,
                   worker_t(
-                      context, "ipc:///tmp/test_unshaped_proxy_downstream", "ipc:///dev/null",
-                      "ipc:///tmp/test_unshaped_results", "ipc:///tmp/test_unshaped_interrupt",
+                      context, "inproc://test_unshaped_proxy_downstream", "inproc://dev_null",
+                      "inproc://test_unshaped_results", "inproc://test_unshaped_interrupt",
                       [response](const std::list<zmq::message_t>&, void*,
                                  worker_t::interrupt_function_t&) {
                         worker_t::result_t result{false,
@@ -95,7 +94,7 @@ void test_unshaped() {
   // B workers
   std::list<std::string> responses;
   std::thread client(std::bind(&netstring_client_work, std::ref(context), "A", std::ref(responses),
-                               "ipc:///tmp/test_unshaped_server", 10000, 1));
+                               "tcp://127.0.0.1:15706", 10000, 1));
   client.join();
   size_t as = 0;
   size_t bs = 0;
@@ -113,18 +112,18 @@ void test_shaped() {
 
   // server
   std::thread server(std::bind(&netstring_server_t::serve,
-                               netstring_server_t(context, "ipc:///tmp/test_shaped_server",
-                                                  "ipc:///tmp/test_shaped_proxy_upstream",
-                                                  "ipc:///tmp/test_shaped_results",
-                                                  "ipc:///tmp/test_shaped_interrupt", false)));
+                               netstring_server_t(context, "tcp://127.0.0.1:15707",
+                                                  "inproc://test_shaped_proxy_upstream",
+                                                  "inproc://test_shaped_results",
+                                                  "inproc://test_shaped_interrupt", false)));
   server.detach();
 
   // load balancer for parsing that favors heartbeats (ie workers) based on whats in the job to be
   // forwarded returning a nullptr means you dont have a preference
   std::thread proxy(
       std::bind(&proxy_t::forward,
-                testable_proxy_t(context, "ipc:///tmp/test_shaped_proxy_upstream",
-                                 "ipc:///tmp/test_shaped_proxy_downstream",
+                testable_proxy_t(context, "inproc://test_shaped_proxy_upstream",
+                                 "inproc://test_shaped_proxy_downstream",
                                  [](const std::list<zmq::message_t>& heart_beats,
                                     const std::list<zmq::message_t>& job) -> const zmq::message_t* {
                                    // have a look at each heartbeat
@@ -149,8 +148,8 @@ void test_shaped() {
     std::thread worker(
         std::bind(&worker_t::work,
                   worker_t(
-                      context, "ipc:///tmp/test_shaped_proxy_downstream", "ipc:///dev/null",
-                      "ipc:///tmp/test_shaped_results", "ipc:///tmp/test_shaped_interrupt",
+                      context, "inproc://test_shaped_proxy_downstream", "inproc://dev_null",
+                      "inproc://test_shaped_results", "inproc://test_shaped_interrupt",
                       [response](const std::list<zmq::message_t>&, void*,
                                  worker_t::interrupt_function_t&) {
                         worker_t::result_t result{false,
@@ -166,7 +165,7 @@ void test_shaped() {
   // ready
   std::list<std::string> responses;
   std::thread client(std::bind(&netstring_client_work, std::ref(context), "A", std::ref(responses),
-                               "ipc:///tmp/test_shaped_server", 10000, 1));
+                               "tcp://127.0.0.1:15707", 10000, 1));
   client.join();
   size_t as = 0;
   size_t bs = 0;
@@ -183,7 +182,7 @@ void test_shaped() {
 
 int main() {
   // make this whole thing bail if it doesnt finish fast
-  alarm(240);
+  testing::set_timeout(240);
 
   testing::suite suite("shaping");
 

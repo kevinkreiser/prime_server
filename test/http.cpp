@@ -8,7 +8,6 @@
 #include <iterator>
 #include <memory>
 #include <thread>
-#include <unistd.h>
 #include <unordered_set>
 #include <vector>
 
@@ -66,9 +65,9 @@ public:
 
 void test_streaming_server() {
   zmq::context_t context;
-  testable_http_server_t server(context, "ipc:///tmp/test_http_server",
-                                "ipc:///tmp/test_http_proxy_upstream", "ipc:///tmp/test_http_results",
-                                "ipc:///tmp/test_http_interrupt");
+  testable_http_server_t server(context, "tcp://127.0.0.1:15701",
+                                "inproc://test_http_proxy_upstream", "inproc://test_http_results",
+                                "inproc://test_http_interrupt");
   server.passify();
 
   testable_http_request_t request;
@@ -89,7 +88,7 @@ void test_streaming_client() {
   size_t responses = 0;
   zmq::context_t context;
   testable_http_client_t client(
-      context, "ipc:///tmp/test_http_server",
+      context, "tcp://127.0.0.1:15701",
       []() { return std::make_pair<void*, size_t>(nullptr, 0); },
       [&all, &responses](const void* data, size_t size) {
         std::string response(static_cast<const char*>(data), size);
@@ -287,8 +286,8 @@ void test_shortcircuit() {
   // a server who lets us snoop on what its doing
   zmq::context_t context;
   testable_http_server_t server(
-      context, "ipc:///tmp/test_http_server", "ipc:///tmp/test_http_proxy_upstream",
-      "ipc:///tmp/test_http_results", "ipc:///tmp/test_http_interrupt", false, MAX_REQUEST_SIZE, -1,
+      context, "tcp://127.0.0.1:15701", "inproc://test_http_proxy_upstream",
+      "inproc://test_http_results", "inproc://test_http_interrupt", false, MAX_REQUEST_SIZE, -1,
       [](const http_request_t& r) -> bool { return r.path == "/health_check"; },
       http_response_t{200, "OK", "foo_bar_baz"}.to_string());
   server.passify();
@@ -337,7 +336,7 @@ void http_client_work(zmq::context_t& context) {
   size_t received = 0;
   std::string request;
   http_client_t client(
-      context, "ipc:///tmp/test_http_server",
+      context, "tcp://127.0.0.1:15701",
       [&requests, &request]() {
         // we want more requests
         if (requests.size() < total) {
@@ -376,8 +375,8 @@ void test_parallel_clients() {
   std::thread server(
       std::bind(&http_server_t::serve,
                 http_server_t(
-                    context, "ipc:///tmp/test_http_server", "ipc:///tmp/test_http_proxy_upstream",
-                    "ipc:///tmp/test_http_results", "ipc:///tmp/test_http_interrupt", false,
+                    context, "tcp://127.0.0.1:15701", "inproc://test_http_proxy_upstream",
+                    "inproc://test_http_results", "inproc://test_http_interrupt", false,
                     MAX_REQUEST_SIZE, -1,
                     [](const http_request_t& r) -> bool { return r.path == "/health_check"; },
                     http_response_t{200, "OK", "foo_bar_baz"}.to_string())));
@@ -385,15 +384,15 @@ void test_parallel_clients() {
 
   // load balancer for parsing
   std::thread proxy(
-      std::bind(&proxy_t::forward, proxy_t(context, "ipc:///tmp/test_http_proxy_upstream",
-                                           "ipc:///tmp/test_http_proxy_downstream")));
+      std::bind(&proxy_t::forward, proxy_t(context, "inproc://test_http_proxy_upstream",
+                                           "inproc://test_http_proxy_downstream")));
   proxy.detach();
 
   // echo worker
   std::thread worker(
       std::bind(&worker_t::work,
-                worker_t(context, "ipc:///tmp/test_http_proxy_downstream", "ipc:///dev/null",
-                         "ipc:///tmp/test_http_results", "ipc:///tmp/test_http_interrupt",
+                worker_t(context, "inproc://test_http_proxy_downstream", "inproc://dev_null",
+                         "inproc://test_http_results", "inproc://test_http_interrupt",
                          [](const std::list<zmq::message_t>& job, void* request_info,
                             worker_t::interrupt_function_t&) {
                            // could be a get or a post
@@ -427,7 +426,7 @@ void test_malformed() {
   zmq::context_t context;
   std::string request = "isch_doch_unsinn";
   http_client_t client(
-      context, "ipc:///tmp/test_http_server",
+      context, "tcp://127.0.0.1:15701",
       [&request]() {
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
@@ -448,7 +447,7 @@ void test_too_large() {
   std::string request =
       http_request_t(POST, "/", std::string(MAX_REQUEST_SIZE + 10, '!')).to_string();
   http_client_t client(
-      context, "ipc:///tmp/test_http_server",
+      context, "tcp://127.0.0.1:15701",
       [&request]() {
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
@@ -475,7 +474,7 @@ void test_large_request() {
 
   // see if we get it back
   http_client_t client(
-      context, "ipc:///tmp/test_http_server",
+      context, "tcp://127.0.0.1:15701",
       [&request]() {
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
@@ -497,7 +496,7 @@ void test_health_check() {
   zmq::context_t context;
   auto request = http_request_t{GET, "/health_check"}.to_string();
   http_client_t client(
-      context, "ipc:///tmp/test_http_server",
+      context, "tcp://127.0.0.1:15701",
       [&request]() {
         return std::make_pair(static_cast<const void*>(request.c_str()), request.size());
       },
@@ -603,7 +602,7 @@ int main() {
   suite.test(TEST_CASE(test_shortcircuit));
 
   // fail if it hangs
-  alarm(300);
+  testing::set_timeout(300);
 
   suite.test(TEST_CASE(test_parallel_clients));
 
