@@ -6,6 +6,7 @@
 #include <chrono>
 #include <csignal>
 #include <cstring>
+#include <iostream>
 #include <thread>
 
 #ifdef _WIN32
@@ -71,14 +72,26 @@ void test_shutdown() {
 
   // quiesce handler catches this and sets shutting_down after the 1s drain
 #ifdef _WIN32
-  // target our own process group (created by CreateProcess with CREATE_NEW_PROCESS_GROUP)
-  GenerateConsoleCtrlEvent(CTRL_C_EVENT, GetCurrentProcessId());
+  // CTRL_C_EVENT is ignored for process groups created with CREATE_NEW_PROCESS_GROUP,
+  // so we must use CTRL_BREAK_EVENT to reach our own process group
+  std::cerr << "sending CTRL_BREAK_EVENT to pid " << GetCurrentProcessId() << std::endl;
+  auto ok = GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, GetCurrentProcessId());
+  std::cerr << "GenerateConsoleCtrlEvent returned " << ok
+            << " (error=" << (ok ? 0 : GetLastError()) << ")" << std::endl;
 #else
   kill(getpid(), SIGTERM);
 #endif
 
+  std::cerr << "waiting for shutdown (draining=" << draining()
+            << " shutting_down=" << shutting_down() << ")" << std::endl;
+
   // 1s drain + up to 1s poll + 1s buffer = 3s should be plenty
   std::this_thread::sleep_for(std::chrono::seconds(3));
+
+  std::cerr << "after wait: draining=" << draining()
+            << " shutting_down=" << shutting_down()
+            << " serve_returned=" << serve_returned
+            << " work_returned=" << work_returned << std::endl;
 
   if (!serve_returned)
     throw std::runtime_error("serve() did not exit within the shutdown window");
@@ -171,7 +184,8 @@ void test_interrupt_from_shutdown() {
 
   // trigger shutdown: draining for 1s, then shutting_down fires
 #ifdef _WIN32
-  GenerateConsoleCtrlEvent(CTRL_C_EVENT, GetCurrentProcessId());
+  std::cerr << "sending CTRL_BREAK_EVENT (interrupt test)" << std::endl;
+  GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, GetCurrentProcessId());
 #else
   kill(getpid(), SIGTERM);
 #endif
