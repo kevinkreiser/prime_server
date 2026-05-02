@@ -37,3 +37,28 @@ jobs:
         shell: pwsh
         run: |
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -j $env:NUMBER_OF_PROCESSORS
+
+      - name: smoke test (start server, request, graceful shutdown)
+        shell: pwsh
+        run: |
+          $proc = Start-Process -FilePath "build/RelWithDebInfo/prime_echod.exe" `
+            -ArgumentList "tcp://*:8002", "1", "5" `
+            -PassThru -NoNewWindow
+          Start-Sleep -Seconds 2
+
+          $code = (curl.exe -s -o NUL -w "%{http_code}" http://127.0.0.1:8002/test)
+          if ($code -ne "200") {
+            Stop-Process -Id $proc.Id -Force
+            throw "Expected 200, got $code"
+          }
+          Write-Host "request returned $code"
+
+          # taskkill without /F sends CTRL_CLOSE_EVENT to console apps,
+          # which triggers our SetConsoleCtrlHandler for graceful shutdown
+          taskkill /PID $proc.Id 2>$null
+          $exited = $proc.WaitForExit(15000)
+          if (!$exited) {
+            Stop-Process -Id $proc.Id -Force
+            throw "Server did not shut down gracefully within 15 seconds"
+          }
+          Write-Host "server exited with code $($proc.ExitCode)"
