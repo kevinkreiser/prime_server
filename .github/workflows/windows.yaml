@@ -38,31 +38,43 @@ jobs:
         run: |
           ctest --test-dir build --build-config RelWithDebInfo --output-on-failure -j $env:NUMBER_OF_PROCESSORS
 
-      - name: start server
+      - name: smoke test (start server, request, graceful shutdown)
         shell: pwsh
         run: |
-          $proc = Start-Process -FilePath "build/RelWithDebInfo/prime_echod.exe" `
-            -ArgumentList "tcp://*:8002", "1", "5" -PassThru
-          "SERVER_PID=$($proc.Id)" >> $env:GITHUB_ENV
-          Start-Sleep -Seconds 2
+          Add-Type -TypeDefinition @"
+          using System;
+          using System.Runtime.InteropServices;
+          public class ConsoleCtrl {
+              [DllImport("kernel32.dll")]
+              public static extern bool GenerateConsoleCtrlEvent(uint dwCtrlEvent, uint dwProcessGroupId);
+              [DllImport("kernel32.dll")]
+              public static extern bool SetConsoleCtrlHandler(IntPtr handler, bool add);
+          }
+          "@
 
-      - name: send request
-        shell: pwsh
-        run: |
+          $proc = Start-Process -FilePath "build/RelWithDebInfo/prime_echod.exe" `
+            -ArgumentList "tcp://*:8002", "1", "1" `
+            -PassThru -NoNewWindow
+          Start-Sleep -Seconds 1
+
           $code = (curl.exe -s -o NUL -w "%{http_code}" http://127.0.0.1:8002/test)
-          if ($code -ne "200") { throw "Expected 200, got $code" }
+          if ($code -ne "200") {
+            Stop-Process -Id $proc.Id -Force
+            throw "Expected 200, got $code"
+          }
           Write-Host "request returned $code"
 
-      - name: graceful shutdown
-        shell: pwsh
-        run: |
-          taskkill /PID $env:SERVER_PID
-          $proc = Get-Process -Id $env:SERVER_PID -ErrorAction SilentlyContinue
-          if ($proc) {
-            $exited = $proc.WaitForExit(15000)
-            if (!$exited) {
-              Stop-Process -Id $env:SERVER_PID -Force
-              throw "Server did not shut down gracefully within 15 seconds"
-            }
+          # In a real terminal: taskkill /PID $proc.Id
+          # CI is headless (no console window) so taskkill can't deliver CTRL_CLOSE_EVENT.
+          # We use GenerateConsoleCtrlEvent directly instead.
+          [ConsoleCtrl]::SetConsoleCtrlHandler([IntPtr]::Zero, $true)
+          [ConsoleCtrl]::GenerateConsoleCtrlEvent(1, 0)  # CTRL_BREAK_EVENT
+          [ConsoleCtrl]::SetConsoleCtrlHandler([IntPtr]::Zero, $false)
+
+          # 1s drain + buffer
+          $exited = $proc.WaitForExit(2000)
+          if (!$exited) {
+            Stop-Process -Id $proc.Id -Force
+            throw "Server did not shut down gracefully within 2 seconds"
           }
-          Write-Host "server shut down gracefully"
+          Write-Host "server exited gracefully with code $($proc.ExitCode)"
