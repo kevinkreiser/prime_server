@@ -2,7 +2,7 @@
 
 // some version info
 #define PRIME_SERVER_VERSION_MAJOR 0
-#define PRIME_SERVER_VERSION_MINOR 8
+#define PRIME_SERVER_VERSION_MINOR 9
 #define PRIME_SERVER_VERSION_PATCH 0
 
 #include <cstddef>
