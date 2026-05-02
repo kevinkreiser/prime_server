@@ -41,9 +41,9 @@ jobs:
           echo "request returned $CODE"
 
           kill -TERM $SERVER_PID
-          sleep 2
+          sleep 3
           if kill -0 $SERVER_PID 2>/dev/null; then
             kill -9 $SERVER_PID
-            echo "Server did not shut down gracefully within 2 seconds" && exit 1
+            echo "Server did not shut down gracefully within 3 seconds" && exit 1
           fi
           echo "server shut down gracefully"

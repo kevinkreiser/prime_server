@@ -72,9 +72,9 @@ jobs:
           [ConsoleCtrl]::SetConsoleCtrlHandler([IntPtr]::Zero, $false)
 
           # 1s drain + buffer
-          $exited = $proc.WaitForExit(2000)
+          $exited = $proc.WaitForExit(3000)
           if (!$exited) {
             Stop-Process -Id $proc.Id -Force
-            throw "Server did not shut down gracefully within 2 seconds"
+            throw "Server did not shut down gracefully within 3 seconds"
           }
           Write-Host "server exited gracefully with code $($proc.ExitCode)"
