@@ -65,6 +65,7 @@ int main(int argc, char** argv) {
   }
 
   // inproc:// works within one process; use tcp:// to split components across machines or processes
+  // on linux ipc:// is a faster alternative to tcp for multiprocess mode, windows doesn't support it
   zmq::context_t context;
   std::string result_endpoint = "inproc://result_endpoint";
   std::string request_interrupt = "inproc://request_interrupt";
