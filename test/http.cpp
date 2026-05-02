@@ -331,7 +331,7 @@ std::string random_string(size_t length) {
 
 void http_client_work(zmq::context_t& context) {
   // client makes requests and gets back responses in a batch fashion
-  const size_t total = 100000;
+  constexpr size_t total = 100000;
   std::unordered_set<std::string> requests;
   size_t received = 0;
   std::string request;

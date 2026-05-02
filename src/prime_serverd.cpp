@@ -34,7 +34,7 @@ int main(int argc, char** argv) {
     prime_start = std::stoul(argv1.substr(0, argv1.find(',')));
     prime_end = std::stoul(argv1.substr(argv1.find(',') + 1));
     prime_start += !(prime_start % 2);
-    prime_start = std::max(prime_start, 3ul);
+    prime_start = std::max(prime_start, size_t{3});
     prime_end -= !(prime_end % 2);
     if (prime_start >= prime_end) {
       logging::ERROR("provide a valid range of numbers to test for prime");

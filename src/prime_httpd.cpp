@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -31,7 +32,9 @@ int main(int argc, char** argv) {
     logging::ERROR("bad server request interrupt");
 
   // default to logging requests/responses
-  bool log = argc < 6 || strcasecmp(argv[5], "false") != 0;
+  if (argc > 5)
+    std::transform(argv[5], argv[5] + std::strlen(argv[5]), argv[5], ::tolower);
+  bool log = argc < 6 || std::strcmp(argv[5], "false") != 0;
 
   // default to 10mb
   size_t max_request_size_bytes = 1024 * 1024 * 10;
