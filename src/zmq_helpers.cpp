@@ -15,6 +15,9 @@ namespace {
 constexpr char uuid_chars[] = {'a', 'b', 'c', 'd', 'e', 'f', '0', '1',
                                '2', '3', '4', '5', '6', '7', '8', '9'};
 
+constexpr int ipv4 = 0; // used as a fallback to v4 only if v6 fails
+constexpr int ipv6 = 1; // dual stack gives us both v4 and v6
+
 }
 
 namespace zmq {
@@ -118,13 +121,25 @@ void socket_t::getsockopt(int option, void* value, size_t* value_length) {
 }
 // connect the socket
 void socket_t::connect(const char* address) {
+  setsockopt(ZMQ_IPV6, &ipv6, sizeof(int));
   if (zmq_connect(ptr.get(), address) != 0)
     throw std::runtime_error(zmq_strerror(zmq_errno()));
 }
 // bind the socket
 void socket_t::bind(const char* address) {
-  if (zmq_bind(ptr.get(), address) != 0)
-    throw std::runtime_error(zmq_strerror(zmq_errno()));
+  // we try dual stack ipv6/v4
+  setsockopt(ZMQ_IPV6, &ipv6, sizeof(int));
+  if (zmq_bind(ptr.get(), address) == 0)
+    return;
+  // fall back to ipv4 only if we cant do both 6/4
+  auto err = zmq_errno();
+  if (err == EAFNOSUPPORT) {
+    setsockopt(ZMQ_IPV6, &ipv4, sizeof(int));
+    if (zmq_bind(ptr.get(), address) == 0)
+      return;
+    err = zmq_errno();
+  }
+  throw std::runtime_error(zmq_strerror(err));
 }
 // read a single message from this socket
 bool socket_t::recv(message_t& message, int flags) {
