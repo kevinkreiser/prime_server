@@ -151,8 +151,31 @@ set(pkgconfigdir "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
 set(VERSION ${PROJECT_VERSION})
 
 install(TARGETS prime_server
+	EXPORT libprime_serverTargets
+	RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 	LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+	ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+	INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 	PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/prime_server)
+
+install(EXPORT libprime_serverTargets
+	FILE libprime_serverTargets.cmake
+	NAMESPACE libprime_server::
+	DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/libprime_server)
+
+include(CMakePackageConfigHelpers)
+configure_package_config_file(
+	"${CMAKE_CURRENT_SOURCE_DIR}/cmake/libprime_serverConfig.cmake.in"
+	"${CMAKE_CURRENT_BINARY_DIR}/libprime_serverConfig.cmake"
+	INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/libprime_server)
+write_basic_package_version_file(
+	"${CMAKE_CURRENT_BINARY_DIR}/libprime_serverConfigVersion.cmake"
+	VERSION ${PROJECT_VERSION}
+	COMPATIBILITY SameMajorVersion)
+install(FILES
+	"${CMAKE_CURRENT_BINARY_DIR}/libprime_serverConfig.cmake"
+	"${CMAKE_CURRENT_BINARY_DIR}/libprime_serverConfigVersion.cmake"
+	DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/libprime_server)
 
 install(TARGETS prime_echod
 	prime_filed
