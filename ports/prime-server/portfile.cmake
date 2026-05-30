@@ -6,7 +6,7 @@ vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO kevinkreiser/prime_server
     REF "${VERSION}"
-    SHA512 0
+    SHA512 f2757d4460e14a645c123d5192b50f434c3ecde7594c156e46e8b692567200a8b14d097db8b521acf3b98414ac45665acaaaff4473ee77b1867a9390fce3762
     HEAD_REF master
 )
 
