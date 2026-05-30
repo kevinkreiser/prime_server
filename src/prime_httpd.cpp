@@ -44,7 +44,7 @@ int main(int argc, char** argv) {
   } catch (...) {}
 
   // default to no timeout
-  uint32_t request_timeout_seconds = -1;
+  uint32_t request_timeout_seconds = DEFAULT_REQUEST_TIMEOUT;
   try {
     if (argc > 7)
       request_timeout_seconds = std::stoul(argv[7]);

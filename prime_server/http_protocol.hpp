@@ -173,7 +173,7 @@ public:
 
   virtual ~http_response_t();
   http_response_t();
-  http_response_t(unsigned code,
+  http_response_t(uint16_t code,
                   const std::string& message,
                   const std::string& body = "",
                   const headers_t& headers = headers_t{},
@@ -183,7 +183,7 @@ public:
   virtual std::string to_string() const override;
   static http_response_t from_string(const char* start, size_t length);
   std::list<http_response_t> from_stream(const char* start, size_t length);
-  static std::string generic(unsigned code,
+  static std::string generic(uint16_t code,
                              const std::string& message,
                              const headers_t& headers = headers_t{},
                              const std::string& body = "",

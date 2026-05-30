@@ -211,7 +211,7 @@ struct beacon_t::cheshire_cat_t {
       throw std::runtime_error("Beacon not supported");
     // keep the socket for polling
     socket = zsock_resolve(zactor_sock(actor.get()));
-    generator.seed(std::time(nullptr));
+    generator.seed(std::random_device{}());
   }
   ~cheshire_cat_t() {
   }
@@ -347,9 +347,9 @@ int poll(pollitem_t* items, int count, long timeout) {
 
 // make a random port in suggested range
 uint16_t random_port() {
-  std::default_random_engine generator(std::time(nullptr));
-  std::uniform_int_distribution<uint16_t> distribution(49152, 65535);
-  return distribution(generator);
+  std::default_random_engine generator(std::random_device{}());
+  std::uniform_int_distribution<int> distribution(49152, 65535);
+  return static_cast<uint16_t>(distribution(generator));
 }
 
 // explicit instantiations for templated sending of data

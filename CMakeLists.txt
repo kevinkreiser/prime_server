@@ -80,9 +80,10 @@ include_directories(${CURL_INCLUDEDIR} ${ZMQ_INCLUDEDIR} ${CZMQ_INCLUDEDIR})
 
 find_package(Threads REQUIRED)
 
-# Prevent Windows.h from defining min/max macros and pulling in rarely-used headers
+# Prevent Windows.h from defining min/max macros and pulling in rarely-used headers,
+# and silence MSVC's deprecation warnings for portable C functions like getenv()
 if(WIN32)
-  add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX)
+  add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
 endif()
 
 # Include the hpp files

@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <list>
 #include <string>
 #include <type_traits>
@@ -55,7 +56,7 @@ protected:
 };
 
 constexpr size_t DEFAULT_MAX_REQUEST_SIZE = 1024 * 1024 * 10; // 10 megabytes
-constexpr uint32_t DEFAULT_REQUEST_TIMEOUT = -1;              // infinity seconds
+constexpr uint32_t DEFAULT_REQUEST_TIMEOUT = std::numeric_limits<uint32_t>::max(); // infinity seconds
 
 // TODO: bundle both request_containter_t (req, rep) and request_info_t into
 // a single session_t that implements all the guts of the protocol

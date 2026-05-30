@@ -287,7 +287,8 @@ void test_shortcircuit() {
   zmq::context_t context;
   testable_http_server_t server(
       context, "tcp://127.0.0.1:15701", "inproc://test_http_proxy_upstream",
-      "inproc://test_http_results", "inproc://test_http_interrupt", false, MAX_REQUEST_SIZE, -1,
+      "inproc://test_http_results", "inproc://test_http_interrupt", false, MAX_REQUEST_SIZE,
+      DEFAULT_REQUEST_TIMEOUT,
       [](const http_request_t& r) -> bool { return r.path == "/health_check"; },
       http_response_t{200, "OK", "foo_bar_baz"}.to_string());
   server.passify();
@@ -377,7 +378,7 @@ void test_parallel_clients() {
                 http_server_t(
                     context, "tcp://127.0.0.1:15701", "inproc://test_http_proxy_upstream",
                     "inproc://test_http_results", "inproc://test_http_interrupt", false,
-                    MAX_REQUEST_SIZE, -1,
+                    MAX_REQUEST_SIZE, DEFAULT_REQUEST_TIMEOUT,
                     [](const http_request_t& r) -> bool { return r.path == "/health_check"; },
                     http_response_t{200, "OK", "foo_bar_baz"}.to_string())));
   server.detach();

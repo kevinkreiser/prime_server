@@ -161,7 +161,8 @@ void test_parallel_clients() {
                 netstring_server_t(
                     context, "tcp://127.0.0.1:15702",
                     "inproc://test_netstring_proxy_upstream", "inproc://test_netstring_results",
-                    "inproc://test_netstring_interrupt", false, MAX_REQUEST_SIZE, -1,
+                    "inproc://test_netstring_interrupt", false, MAX_REQUEST_SIZE,
+                    DEFAULT_REQUEST_TIMEOUT,
                     [](const netstring_entity_t& r) -> bool { return r.body == "health_check"; },
                     netstring_entity_t::to_string("foo_bar_baz"))));
   server.detach();

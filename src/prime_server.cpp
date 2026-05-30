@@ -64,16 +64,16 @@ struct quiescable final {
 };
 #else
 struct quiescable final {
-  static const quiescable& get(unsigned int drain_seconds = 0) {
-    static quiescable instance(drain_seconds);
+  static const quiescable& get(unsigned int seconds = 0) {
+    static quiescable instance(seconds);
     return instance;
   }
-  quiescable(unsigned int drain_seconds) : draining(false), shutting_down(false) {
-    if (drain_seconds == 0)
+  quiescable(unsigned int seconds) : draining(false), shutting_down(false) {
+    if (seconds == 0)
       return;
     // install a console control handler to catch termination events
     // (CTRL_C, CTRL_CLOSE, service stop) which are analogous to SIGTERM
-    quiescable::drain_seconds = drain_seconds;
+    quiescable::drain_seconds = seconds;
     if (!SetConsoleCtrlHandler(ctrl_handler, TRUE))
       logging::ERROR("Could not install console ctrl handler, graceful shutdown disabled");
   }
