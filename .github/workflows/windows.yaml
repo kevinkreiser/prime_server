@@ -29,8 +29,7 @@ jobs:
         run: |
           cmake -B build -S . `
             -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake" `
-            -DCMAKE_BUILD_TYPE=RelWithDebInfo `
-            -DENABLE_WERROR=Off
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo
           cmake --build build --config RelWithDebInfo -j $env:NUMBER_OF_PROCESSORS
 
       - name: test

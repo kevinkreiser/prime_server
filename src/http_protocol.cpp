@@ -578,7 +578,7 @@ http_response_t::http_response_t() : http_entity_t("", headers_t{}, "") {
   flush_stream();
 }
 
-http_response_t::http_response_t(unsigned code,
+http_response_t::http_response_t(uint16_t code,
                                  const std::string& message,
                                  const std::string& body,
                                  const headers_t& headers,
@@ -703,7 +703,7 @@ void http_response_t::flush_stream() {
   message.clear();
 }
 
-std::string http_response_t::generic(unsigned code,
+std::string http_response_t::generic(uint16_t code,
                                      const std::string& message,
                                      const headers_t& headers,
                                      const std::string& body,

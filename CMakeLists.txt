@@ -10,6 +10,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 option(ENABLE_WALL "Convert compiler warnings to errors" ON)
 option(ENABLE_WERROR "Convert compiler warnings to errors. Requires ENABLE_WALL" ON)
+option(ENABLE_TESTS "Build the test suite (pulls in the test/testing submodule)" ON)
 
 # What type of build
 if(NOT MSVC_IDE) # TODO: May need to be extended for Xcode, CLion, etc.
@@ -80,9 +81,10 @@ include_directories(${CURL_INCLUDEDIR} ${ZMQ_INCLUDEDIR} ${CZMQ_INCLUDEDIR})
 
 find_package(Threads REQUIRED)
 
-# Prevent Windows.h from defining min/max macros and pulling in rarely-used headers
+# Prevent Windows.h from defining min/max macros and pulling in rarely-used headers,
+# and silence MSVC's deprecation warnings for portable C functions like getenv()
 if(WIN32)
-  add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX)
+  add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX _CRT_SECURE_NO_WARNINGS)
 endif()
 
 # Include the hpp files
@@ -200,7 +202,8 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libprime_server.pc" DESTINATION ${pkg
 configure_file(cmake/uninstall.cmake.in ${CMAKE_CURRENT_BINARY_DIR}/prime_server_uninstall.cmake @ONLY)
 add_custom_target(uninstall COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/prime_server_uninstall.cmake)
 
-# Add tests - Requires CTest
+# Add tests - Requires CTest and the test/testing submodule
+if(ENABLE_TESTS)
 enable_testing()
 
 add_executable(http ${CMAKE_SOURCE_DIR}/test/http.cpp)
@@ -226,3 +229,4 @@ add_test(shutdown shutdown)
 add_executable(zmq ${CMAKE_SOURCE_DIR}/test/zmq.cpp)
 target_link_libraries(zmq prime_server ${CMAKE_THREAD_LIBS_INIT})
 add_test(zmq zmq)
+endif()
