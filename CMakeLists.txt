@@ -10,6 +10,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 option(ENABLE_WALL "Convert compiler warnings to errors" ON)
 option(ENABLE_WERROR "Convert compiler warnings to errors. Requires ENABLE_WALL" ON)
+option(ENABLE_TESTS "Build the test suite (pulls in the test/testing submodule)" ON)
 
 # What type of build
 if(NOT MSVC_IDE) # TODO: May need to be extended for Xcode, CLion, etc.
@@ -201,7 +202,8 @@ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/libprime_server.pc" DESTINATION ${pkg
 configure_file(cmake/uninstall.cmake.in ${CMAKE_CURRENT_BINARY_DIR}/prime_server_uninstall.cmake @ONLY)
 add_custom_target(uninstall COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/prime_server_uninstall.cmake)
 
-# Add tests - Requires CTest
+# Add tests - Requires CTest and the test/testing submodule
+if(ENABLE_TESTS)
 enable_testing()
 
 add_executable(http ${CMAKE_SOURCE_DIR}/test/http.cpp)
@@ -227,3 +229,4 @@ add_test(shutdown shutdown)
 add_executable(zmq ${CMAKE_SOURCE_DIR}/test/zmq.cpp)
 target_link_libraries(zmq prime_server ${CMAKE_THREAD_LIBS_INIT})
 add_test(zmq zmq)
+endif()
