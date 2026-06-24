@@ -2,7 +2,7 @@
 
 // some version info
 #define PRIME_SERVER_VERSION_MAJOR 0
-#define PRIME_SERVER_VERSION_MINOR 12
+#define PRIME_SERVER_VERSION_MINOR 13
 #define PRIME_SERVER_VERSION_PATCH 0
 
 #include <cstddef>
@@ -55,7 +55,7 @@ protected:
   size_t batch_size;
 };
 
-constexpr size_t DEFAULT_MAX_REQUEST_SIZE = 1024 * 1024 * 10; // 10 megabytes
+constexpr size_t DEFAULT_MAX_REQUEST_SIZE = 1024 * 1024 * 10;                      // 10 megabytes
 constexpr uint32_t DEFAULT_REQUEST_TIMEOUT = std::numeric_limits<uint32_t>::max(); // infinity seconds
 
 // TODO: bundle both request_containter_t (req, rep) and request_info_t into
@@ -98,8 +98,7 @@ protected:
                 "request_info_t::id must be uint32_t");
   static_assert(std::is_same<decltype(request_info_t().time_stamp), uint32_t>::value,
                 "request_info_t::time_stamp must be uint32_t");
-  static_assert(offsetof(request_info_t, id) == 0,
-                "request_info_t::id must be the first member");
+  static_assert(offsetof(request_info_t, id) == 0, "request_info_t::id must be the first member");
   static_assert(offsetof(request_info_t, time_stamp) == sizeof(uint32_t),
                 "request_info_t::time_stamp must be the second member");
 
