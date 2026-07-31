@@ -189,8 +189,8 @@ install(TARGETS prime_echod
 # pkg-config stuff, also make it compatible with autotools
 set(prefix ${CMAKE_INSTALL_PREFIX})
 set(exec_prefix ${prefix})
-set(libdir ${prefix}/${CMAKE_INSTALL_LIBDIR})
-set(includedir ${prefix}/${CMAKE_INSTALL_INCLUDEDIR})
+set(libdir ${CMAKE_INSTALL_FULL_LIBDIR})
+set(includedir ${CMAKE_INSTALL_FULL_INCLUDEDIR})
 
 configure_file(
 	${CMAKE_CURRENT_SOURCE_DIR}/libprime_server.pc.in
